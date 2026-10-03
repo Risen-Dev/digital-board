@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { currentUser } from "@/lib/auth";
-import { get, run } from "@/lib/db";
+import { get, run, transaction } from "@/lib/db";
+import { mergeSnapshots, type Snapshot } from "@/lib/canvas/merge";
+import { broadcast, peers, type Peer } from "@/lib/canvas/hub";
 
 /**
  * Canvas snapshots travel through a Route Handler, not a Server Action.
@@ -30,21 +32,10 @@ async function guard(projectId: string, write = false) {
 }
 
 /**
- * Live collaboration: each open sheet holds an SSE stream (GET ?live=<tabId>),
- * and cursor moves / element changes are PATCHed here and fanned out to the
- * other tabs on that sheet. The snapshot POST stays the source of truth.
+ * Live collaboration (lib/canvas/hub.ts): cursor moves and element changes are
+ * PATCHed here and relayed to the sheet's other tabs over their SSE stream.
+ * The snapshot POST stays the source of truth.
  */
-type Peer = { client: string; send: (data: string) => void };
-// ponytail: in-process fan-out, so live cursors/edits only reach tabs served by
-// the same Node instance. Running pm2 with instances > 1 needs Postgres LISTEN/NOTIFY here.
-const hub = globalThis as unknown as { canvasPeers?: Map<string, Set<Peer>> };
-const peers = (hub.canvasPeers ??= new Map());
-
-function broadcast(canvasId: string, from: string, message: object) {
-  const data = `data: ${JSON.stringify({ ...message, from })}\n\n`;
-  for (const peer of peers.get(canvasId) ?? []) if (peer.client !== from) peer.send(data);
-}
-
 function liveStream(req: Request, canvasId: string, client: string) {
   const room = peers.get(canvasId) ?? new Set<Peer>();
   peers.set(canvasId, room);
@@ -68,6 +59,8 @@ function liveStream(req: Request, canvasId: string, client: string) {
         try { controller.close(); } catch {}
       };
       room.add(peer);
+      // Peers answer with their full scene, so a (re)joining tab misses nothing.
+      broadcast(canvasId, client, { type: "join" });
       req.signal.addEventListener("abort", () => leave());
     },
     cancel: () => leave(),
@@ -98,14 +91,18 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const canvas = await get<{ project_id: string }>("SELECT project_id FROM canvases WHERE id = ?", id);
   if (!canvas || !await guard(canvas.project_id, true)) return new NextResponse("Not found", { status: 404 });
 
-  const snapshot = await req.text();
-  try {
-    JSON.parse(snapshot);
-  } catch {
+  const incoming: Snapshot | null = await req.json().catch(() => null);
+  if (!incoming || typeof incoming !== "object" || !Array.isArray(incoming.elements ?? [])) {
     return new NextResponse("Invalid snapshot", { status: 400 });
   }
 
-  await run("UPDATE canvases SET snapshot = ?, updated_at = ? WHERE id = ?", snapshot, new Date().toISOString(), id);
+  // Merge, don't overwrite: with several tabs on one sheet, saves can land out
+  // of order. The row lock keeps two concurrent merges from racing each other.
+  await transaction(async () => {
+    const row = await get<{ snapshot: string | null }>("SELECT snapshot FROM canvases WHERE id = ? FOR UPDATE", id);
+    const merged = mergeSnapshots(row?.snapshot ? JSON.parse(row.snapshot) : null, incoming);
+    await run("UPDATE canvases SET snapshot = ?, updated_at = ? WHERE id = ?", JSON.stringify(merged), new Date().toISOString(), id);
+  });
   return new NextResponse(null, { status: 204 });
 }
 

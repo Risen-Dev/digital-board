@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { all, get, run, transaction } from "./db";
 import { createUser, createWorkspace, currentUser, endSession, login, passwordOf, setPassword, startSession, verifyPassword } from "./auth";
 import { DEFAULT_COLUMNS, reorder, type Priority } from "./board";
+import { broadcast } from "./canvas/hub";
 
 async function requireUser() {
   const user = await currentUser();
@@ -442,5 +443,7 @@ export async function deleteCanvas(id: string) {
   const canvas = await get<{ project_id: string }>("SELECT project_id FROM canvases WHERE id = ?", id);
   if (!canvas || (await projectRole(user, canvas.project_id)) === "viewer" || (await projectRole(user, canvas.project_id)) === null) return;
   await run("DELETE FROM canvases WHERE id = ?", id);
+  // Anyone else on this sheet would keep drawing into a row that no longer exists.
+  broadcast(id, "", { type: "deleted" });
   revalidatePath("/board");
 }

@@ -460,7 +460,14 @@ export function Workspace({
         ) : !project ? (
           <EmptyProject />
         ) : section === "canvas" ? (
-          <CanvasView projectId={project.id} sheets={sheets} dark={dark} onChanged={() => router.refresh()} />
+          <CanvasView
+            projectId={project.id}
+            sheets={sheets}
+            dark={dark}
+            // Viewers can watch live but every save would be refused, so don't let them draw.
+            readOnly={user.is_admin !== 1 && assignments.find((item) => item.user_id === user.id && item.project_id === project.id)?.role === "viewer"}
+            onChanged={() => router.refresh()}
+          />
         ) : section === "inbox" ? (
           <FeedView feed={notifications} onMarkRead={markNotificationItemsRead} onMarkAll={markCardNotificationsRead} />
         ) : section === "mine" ? (

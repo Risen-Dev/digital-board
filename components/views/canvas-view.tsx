@@ -104,6 +104,7 @@ type CanvasViewProps = {
   projectId: string;
   sheets: CanvasMeta[];
   dark: boolean;
+  readOnly: boolean;
   onChanged: () => void;
 };
 
@@ -111,6 +112,7 @@ export function CanvasView({
   projectId,
   sheets,
   dark,
+  readOnly,
   onChanged,
 }: CanvasViewProps) {
   const [selected, setSelected] = useState<
@@ -130,14 +132,6 @@ export function CanvasView({
     sheets.some((sheet) => sheet.id === selected)
       ? selected
       : (sheets[0]?.id ?? null);
-
-  const {
-    status,
-    onChange,
-    flush,
-    reset,
-    cancel,
-  } = useCanvasPersistence(activeId);
 
   /**
    * Excalidraw accepts Promise-based initialData.
@@ -171,6 +165,15 @@ export function CanvasView({
       });
   }, [activeId]);
 
+  const {
+    status,
+    onChange,
+    markRemote,
+    flush,
+    reset,
+    cancel,
+  } = useCanvasPersistence(activeId, initialData);
+
   /**
    * Tagged with its sheet so the outgoing instance's API is never used for the
    * incoming sheet during the remount.
@@ -184,6 +187,12 @@ export function CanvasView({
     activeId,
     excalidraw?.sheetId === activeId ? excalidraw.api : null,
     initialData,
+    markRemote,
+    () => {
+      // Its row is gone: drop pending saves and let the sheet list refresh.
+      cancel();
+      onChanged();
+    },
   );
 
   async function addSheet() {
@@ -317,7 +326,7 @@ export function CanvasView({
                     {sheet.name}
                   </button>
 
-                  {active && (
+                  {active && !readOnly && (
                     <>
                       <button
                         type="button"
@@ -351,7 +360,7 @@ export function CanvasView({
           );
         })}
 
-        <button
+        {!readOnly && <button
           type="button"
           onClick={() => {
             void addSheet();
@@ -361,7 +370,7 @@ export function CanvasView({
           <Plus className="size-3" />
 
           Sheet
-        </button>
+        </button>}
 
         <span className="ml-auto shrink-0 pl-3 text-[11px] text-muted-foreground">
           {status === "saving" ? (
@@ -370,6 +379,8 @@ export function CanvasView({
             <span className="text-[var(--chart-7)]">
               Save failed — retrying on next change
             </span>
+          ) : readOnly && activeId ? (
+            "View only"
           ) : activeId ? (
             "Saved"
           ) : null}
@@ -395,6 +406,7 @@ export function CanvasView({
               }}
               onPointerUpdate={live.onPointerUpdate}
               theme={dark ? "dark" : "light"}
+              viewModeEnabled={readOnly}
             />
           </CanvasBoundary>
         ) : (
@@ -403,7 +415,7 @@ export function CanvasView({
               No sheets in this project yet.
             </p>
 
-            <button
+            {!readOnly && <button
               type="button"
               onClick={() => {
                 void addSheet();
@@ -413,7 +425,7 @@ export function CanvasView({
               <Plus className="size-3" />
 
               Create the first sheet
-            </button>
+            </button>}
           </div>
         )}
       </div>

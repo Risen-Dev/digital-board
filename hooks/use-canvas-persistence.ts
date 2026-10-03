@@ -16,6 +16,8 @@ type SaveStatus = "idle" | "saving" | "error";
 
 type SceneSnapshot = {
   canvasId: string;
+  /** sceneKey() of this scene; equal keys mean nothing worth saving changed. */
+  key: string;
   version: number;
   elements: readonly unknown[];
   appState: object;
@@ -42,8 +44,33 @@ function loadSerializer(): Promise<SerializeAsJSON> {
   return serializerPromise;
 }
 
+/**
+ * Fingerprint of what a save would actually change. Every element edit,
+ * deletes included, bumps that element's version; scroll, zoom, selection
+ * and remote cursors don't touch it. Background defaults to Excalidraw's
+ * white so an empty new sheet matches its stored `null` snapshot.
+ */
+function sceneKey(
+  canvasId: string,
+  elements: readonly unknown[],
+  appState: object,
+) {
+  const versions = elements.reduce(
+    (sum: number, element) =>
+      sum + (element as { version: number }).version,
+    0,
+  );
+  const background =
+    (appState as { viewBackgroundColor?: string })
+      .viewBackgroundColor ?? "#ffffff";
+
+  return `${canvasId}:${versions}:${background}`;
+}
+
 export function useCanvasPersistence(
   activeId: string | null,
+  /** The sheet's initialData: what's already stored needs no save. */
+  loaded: Promise<Record<string, unknown> | null> | null,
 ) {
   const [status, setStatus] =
     useState<SaveStatus>("idle");
@@ -56,6 +83,33 @@ export function useCanvasPersistence(
     useRef<SceneSnapshot | null>(null);
 
   const versionRef = useRef(0);
+
+  /** Fingerprint of the last scene seen, to ignore non-drawing changes. */
+  const sceneKeyRef = useRef<string | null>(null);
+
+  /** sceneKey() of what each canvas has stored on the server. */
+  const storedKeysRef = useRef(new Map<string, string>());
+
+  useEffect(() => {
+    if (!activeId || !loaded) {
+      return;
+    }
+
+    void loaded
+      .then((saved) => {
+        storedKeysRef.current.set(
+          activeId,
+          sceneKey(
+            activeId,
+            (saved?.elements ?? []) as unknown[],
+            (saved?.appState ?? {}) as object,
+          ),
+        );
+      })
+      .catch(() => {
+        // A failed load just means the first change saves; nothing to do.
+      });
+  }, [activeId, loaded]);
 
   /**
    * Save queue prevents this:
@@ -107,7 +161,10 @@ export function useCanvasPersistence(
       const alreadySaved =
         savedVersionsRef.current.get(scene.canvasId) ?? 0;
 
-      if (scene.version <= alreadySaved) {
+      if (
+        scene.version <= alreadySaved ||
+        storedKeysRef.current.get(scene.canvasId) === scene.key
+      ) {
         return;
       }
 
@@ -118,12 +175,23 @@ export function useCanvasPersistence(
         serializerRef.current = serializer;
       }
 
-      const body = serializer(
-        scene.elements as never,
-        scene.appState as never,
-        scene.files as never,
-        "local",
+      const data = JSON.parse(
+        serializer(
+          scene.elements as never,
+          scene.appState as never,
+          scene.files as never,
+          "local",
+        ),
       );
+
+      /**
+       * serializeAsJSON drops deleted elements. Keep them as tombstones so the
+       * server-side merge (lib/canvas/merge.ts) can't resurrect a deletion
+       * from another tab's older save.
+       */
+      data.elements = scene.elements;
+
+      const body = JSON.stringify(data);
 
       /**
        * Browser keepalive requests have a small payload limit.
@@ -151,6 +219,11 @@ export function useCanvasPersistence(
           savedVersionsRef.current.set(
             scene.canvasId,
             scene.version,
+          );
+
+          storedKeysRef.current.set(
+            scene.canvasId,
+            scene.key,
           );
 
           const latest = latestSceneRef.current;
@@ -217,10 +290,20 @@ export function useCanvasPersistence(
         return;
       }
 
+      // onChange also fires for scroll, zoom, selection and remote cursors.
+      const key = sceneKey(activeId, elements, appState);
+
+      if (key === sceneKeyRef.current) {
+        return;
+      }
+
+      sceneKeyRef.current = key;
+
       const version = ++versionRef.current;
 
       latestSceneRef.current = {
         canvasId: activeId,
+        key,
         version,
         elements,
         appState,
@@ -311,9 +394,35 @@ export function useCanvasPersistence(
     setStatus("idle");
   }, []);
 
+  /**
+   * A peer's edit was merged in. The editor's own tab saves it, so if this
+   * tab had nothing unsaved, the merged scene counts as already stored.
+   * With local unsaved work, leave it alone so that work still gets saved.
+   */
+  const markRemote = useCallback(
+    (elements: readonly unknown[], appState: object) => {
+      if (!activeId) {
+        return;
+      }
+
+      const stored = storedKeysRef.current.get(activeId);
+
+      if (stored === undefined || sceneKeyRef.current !== stored) {
+        return;
+      }
+
+      storedKeysRef.current.set(
+        activeId,
+        sceneKey(activeId, elements, appState),
+      );
+    },
+    [activeId],
+  );
+
   return {
     status,
     onChange,
+    markRemote,
     flush,
     reset,
     cancel,
