@@ -234,7 +234,8 @@ pm2 startup       # print the command that re-runs pm2 at boot, then run it`}</C
           <p className="rounded-lg border border-[var(--chart-7)] bg-[rgba(239,68,68,0.06)] p-4 text-sm">
             <strong className="text-foreground">Raising <C>instances</C> is allowed.</strong> Postgres holds all
             application state. Raise <C>DATABASE_POOL_MAX</C> with care — each instance opens its own pool, so total
-            connections is instances × pool size.
+            connections is instances × pool size. Live canvas cursors and edits are relayed in-process, so they
+            only reach people served by the same instance — keep <C>instances: 1</C> if you rely on them.
           </p>
           <p className="text-sm text-muted-foreground">Day-to-day:</p>
           <Code>{`pm2 logs digital-board        # tail logs

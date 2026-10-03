@@ -28,6 +28,9 @@ import type { CanvasMeta } from "@/lib/queries";
 import { loadCanvasSnapshot } from "@/lib/canvas/api";
 
 import { useCanvasPersistence } from "@/hooks/use-canvas-persistence";
+import { useCanvasLive } from "@/hooks/use-canvas-live";
+
+import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 
 /**
  * Excalidraw is browser-only.
@@ -167,6 +170,21 @@ export function CanvasView({
         return null;
       });
   }, [activeId]);
+
+  /**
+   * Tagged with its sheet so the outgoing instance's API is never used for the
+   * incoming sheet during the remount.
+   */
+  const [excalidraw, setExcalidraw] = useState<{
+    sheetId: string;
+    api: ExcalidrawImperativeAPI;
+  } | null>(null);
+
+  const live = useCanvasLive(
+    activeId,
+    excalidraw?.sheetId === activeId ? excalidraw.api : null,
+    initialData,
+  );
 
   async function addSheet() {
     /**
@@ -368,7 +386,14 @@ export function CanvasView({
           <CanvasBoundary key={activeId}>
             <Excalidraw
               initialData={initialData}
-              onChange={onChange}
+              excalidrawAPI={(api) =>
+                setExcalidraw({ sheetId: activeId, api })
+              }
+              onChange={(elements, appState, files) => {
+                onChange(elements, appState, files);
+                live.onChange();
+              }}
+              onPointerUpdate={live.onPointerUpdate}
               theme={dark ? "dark" : "light"}
             />
           </CanvasBoundary>

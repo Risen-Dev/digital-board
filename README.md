@@ -58,7 +58,7 @@ Requires **Node 22+** and **PostgreSQL 14+** (verified on 16). For development,
 | **Board** | Drag and drop with reordering inside a column and positional drops between columns. Mouse, touch and keyboard. Task details are editable and previewed up to three lines on cards. Click the workspace name in the sidebar or Settings, or the project title in the header or Settings, to rename it. Columns are add / rename / recolour / reorder / delete. |
 | **List, Calendar, Analytics** | The same tasks as a table, on a month grid by due date, and as charts — column distribution, priority split, workload per member, 14-day activity. |
 | **History** | Every move, reorder and field change is logged with its actor. Per task, and board-wide in the Inbox. |
-| **Canvas** | Excalidraw with sheet tabs. Each sheet keeps its own drawing. |
+| **Canvas** | Excalidraw with sheet tabs. Each sheet keeps its own drawing. Live collaboration: other members' cursors (with their names) and edits appear as they happen. |
 | **Chat** | Workspace channel plus direct messages, with unread badges, attachments and a 15-minute edit window. |
 | **Notifications** | Bell dropdown combines unread card activity and chat. Card items open Inbox; chat items open their conversation; card items can be marked read. Enable alerts there for browser notifications, an in-app popup, and sound. |
 | **Accounts** | Multi-user with `scrypt` password hashing and cookie sessions. Presence shows who is online. |
