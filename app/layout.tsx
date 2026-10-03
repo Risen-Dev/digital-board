@@ -8,6 +8,9 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 export const metadata: Metadata = {
   title: "Workspace — Digital Board",
   description: "Boards, sprints, docs, and automations, unified in one clean tool.",
+  // The app has its own dark theme. Without this, Dark Reader rewrites every SVG and
+  // inline style before hydration and React reports a mismatch on each one.
+  other: { "darkreader-lock": "true" },
 };
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
