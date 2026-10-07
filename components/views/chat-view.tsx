@@ -41,7 +41,7 @@ function Attachments({ files }: { files: Attachment[] }) {
   return (
     <div className="mt-1.5 flex flex-col gap-1.5">
       {files.map((f) =>
-        f.mime.startsWith("image/") ? (
+        f.mime.startsWith("image/") && f.mime !== "image/svg+xml" ? (
           <a key={f.id} href={`/api/files/${f.id}`} target="_blank" rel="noreferrer">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img

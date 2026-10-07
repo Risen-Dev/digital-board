@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { all, get, run, transaction } from "./db";
 import { createUser, createWorkspace, currentUser, endSession, login, passwordOf, setPassword, startSession, verifyPassword } from "./auth";
-import { DEFAULT_COLUMNS, reorder, type Priority } from "./board";
+import { DEFAULT_COLUMNS, PALETTE, PRIORITIES, reorder, type Priority } from "./board";
 import { broadcast } from "./canvas/hub";
 
 async function requireUser() {
@@ -20,7 +20,14 @@ async function logEvent(taskId: string, actorId: string | null, text: string) {
   await run("INSERT INTO task_events (task_id, actor_id, text, at) VALUES (?,?,?,?)", taskId, actorId, text, now());
 }
 
+/**
+ * Every permission check routes through here. The workspace check comes first:
+ * anyone can register and become admin of their own workspace, and that must
+ * not reach into someone else's.
+ */
 async function projectRole(user: Awaited<ReturnType<typeof requireUser>>, projectId: string) {
+  const project = await get<{ workspace_id: string }>("SELECT workspace_id FROM projects WHERE id = ?", projectId);
+  if (!project || project.workspace_id !== user.workspace_id) return null;
   if (user.is_admin) return "workspace-admin";
   return (await get<{ role: "admin" | "editor" | "viewer" }>(
     "SELECT role FROM project_members WHERE project_id = ? AND user_id = ?",
@@ -159,19 +166,32 @@ export async function setMemberPassword(userId: string, password: string) {
 
 // ── Tasks ───────────────────────────────────────────────────────────────────
 
+/** Priority drives a style lookup on every card, and an assignee must be a colleague. */
+async function invalidTaskFields(user: Awaited<ReturnType<typeof requireUser>>, priority: string, assignee: string | null) {
+  if (!PRIORITIES.includes(priority as Priority)) return "Invalid priority.";
+  if (assignee && !await get("SELECT 1 FROM users WHERE id = ? AND workspace_id = ?", assignee, user.workspace_id)) {
+    return "That assignee is not in this workspace.";
+  }
+  return null;
+}
+
+/** Column colours land in inline styles, so only the editor's own swatches are accepted. */
+const COLUMN_COLORS = ["var(--muted-foreground)", ...PALETTE];
+
 export async function createTask(_prev: unknown, form: FormData) {
   const user = await requireUser();
   const columnId = String(form.get("columnId") ?? "");
   const title = String(form.get("title") ?? "").trim();
   if (!title) return { error: "Title is required." };
   if (!await writableColumn(user, columnId)) return { error: "You cannot edit this project." };
-  if (!await get("SELECT 1 FROM columns WHERE id = ?", columnId)) return { error: "Column not found." };
 
-  const priority = (String(form.get("priority") ?? "medium") as Priority) ?? "medium";
+  const priority = String(form.get("priority") ?? "medium") as Priority;
   const description = String(form.get("description") ?? "").trim() || null;
   const label = String(form.get("label") ?? "").trim() || null;
   const dueDate = String(form.get("dueDate") ?? "").trim() || null;
   const assignee = String(form.get("assigneeId") ?? "").trim() || null;
+  const invalid = await invalidTaskFields(user, priority, assignee);
+  if (invalid) return { error: invalid };
 
   const next = ((await get<{ n: number }>("SELECT COALESCE(MAX(position) + 1, 0) n FROM tasks WHERE column_id = ?", columnId)))!.n;
   const id = randomUUID();
@@ -241,6 +261,8 @@ export async function updateTask(_prev: unknown, form: FormData) {
   const label = String(form.get("label") ?? "").trim() || null;
   const dueDate = String(form.get("dueDate") ?? "").trim() || null;
   const assignee = String(form.get("assigneeId") ?? "").trim() || null;
+  const invalid = await invalidTaskFields(user, priority, assignee);
+  if (invalid) return { error: invalid };
 
   await run(
     "UPDATE tasks SET title = ?, description = ?, label = ?, priority = ?, assignee_id = ?, due_date = ? WHERE id = ?",
@@ -269,6 +291,8 @@ export async function deleteTask(id: string) {
 export async function setProjectMember(projectId: string, userId: string, role: "admin" | "editor" | "viewer" | "") {
   const user = await requireUser();
   if (!user.is_admin) return { error: "Only workspace admins can assign projects." };
+  if (await projectRole(user, projectId) === null) return { error: "No such project." };
+  if (!await get("SELECT 1 FROM users WHERE id = ? AND workspace_id = ?", userId, user.workspace_id)) return { error: "No such member." };
   if (role === "") await run("DELETE FROM project_members WHERE project_id = ? AND user_id = ?", projectId, userId);
   else await run(
     `INSERT INTO project_members (project_id, user_id, role) VALUES (?,?,?)
@@ -282,7 +306,6 @@ export async function setProjectMember(projectId: string, userId: string, role: 
 export async function addProject(name: string) {
   const user = await requireUser();
   if (!user.is_admin) return { error: "Only workspace admins can create projects." };
-  await requireUser();
   const clean = name.trim();
   if (!clean) return { error: "Project name is required." };
 
@@ -346,6 +369,7 @@ export async function addColumn(projectId: string, title: string, color: string)
   if (role !== "workspace-admin" && role !== "admin") return { error: "You cannot manage this project." };
   const clean = title.trim();
   if (!clean) return { error: "Column name is required." };
+  if (!COLUMN_COLORS.includes(color)) return { error: "Invalid colour." };
   const next = (await get<{ n: number }>(
     "SELECT COALESCE(MAX(position) + 1, 0) n FROM columns WHERE project_id = ?",
     projectId,
@@ -365,6 +389,7 @@ export async function updateColumn(id: string, title: string, color: string) {
   if (role !== "workspace-admin" && role !== "admin") return { error: "You cannot manage this project." };
   const clean = title.trim();
   if (!clean) return { error: "Column name is required." };
+  if (!COLUMN_COLORS.includes(color)) return { error: "Invalid colour." };
   await run("UPDATE columns SET title = ?, color = ? WHERE id = ?", clean, color, id);
   revalidatePath("/board");
   return { ok: true };
@@ -407,7 +432,11 @@ export async function moveColumn(id: string, direction: -1 | 1) {
 
 
 export async function fetchHistory(taskId: string) {
-  await requireUser();
+  const user = await requireUser();
+  const task = await get<{ project_id: string }>(
+    "SELECT c.project_id FROM tasks t JOIN columns c ON c.id = t.column_id WHERE t.id = ?", taskId,
+  );
+  if (!task || await projectRole(user, task.project_id) === null) return [];
   const { taskHistory } = await import("./queries");
   return taskHistory(taskId);
 }

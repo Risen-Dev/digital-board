@@ -24,8 +24,8 @@ export default async function BoardPage({ searchParams }: PageProps<"/board">) {
       members={await listMembers(ws)}
       assignments={await projectMembers(ws)}
       presence={await listMembersWithPresence(ws)}
-      feed={await activityFeed(ws)}
-      notifications={await activityNotifications(ws, user.id)}
+      feed={await activityFeed(ws, user.id, user.is_admin)}
+      notifications={await activityNotifications(ws, user.id, user.is_admin)}
       unread={await unreadCounts(ws, user.id)}
       mine={await myTasks(user.id)}
       stats={project ? await analytics(project.id) : null}

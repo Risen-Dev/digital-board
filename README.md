@@ -31,7 +31,7 @@ CREATE ROLE board LOGIN PASSWORD 'choose-something';
 CREATE DATABASE board OWNER board;
 SQL
 
-git clone https://github.com/Mqdd27/digital-board.git
+git clone https://github.com/Risen-Dev/digital-board.git
 cd digital-board
 npm install
 
@@ -40,9 +40,9 @@ npm run build
 npm start
 ```
 
-Open <http://localhost:3000>. The database is empty, so you land on `/setup` — a
-one-time wizard for the workspace name, your first project, the board columns and
-the admin account.
+Open <http://localhost:3000> and choose **Create a workspace** (`/register`) — it asks
+for the workspace name, your first project, the board columns and the admin account.
+Anyone can register a workspace of their own; set `REGISTRATION_CLOSED=1` to stop that.
 
 ![First-run setup](public/screenshots/setup.png)
  Tables create themselves on first use; there is no migration
@@ -70,6 +70,7 @@ Requires **Node 22+** and **PostgreSQL 14+** (verified on 16). For development,
 |---|---|---|
 | `DATABASE_URL` | — | **Required.** Postgres connection string. |
 | `DATABASE_POOL_MAX` | `10` | Maximum pooled Postgres connections. |
+| `REGISTRATION_CLOSED` | unset | `1` stops new workspaces being registered; admins still add members. |
 | `PORT` | `3000` | Listen port. |
 | `TZ` | system | Timezone for rendered timestamps — they are formatted server-side. |
 

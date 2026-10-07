@@ -29,7 +29,15 @@ function pool() {
 function ready() {
   return (globalThis.__boardReady ??= pool()
     .query(readFileSync(join(process.cwd(), "lib", "schema.sql"), "utf8"))
-    .then(() => undefined));
+    .then(
+      () => undefined,
+      (error) => {
+        // Don't cache the failure: a database that was down at boot would
+        // otherwise fail every request until the process restarts.
+        globalThis.__boardReady = undefined;
+        throw error;
+      },
+    ));
 }
 
 /**

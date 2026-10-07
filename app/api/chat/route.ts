@@ -53,7 +53,7 @@ export async function POST(req: Request) {
     text = String(form.get("body") ?? "").trim();
     files = form.getAll("files").filter((f): f is File => f instanceof File && f.size > 0);
   } else {
-    const json = (await req.json()) as { to?: string | null; body?: string };
+    const json = ((await req.json().catch(() => null)) ?? {}) as { to?: string | null; body?: string };
     to = json.to ?? null;
     text = (json.body ?? "").trim();
   }
@@ -97,7 +97,7 @@ export async function PATCH(req: Request) {
   const me = await currentUser();
   if (!me) return new NextResponse("Unauthorized", { status: 401 });
 
-  const { id, body } = (await req.json()) as { id?: number; body?: string };
+  const { id, body } = ((await req.json().catch(() => null)) ?? {}) as { id?: number; body?: string };
   const text = (body ?? "").trim();
   if (!id || !text) return new NextResponse("Bad request", { status: 400 });
   if (text.length > MAX_BODY) return new NextResponse("Message too long", { status: 413 });

@@ -11,7 +11,7 @@ export async function GET() {
   if (!me) return new NextResponse("Unauthorized", { status: 401 });
 
   return NextResponse.json(
-    { members: await listMembersWithPresence(me.workspace_id), unread: await unreadCounts(me.workspace_id, me.id), notifications: await activityNotifications(me.workspace_id, me.id) },
+    { members: await listMembersWithPresence(me.workspace_id), unread: await unreadCounts(me.workspace_id, me.id), notifications: await activityNotifications(me.workspace_id, me.id, me.is_admin) },
     { headers: { "cache-control": "no-store" } },
   );
 }

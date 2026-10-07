@@ -88,7 +88,10 @@ export type FeedItem = Entry & { id: number; taskId: string; taskTitle: string; 
 type FeedRow = Omit<FeedItem, "atLabel" | "dayLabel">;
 
 
-export const activityFeed = async (workspaceId: string, limit = 100): Promise<FeedItem[]> =>
+/** Workspace admins see every project; members only the projects they are assigned to. */
+const VISIBLE_PROJECT = "(? = 1 OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = ?))";
+
+export const activityFeed = async (workspaceId: string, userId: string, isAdmin: number, limit = 100): Promise<FeedItem[]> =>
   (await all<FeedRow>(
     `SELECT e.id, e.at, e.text, u.name AS actor, t.id AS "taskId", t.title AS "taskTitle",
             c.title AS "columnTitle", c.color AS "columnColor"
@@ -97,12 +100,12 @@ export const activityFeed = async (workspaceId: string, limit = 100): Promise<Fe
        JOIN columns c ON c.id = t.column_id
        JOIN projects p ON p.id = c.project_id
        LEFT JOIN users u ON u.id = e.actor_id
-      WHERE p.workspace_id = ?
+      WHERE p.workspace_id = ? AND ${VISIBLE_PROJECT}
       ORDER BY e.id DESC LIMIT ?`,
-    workspaceId, limit,
+    workspaceId, isAdmin, userId, limit,
   )).map((e) => ({ ...e, atLabel: stamp(e.at), dayLabel: day(e.at) }));
 
-export const activityNotifications = async (workspaceId: string, userId: string, limit = 5): Promise<FeedItem[]> => {
+export const activityNotifications = async (workspaceId: string, userId: string, isAdmin: number, limit = 5): Promise<FeedItem[]> => {
   const read = (await get<{ last_activity_read_id: number }>(
     "SELECT last_activity_read_id FROM users WHERE id = ?",
     userId,
@@ -115,10 +118,10 @@ export const activityNotifications = async (workspaceId: string, userId: string,
        JOIN columns c ON c.id = t.column_id
        JOIN projects p ON p.id = c.project_id
        LEFT JOIN users u ON u.id = e.actor_id
-      WHERE p.workspace_id = ? AND e.id > ?
+      WHERE p.workspace_id = ? AND e.id > ? AND ${VISIBLE_PROJECT}
         AND NOT EXISTS (SELECT 1 FROM activity_reads ar WHERE ar.user_id = ? AND ar.event_id = e.id)
       ORDER BY e.id DESC LIMIT ?`,
-    workspaceId, read, userId, limit,
+    workspaceId, read, isAdmin, userId, userId, limit,
   )).map((e) => ({ ...e, atLabel: stamp(e.at), dayLabel: day(e.at) }));
 };
 
@@ -143,7 +146,8 @@ export async function markActivityItemsRead(userId: string, eventIds: number[]) 
 export const myTasks = async (userId: string) =>
   (await all<TaskRow & { column_title: string; column_color: string; project_name: string }>(
     `SELECT t.id, t.column_id, t.title, t.description, t.label, t.priority, t.due_date,
-            u.id AS assignee_id, u.name AS assignee_name, u.color AS assignee_color
+            u.id AS assignee_id, u.name AS assignee_name, u.color AS assignee_color,
+            c.title AS column_title, c.color AS column_color, p.name AS project_name
        FROM tasks t
        JOIN columns c ON c.id = t.column_id
        JOIN projects p ON p.id = c.project_id

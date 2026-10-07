@@ -107,7 +107,7 @@ export default async function Home() {
           No extra services. The database is created on first run.
         </p>
         <pre className="overflow-x-auto rounded-xl border bg-card p-5 text-xs leading-relaxed">
-{`git clone https://github.com/Mqdd27/digital-board.git
+{`git clone https://github.com/Risen-Dev/digital-board.git
 cd digital-board
 npm install
 npm run build
@@ -132,7 +132,7 @@ npm start
           </div>
           <div className="flex items-center gap-4 text-xs text-muted-foreground">
             <Link href="/docs" className="transition-colors hover:text-foreground">Documentation</Link>
-            <a href="https://github.com/Mqdd27/digital-board" target="_blank" rel="noreferrer" className="transition-colors hover:text-foreground">
+            <a href="https://github.com/Risen-Dev/digital-board" target="_blank" rel="noreferrer" className="transition-colors hover:text-foreground">
               GitHub
             </a>
             <span>Self-hosted. Your data never leaves your server.</span>

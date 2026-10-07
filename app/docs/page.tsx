@@ -153,7 +153,7 @@ CREATE ROLE board LOGIN PASSWORD 'choose-something';
 CREATE DATABASE board OWNER board;
 SQL
 
-git clone https://github.com/Mqdd27/digital-board.git
+git clone https://github.com/Risen-Dev/digital-board.git
 cd digital-board
 npm install
 
@@ -169,8 +169,8 @@ npm start`}</Code>
 
           <H id="first-run">First run</H>
           <p className="text-sm text-muted-foreground">
-            Open <C>http://localhost:3000</C>. Because the database has no accounts yet, every route redirects to{" "}
-            <C>/setup</C>. The wizard asks for four things:
+            Open <C>http://localhost:3000</C> and choose <strong className="text-foreground">Create a workspace</strong>{" "}
+            (<C>/register</C>). It asks for four things:
           </p>
           <ul className="flex list-disc flex-col gap-1.5 pl-5 text-sm text-muted-foreground">
             <li><strong className="text-foreground">Workspace name</strong> — shown in the sidebar; click it later to rename it.</li>
@@ -179,8 +179,8 @@ npm start`}</Code>
             <li><strong className="text-foreground">Admin account</strong> — name, email and a password of at least 8 characters. This account becomes the workspace admin.</li>
           </ul>
           <p className="text-sm text-muted-foreground">
-            Submitting creates everything, signs you in and drops you on the board. <C>/setup</C> refuses to run a
-            second time once an account exists.
+            Submitting creates everything, signs you in and drops you on the board. Each registration is a separate
+            workspace; set <C>REGISTRATION_CLOSED=1</C> once yours exists to make the instance invite-only.
           </p>
           <Shot src="/screenshots/setup.png" alt="The first-run wizard — workspace, first project, columns and the admin account" />
 
@@ -192,6 +192,7 @@ npm start`}</Code>
               [<C>DATABASE_URL</C>, <>—</>, <><strong className="text-foreground">Required.</strong> Postgres connection string, e.g. <C>postgres://board:pw@localhost:5432/board</C>.</>],
               [<C>DATABASE_POOL_MAX</C>, <>10</>, <>Maximum Postgres connections held by the pool.</>],
               [<C>PORT</C>, <>3000</>, <>Port the server listens on.</>],
+              [<C>REGISTRATION_CLOSED</C>, <>unset</>, <>Set to <C>1</C> to stop new workspaces being registered. Existing ones keep working; admins still add members.</>],
               [<C>TZ</C>, <>system</>, <>Timezone used to render timestamps. They are formatted on the server, so this decides what every user sees.</>],
               [<C>NODE_ENV</C>, <><C>production</C> via <C>npm start</C></>, <>Session cookies are marked <C>secure</C> in production, which means they require HTTPS.</>],
             ]}
@@ -457,7 +458,7 @@ psql "$DATABASE_URL" -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'`}</C
               ← Back home
             </Link>
             <a
-              href="https://github.com/Mqdd27/digital-board"
+              href="https://github.com/Risen-Dev/digital-board"
               target="_blank"
               rel="noreferrer"
               className="text-muted-foreground transition-colors hover:text-foreground"

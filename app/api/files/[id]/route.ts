@@ -7,6 +7,8 @@ import { get } from "@/lib/db";
  * guessable-ish and an attachment belongs to a message, which belongs to a
  * workspace — and, if it is a DM, to two specific people. Both are checked here.
  */
+const SAFE_INLINE = /^(image\/(png|jpeg|gif|webp|avif)|application\/pdf|video\/(mp4|webm)|audio\/(mpeg|ogg|wav|webm))$/;
+
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await currentUser();
   if (!user) return new NextResponse("Unauthorized", { status: 401 });
@@ -26,11 +28,16 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   }
   if (!row.data) return new NextResponse("Attachment needs migration", { status: 410 });
 
+  // The mime type is whatever the uploader claimed. Rendering HTML or SVG inline
+  // would run a member's script on this origin with the viewer's session, so
+  // only plain media is shown inline; everything else downloads.
+  const inline = SAFE_INLINE.test(row.mime);
   return new NextResponse(row.data as unknown as BodyInit, {
     headers: {
-      "content-type": row.mime,
+      "content-type": inline ? row.mime : "application/octet-stream",
       "content-length": String(row.size),
-      "content-disposition": `inline; filename="${encodeURIComponent(row.name)}"`,
+      "content-disposition": `${inline ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(row.name)}`,
+      "x-content-type-options": "nosniff",
       "cache-control": "private, max-age=31536000, immutable",
     },
   });
