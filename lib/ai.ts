@@ -65,19 +65,43 @@ async function askAnthropic(config: AiConfig, turns: ChatTurn[]) {
   return response.content.map((b) => (b.type === "text" ? b.text : "")).join("");
 }
 
+const openAiBase = (config: AiConfig) =>
+  (config.provider === "gemini" ? GEMINI_URL : config.baseUrl || "https://api.openai.com/v1").replace(/\/+$/, "");
+const openAiAuth = (config: AiConfig): Record<string, string> => (config.apiKey ? { authorization: `Bearer ${config.apiKey}` } : {});
+
+// Only the provider's own error message goes back to the browser, never the raw body:
+// the base URL is admin-set, so the response may come from anywhere. Gemini wraps it in an array.
+function providerError(status: number, body: unknown) {
+  const message = (Array.isArray(body) ? body[0] : (body as { error?: { message?: unknown } }))?.error?.message;
+  return new Error(`Provider returned ${status}${message ? `: ${String(message).slice(0, 300)}` : ""}`);
+}
+
+// Not chat models; OpenAI and Gemini list them alongside the rest.
+const NOT_CHAT = /embed|tts|whisper|dall-e|image|imagen|veo|moderation|audio|transcribe|realtime|aqa|search|computer-use|davinci|babbage/i;
+
+/** The models this key can use, newest/most relevant first as the provider orders them. */
+export async function listModels(config: AiConfig): Promise<string[]> {
+  if (config.provider === "anthropic") {
+    const ids: string[] = [];
+    for await (const model of new Anthropic({ apiKey: config.apiKey }).models.list()) ids.push(model.id);
+    return ids;
+  }
+  const res = await fetch(`${openAiBase(config)}/models`, { headers: openAiAuth(config), signal: AbortSignal.timeout(15_000) });
+  const body = await res.json().catch(() => null);
+  if (!res.ok) throw providerError(res.status, body);
+  return (Array.isArray(body?.data) ? body.data : [])
+    .map((m: { id?: unknown }) => String(m?.id ?? "").replace(/^models\//, ""))
+    .filter((id: string) => id && !NOT_CHAT.test(id));
+}
+
 async function askOpenAi(config: AiConfig, turns: ChatTurn[]) {
-  const base = (config.provider === "gemini" ? GEMINI_URL : config.baseUrl || "https://api.openai.com/v1").replace(/\/+$/, "");
-  const res = await fetch(`${base}/chat/completions`, {
+  const res = await fetch(`${openAiBase(config)}/chat/completions`, {
     method: "POST",
-    headers: { "content-type": "application/json", ...(config.apiKey ? { authorization: `Bearer ${config.apiKey}` } : {}) },
+    headers: { "content-type": "application/json", ...openAiAuth(config) },
     body: JSON.stringify({ model: config.model, messages: [{ role: "system", content: SYSTEM }, ...turns] }),
     signal: AbortSignal.timeout(120_000),
   });
   const body = await res.json().catch(() => null);
-  // Only the provider's own error message goes back to the browser, never the raw body:
-  // the base URL is admin-set, so the response may come from anywhere.
-  // Gemini wraps its error in an array.
-  const error = (Array.isArray(body) ? body[0] : body)?.error?.message;
-  if (!res.ok) throw new Error(`Provider returned ${res.status}${error ? `: ${String(error).slice(0, 300)}` : ""}`);
+  if (!res.ok) throw providerError(res.status, body);
   return String(body?.choices?.[0]?.message?.content ?? "");
 }

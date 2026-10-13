@@ -1,9 +1,9 @@
 "use client";
 
-import { startTransition, useActionState, useState } from "react";
+import { startTransition, useActionState, useEffect, useEffectEvent, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { FolderPlus, KeyRound, Plus, Trash2 } from "lucide-react";
-import { addProject, changeMyPassword, saveAiConfig, deleteProject, inviteMember, renameProject, renameWorkspace, setMemberPassword, setProjectMember } from "@/lib/actions";
+import { addProject, changeMyPassword, fetchAiModels, saveAiConfig, deleteProject, inviteMember, renameProject, renameWorkspace, setMemberPassword, setProjectMember } from "@/lib/actions";
 import { initials } from "@/lib/board";
 import type { MemberPresence, Project, ProjectMember } from "@/lib/queries";
 import { Avatar } from "./avatar";
@@ -324,11 +324,39 @@ const DEFAULT_MODEL: Record<AiProvider, string> = { anthropic: "claude-opus-5-5"
 function AiSettingsForm({ ai }: { ai: AiSettings | null }) {
   const [state, action, pending] = useActionState(saveAiConfig, null);
   const [provider, setProvider] = useState<AiProvider>(ai?.provider ?? "anthropic");
+  const [model, setModel] = useState(ai?.model ?? DEFAULT_MODEL.anthropic);
+  const [list, setList] = useState<{ provider: AiProvider; models: string[] } | null>(null);
+  const [listError, setListError] = useState<string | null>(null);
+  const [loading, startLoading] = useTransition();
+  const form = useRef<HTMLFormElement>(null);
   const sameProvider = ai?.provider === provider;
+
+  /** Asks the provider which models this key can use; a blank key field means the saved key. */
+  function loadModels(p: AiProvider) {
+    const field = (name: string) => (form.current?.elements.namedItem(name) as HTMLInputElement | null)?.value ?? "";
+    startLoading(async () => {
+      const res = await fetchAiModels(p, field("baseUrl"), field("apiKey"));
+      if ("error" in res) {
+        setList(null);
+        setListError(res.error ?? null);
+        return;
+      }
+      setListError(null);
+      setList({ provider: p, models: res.models });
+      setModel((m) => (res.models.includes(m) ? m : res.models.includes(DEFAULT_MODEL[p]) ? DEFAULT_MODEL[p] : res.models[0]));
+    });
+  }
+
+  const loadSaved = useEffectEvent(() => { if (ai) loadModels(ai.provider); });
+  useEffect(() => loadSaved(), []);
+
+  const models = list?.provider === provider ? list.models : null;
+
   return (
     // onSubmit, not action={}: React resets an action form afterwards, which snaps the
-    // controlled provider select back to its first option while state disagrees.
+    // controlled selects back to their first option while state disagrees.
     <form
+      ref={form}
       onSubmit={(e) => {
         e.preventDefault();
         const data = new FormData(e.currentTarget, (e.nativeEvent as SubmitEvent).submitter);
@@ -339,12 +367,24 @@ function AiSettingsForm({ ai }: { ai: AiSettings | null }) {
       <p className="text-[11px] text-muted-foreground">
         Status: {ai ? <span className="text-[var(--chart-2)]">on — {ai.provider} · {ai.model}</span> : "off"}
       </p>
-      <Select label="Provider" name="provider" value={provider} onChange={(e) => setProvider(e.target.value as AiProvider)}>
+      <Select
+        label="Provider"
+        name="provider"
+        value={provider}
+        onChange={(e) => {
+          const p = e.target.value as AiProvider;
+          setProvider(p);
+          setModel(ai?.provider === p ? ai.model : DEFAULT_MODEL[p]);
+          setList(null);
+          setListError(null);
+          // The key field remounts empty for the new provider, so only the saved key (or none, for local servers) can list now.
+          if (ai?.provider === p || p === "openai") loadModels(p);
+        }}
+      >
         <option value="anthropic">Anthropic (Claude)</option>
         <option value="gemini">Google Gemini</option>
         <option value="openai">OpenAI-compatible (OpenAI, OpenRouter, Groq, Ollama…)</option>
       </Select>
-      <Field key={`model-${provider}`} label="Model" name="model" required defaultValue={sameProvider ? ai.model : DEFAULT_MODEL[provider]} />
       {provider === "openai" && (
         <Field
           label="Base URL"
@@ -352,6 +392,7 @@ function AiSettingsForm({ ai }: { ai: AiSettings | null }) {
           defaultValue={sameProvider ? ai.baseUrl : ""}
           placeholder="https://api.openai.com/v1"
           hint="Leave blank for OpenAI. Ollama: http://localhost:11434/v1"
+          onBlur={() => loadModels(provider)}
         />
       )}
       {provider === "gemini" && (
@@ -366,7 +407,25 @@ function AiSettingsForm({ ai }: { ai: AiSettings | null }) {
         type="password"
         autoComplete="off"
         placeholder={sameProvider && ai.keyHint ? `Saved (${ai.keyHint}) — leave blank to keep` : ""}
+        onBlur={(e) => { if (e.target.value.trim()) loadModels(provider); }}
       />
+      {models ? (
+        <Select label="Model" name="model" value={model} onChange={(e) => setModel(e.target.value)}>
+          {models.map((id) => <option key={id} value={id}>{id}</option>)}
+        </Select>
+      ) : (
+        // Until the provider answers (or if it can't list, like some local servers), type the id.
+        <Field label="Model" name="model" required value={model} onChange={(e) => setModel(e.target.value)} />
+      )}
+      <p className="-mt-2 text-[11px] text-muted-foreground">
+        {loading ? "Loading models…"
+          : listError ? <span className="text-[var(--chart-7)]">{listError}</span>
+          : models ? `${models.length} models available to this key.`
+          : "Enter the API key to choose from the models it can use."}
+        {!loading && (
+          <button type="button" onClick={() => loadModels(provider)} className="ml-1.5 underline">Refresh</button>
+        )}
+      </p>
       <FormError error={state?.error} />
       {state?.ok && <p className="text-xs text-[var(--chart-2)]">{state.ok}</p>}
       <div className="flex items-center gap-2">

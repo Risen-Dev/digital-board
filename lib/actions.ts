@@ -511,3 +511,24 @@ export async function saveAiConfig(_prev: unknown, form: FormData) {
   revalidatePath("/board");
   return { ok: "Saved." };
 }
+
+/** Admin-only. Lists models for the typed key, or the saved one when the key field is blank. */
+export async function fetchAiModels(provider: string, baseUrl: string, apiKey: string) {
+  const user = await requireUser();
+  if (!user.is_admin) return { error: "Only workspace admins can configure the AI agent." };
+
+  const { AI_PROVIDERS, aiConfig, listModels } = await import("./ai");
+  if (!AI_PROVIDERS.includes(provider as (typeof AI_PROVIDERS)[number])) return { error: "Pick a provider." };
+  if (baseUrl && !/^https?:\/\/\S+$/.test(baseUrl)) return { error: "Base URL must start with http:// or https://." };
+
+  const saved = await aiConfig(user.workspace_id);
+  const key = apiKey.trim() || (saved?.provider === provider ? saved.apiKey : "");
+  if (provider !== "openai" && !key) return { error: "Enter an API key to load the models." };
+
+  try {
+    const models = await listModels({ provider: provider as (typeof AI_PROVIDERS)[number], model: "", baseUrl: baseUrl.trim(), apiKey: key });
+    return models.length ? { models } : { error: "This key has no chat models available." };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Could not load models." };
+  }
+}
