@@ -94,14 +94,21 @@ export async function listModels(config: AiConfig): Promise<string[]> {
     .filter((id: string) => id && !NOT_CHAT.test(id));
 }
 
+// Overloaded / rate-limited / flaky gateway: worth another try. The Anthropic SDK already retries these itself.
+const RETRYABLE = new Set([429, 500, 502, 503, 504]);
+const RETRY_DELAYS_MS = [1_000, 3_000];
+
 async function askOpenAi(config: AiConfig, turns: ChatTurn[]) {
-  const res = await fetch(`${openAiBase(config)}/chat/completions`, {
-    method: "POST",
-    headers: { "content-type": "application/json", ...openAiAuth(config) },
-    body: JSON.stringify({ model: config.model, messages: [{ role: "system", content: SYSTEM }, ...turns] }),
-    signal: AbortSignal.timeout(120_000),
-  });
-  const body = await res.json().catch(() => null);
-  if (!res.ok) throw providerError(res.status, body);
-  return String(body?.choices?.[0]?.message?.content ?? "");
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(`${openAiBase(config)}/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...openAiAuth(config) },
+      body: JSON.stringify({ model: config.model, messages: [{ role: "system", content: SYSTEM }, ...turns] }),
+      signal: AbortSignal.timeout(120_000),
+    });
+    const body = await res.json().catch(() => null);
+    if (res.ok) return String(body?.choices?.[0]?.message?.content ?? "");
+    if (!RETRYABLE.has(res.status) || attempt >= RETRY_DELAYS_MS.length) throw providerError(res.status, body);
+    await new Promise((resolve) => setTimeout(resolve, RETRY_DELAYS_MS[attempt]));
+  }
 }
