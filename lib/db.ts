@@ -14,6 +14,7 @@ types.setTypeParser(20, Number);
 declare global {
   var __boardPool: pg.Pool | undefined;
   var __boardReady: Promise<void> | undefined;
+  var __boardSchema: string | undefined;
 }
 
 function pool() {
@@ -25,16 +26,30 @@ function pool() {
   }));
 }
 
-/** Schema applied once per process, on the first query. */
+const readSchema = () => readFileSync(join(process.cwd(), "lib", "schema.sql"), "utf8");
+
+/**
+ * Schema applied once per process, on the first query. In dev, `globalThis`
+ * survives hot reloads, so it is applied again whenever schema.sql changes —
+ * otherwise a newly added table stays missing until `next dev` is restarted.
+ */
 function ready() {
+  if (process.env.NODE_ENV !== "production") {
+    const schema = readSchema();
+    if (schema !== globalThis.__boardSchema) {
+      globalThis.__boardSchema = schema;
+      globalThis.__boardReady = undefined;
+    }
+  }
   return (globalThis.__boardReady ??= pool()
-    .query(readFileSync(join(process.cwd(), "lib", "schema.sql"), "utf8"))
+    .query(globalThis.__boardSchema ?? readSchema())
     .then(
       () => undefined,
       (error) => {
         // Don't cache the failure: a database that was down at boot would
         // otherwise fail every request until the process restarts.
         globalThis.__boardReady = undefined;
+        globalThis.__boardSchema = undefined;
         throw error;
       },
     ));

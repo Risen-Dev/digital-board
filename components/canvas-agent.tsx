@@ -56,9 +56,12 @@ export function CanvasAgent({
     if (!enabled) return;
     let live = true;
     fetch(`/api/canvas/${canvasId}/ai`)
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data: { models: string[]; model: string | null; reasoning: string; chats: ChatMeta[] } | null) => {
-        if (!live || !data) return;
+      .then((res) => {
+        if (!res.ok) throw new Error(`${res.status}`);
+        return res.json();
+      })
+      .then((data: { models: string[]; model: string | null; reasoning: string; chats: ChatMeta[] }) => {
+        if (!live) return;
         setChats(data.chats);
         if (!data.model) return;
         const lastModel = recall(MODEL_KEY);
@@ -67,7 +70,8 @@ export function CanvasAgent({
         setModel(lastModel && data.models.includes(lastModel) ? lastModel : data.model);
         setReasoning(lastReasoning !== null && REASONING_OPTIONS.some(([v]) => v === lastReasoning) ? lastReasoning : data.reasoning);
       })
-      .catch(() => {});
+      // Without this the panel just looks like it has no model or history to offer.
+      .catch((e) => { if (live) setError(`Couldn't load the agent's chats and models (${e.message}). Reload the page; if it persists, check the server log.`); });
     return () => { live = false; };
   }, [canvasId, enabled]);
 
