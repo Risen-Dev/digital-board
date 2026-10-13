@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { MessageSquarePlus, Send, Sparkles, X } from "lucide-react";
-import type { Flow } from "@/lib/canvas/flow";
+import { patchSession, sendMessage, useAgentSession, type ChatMeta, type Turn } from "@/hooks/use-agent-session";
 
 /** Shared with Settings. Values are lib/ai.ts `REASONING`. */
 export const REASONING_OPTIONS = [
@@ -15,35 +15,26 @@ export const REASONING_OPTIONS = [
 const MODEL_KEY = "agent-model";
 const REASONING_KEY = "agent-reasoning";
 
-/** `content` goes to the model; `shown` (if set) is what the chat displays. */
-type Turn = { role: "user" | "assistant"; content: string; shown?: string; note?: string };
 type StoredTurn = Turn & { drew?: boolean; by?: string };
-type ChatMeta = { id: string; title: string; author: string | null };
 
 const remember = (key: string, value: string) => { try { localStorage.setItem(key, value); } catch {} };
 const recall = (key: string) => { try { return localStorage.getItem(key); } catch { return null; } };
 
 /**
  * Chat with the canvas agent. Conversations are stored per sheet on the server
- * (`agent_chats`), so anyone editing the sheet can reopen one or start a new one;
- * `onFlow` draws whatever flow the agent returns.
+ * (`agent_chats`), so anyone editing the sheet can reopen one or start a new one.
+ * The chat state itself lives in `use-agent-session`, so a request keeps going —
+ * and its flow still lands on its own sheet — when the user switches sheets.
  */
 export function CanvasAgent({
-  canvasId, enabled, onFlow, onClose,
+  canvasId, enabled, onClose,
 }: {
   canvasId: string;
   enabled: boolean;
-  onFlow: (flow: Flow, by: string) => Promise<number>;
   onClose: () => void;
 }) {
-  const [chats, setChats] = useState<ChatMeta[]>([]);
-  const [chatId, setChatId] = useState<string | null>(null);
-  const [turns, setTurns] = useState<Turn[]>([]);
-  const [input, setInput] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [status, setStatus] = useState<string | null>(null);
-  const [startedAt, setStartedAt] = useState<number | null>(null);
+  const { chats, chatId, turns, draft: input, busy, status, startedAt, error } = useAgentSession(canvasId);
+  const setInput = (draft: string) => patchSession(canvasId, { draft });
   const [now, setNow] = useState(0);
   const [models, setModels] = useState<string[]>([]);
   const [model, setModel] = useState("");
@@ -62,7 +53,7 @@ export function CanvasAgent({
       })
       .then((data: { models: string[]; model: string | null; reasoning: string; chats: ChatMeta[] }) => {
         if (!live) return;
-        setChats(data.chats);
+        patchSession(canvasId, { chats: data.chats });
         if (!data.model) return;
         const lastModel = recall(MODEL_KEY);
         const lastReasoning = recall(REASONING_KEY);
@@ -71,98 +62,43 @@ export function CanvasAgent({
         setReasoning(lastReasoning !== null && REASONING_OPTIONS.some(([v]) => v === lastReasoning) ? lastReasoning : data.reasoning);
       })
       // Without this the panel just looks like it has no model or history to offer.
-      .catch((e) => { if (live) setError(`Couldn't load the agent's chats and models (${e.message}). Reload the page; if it persists, check the server log.`); });
+      .catch((e) => { if (live) patchSession(canvasId, { error: `Couldn't load the agent's chats and models (${e.message}). Reload the page; if it persists, check the server log.` }); });
     return () => { live = false; };
   }, [canvasId, enabled]);
 
   // Ticks the "12s" counter while a request is out, so a slow model doesn't look frozen.
   useEffect(() => {
     if (startedAt === null) return;
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
+    const tick = () => setNow(Date.now());
+    const timer = setInterval(tick, 1000);
+    const first = setTimeout(tick, 0);
+    return () => { clearInterval(timer); clearTimeout(first); };
   }, [startedAt]);
   const elapsed = startedAt === null ? 0 : Math.max(0, Math.round((now - startedAt) / 1000));
 
-  const scrollDown = () => requestAnimationFrame(() => end.current?.scrollIntoView({ behavior: "smooth" }));
+  // Keep the newest turn (or the progress line) in view, also when coming back to a running chat.
+  useEffect(() => {
+    requestAnimationFrame(() => end.current?.scrollIntoView({ behavior: "smooth" }));
+  }, [turns.length, busy]);
 
   function newChat() {
-    setChatId(null);
-    setTurns([]);
-    setError(null);
+    patchSession(canvasId, { chatId: null, turns: [], error: null });
   }
 
   async function openChat(id: string) {
-    setError(null);
+    patchSession(canvasId, { error: null });
     const res = await fetch(`/api/canvas/${canvasId}/ai?chat=${encodeURIComponent(id)}`);
-    if (!res.ok) return setError("That chat could not be opened — it may have been deleted with its sheet.");
+    if (!res.ok) return patchSession(canvasId, { error: "That chat could not be opened — it may have been deleted with its sheet." });
     const { turns: stored }: { turns: StoredTurn[] } = await res.json();
-    setChatId(id);
-    setTurns(stored.map(({ drew, by, ...turn }) => ({ ...turn, note: drew ? `Drew a flow${by ? ` — ${by}` : " on the canvas"}` : undefined })));
-    scrollDown();
+    patchSession(canvasId, {
+      chatId: id,
+      turns: stored.map(({ drew, by, ...turn }) => ({ ...turn, note: drew ? `Drew a flow${by ? ` — ${by}` : " on the canvas"}` : undefined })),
+    });
   }
 
-  async function send() {
+  function send() {
     const text = input.trim();
-    if (!text || busy) return;
-    const before = turns;
-    setTurns([...turns, { role: "user", content: text }]);
-    setInput("");
-    setBusy(true);
-    setError(null);
-    setStatus(null);
-    setStartedAt(Date.now());
-    setNow(Date.now());
-    scrollDown();
-    try {
-      const res = await fetch(`/api/canvas/${canvasId}/ai`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ chatId, message: text, model: model || undefined, reasoning }),
-      });
-      if (!res.ok || !res.body) {
-        const failed = await res.json().catch(() => null);
-        throw new Error(failed?.error ?? `Request failed (${res.status})`);
-      }
-      // NDJSON: "status" lines while the model works or retries, then one "result" or "error".
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let data: { reply?: string; flow?: Flow | null; chatId: string; by: string } | null = null;
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        for (let nl = buffer.indexOf("\n"); nl >= 0; nl = buffer.indexOf("\n")) {
-          const line = buffer.slice(0, nl);
-          buffer = buffer.slice(nl + 1);
-          if (!line) continue;
-          const event = JSON.parse(line);
-          if (event.type === "status") setStatus(event.text);
-          else if (event.type === "error") throw new Error(event.error);
-          else if (event.type === "result") data = event;
-        }
-      }
-      if (!data) throw new Error("The agent stopped without an answer.");
-
-      const added = data.flow ? await onFlow(data.flow, data.by) : 0;
-      const shown = data.reply || "Done.";
-      setTurns([...before, { role: "user", content: text }, { role: "assistant", content: shown, shown, note: added ? `Added ${added} shapes — ${data.by}` : undefined }]);
-      // Move this chat to the top of the history, adding it if it is new.
-      const id = data.chatId;
-      setChatId(id);
-      setChats((list) => {
-        const existing = list.find((c) => c.id === id);
-        return [existing ?? { id, title: text.split("\n")[0].slice(0, 60), author: null }, ...list.filter((c) => c.id !== id)];
-      });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Something went wrong.");
-      setTurns(before);
-      setInput(text);
-    } finally {
-      setBusy(false);
-      setStartedAt(null);
-      scrollDown();
-    }
+    if (text && !busy) void sendMessage(canvasId, text, { model, reasoning });
   }
 
   const picker = "min-w-0 truncate rounded border bg-background px-1.5 py-0.5 text-xs disabled:opacity-50";
