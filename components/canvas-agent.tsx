@@ -1,10 +1,12 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Send, Sparkles, X } from "lucide-react";
 import type { Flow } from "@/lib/canvas/flow";
 
 /** `content` goes to the model; `shown` (if set) is what the chat displays. */
+const MODEL_KEY = "agent-model";
+
 type Turn = { role: "user" | "assistant"; content: string; shown?: string; note?: string };
 
 /**
@@ -24,6 +26,25 @@ export function CanvasAgent({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const end = useRef<HTMLDivElement>(null);
+  const [models, setModels] = useState<string[]>([]);
+  const [model, setModel] = useState("");
+
+  // The models the admin's key offers; the last one picked in this browser wins if still offered.
+  useEffect(() => {
+    if (!enabled) return;
+    let live = true;
+    fetch(`/api/canvas/${canvasId}/ai`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { models: string[]; model: string | null } | null) => {
+        if (!live || !data?.model) return;
+        let remembered: string | null = null;
+        try { remembered = localStorage.getItem(MODEL_KEY); } catch {}
+        setModels(data.models);
+        setModel(remembered && data.models.includes(remembered) ? remembered : data.model);
+      })
+      .catch(() => {});
+    return () => { live = false; };
+  }, [canvasId, enabled]);
 
   async function send() {
     const text = input.trim();
@@ -37,7 +58,7 @@ export function CanvasAgent({
       const res = await fetch(`/api/canvas/${canvasId}/ai`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ messages: next.map(({ role, content }) => ({ role, content })) }),
+        body: JSON.stringify({ model: model || undefined, messages: next.map(({ role, content }) => ({ role, content })) }),
       });
       const data = await res.json().catch(() => ({ error: `Request failed (${res.status})` }));
       if (!res.ok) throw new Error(data.error ?? `Request failed (${res.status})`);
@@ -60,7 +81,21 @@ export function CanvasAgent({
       <header className="flex items-center gap-2 border-b px-3 py-2">
         <Sparkles className="size-4 text-[var(--chart-1)]" />
         <span className="text-sm font-medium">Agent</span>
-        <button type="button" onClick={onClose} title="Close" className="ml-auto rounded p-1 text-muted-foreground hover:bg-secondary hover:text-foreground">
+        <span className="flex-1" />
+        {models.length > 1 && (
+          <select
+            aria-label="Model"
+            value={model}
+            onChange={(e) => {
+              setModel(e.target.value);
+              try { localStorage.setItem(MODEL_KEY, e.target.value); } catch {}
+            }}
+            className="min-w-0 max-w-44 truncate rounded border bg-background px-1.5 py-0.5 text-xs"
+          >
+            {models.map((id) => <option key={id} value={id}>{id}</option>)}
+          </select>
+        )}
+        <button type="button" onClick={onClose} title="Close" className="rounded p-1 text-muted-foreground hover:bg-secondary hover:text-foreground">
           <X className="size-4" />
         </button>
       </header>

@@ -98,6 +98,19 @@ export async function listModels(config: AiConfig): Promise<string[]> {
 const RETRYABLE = new Set([429, 500, 502, 503, 504]);
 const RETRY_DELAYS_MS = [1_000, 3_000];
 
+// ponytail: per-process cache; each instance asks the provider at most every 10 min.
+const modelCache = new Map<string, { at: number; config: string; models: string[] }>();
+
+/** The saved key's models, for the chat panel's picker and to vet a requested override. */
+export async function workspaceModels(workspaceId: string, config: AiConfig) {
+  const stamp = JSON.stringify(config);
+  const hit = modelCache.get(workspaceId);
+  if (hit && hit.config === stamp && Date.now() - hit.at < 600_000) return hit.models;
+  const models = await listModels(config);
+  modelCache.set(workspaceId, { at: Date.now(), config: stamp, models });
+  return models;
+}
+
 async function askOpenAi(config: AiConfig, turns: ChatTurn[]) {
   for (let attempt = 0; ; attempt++) {
     const res = await fetch(`${openAiBase(config)}/chat/completions`, {
