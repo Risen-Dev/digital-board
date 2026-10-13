@@ -17,7 +17,7 @@ const REASONING_KEY = "agent-reasoning";
 
 /** `content` goes to the model; `shown` (if set) is what the chat displays. */
 type Turn = { role: "user" | "assistant"; content: string; shown?: string; note?: string };
-type StoredTurn = Turn & { drew?: boolean };
+type StoredTurn = Turn & { drew?: boolean; by?: string };
 type ChatMeta = { id: string; title: string; author: string | null };
 
 const remember = (key: string, value: string) => { try { localStorage.setItem(key, value); } catch {} };
@@ -33,7 +33,7 @@ export function CanvasAgent({
 }: {
   canvasId: string;
   enabled: boolean;
-  onFlow: (flow: Flow) => Promise<number>;
+  onFlow: (flow: Flow, by: string) => Promise<number>;
   onClose: () => void;
 }) {
   const [chats, setChats] = useState<ChatMeta[]>([]);
@@ -97,7 +97,7 @@ export function CanvasAgent({
     if (!res.ok) return setError("That chat could not be opened — it may have been deleted with its sheet.");
     const { turns: stored }: { turns: StoredTurn[] } = await res.json();
     setChatId(id);
-    setTurns(stored.map(({ drew, ...turn }) => ({ ...turn, note: drew ? "Drew a flow on the canvas" : undefined })));
+    setTurns(stored.map(({ drew, by, ...turn }) => ({ ...turn, note: drew ? `Drew a flow${by ? ` — ${by}` : " on the canvas"}` : undefined })));
     scrollDown();
   }
 
@@ -127,7 +127,7 @@ export function CanvasAgent({
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
-      let data: { reply?: string; flow?: Flow | null; chatId: string } | null = null;
+      let data: { reply?: string; flow?: Flow | null; chatId: string; by: string } | null = null;
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -144,9 +144,9 @@ export function CanvasAgent({
       }
       if (!data) throw new Error("The agent stopped without an answer.");
 
-      const added = data.flow ? await onFlow(data.flow) : 0;
+      const added = data.flow ? await onFlow(data.flow, data.by) : 0;
       const shown = data.reply || "Done.";
-      setTurns([...before, { role: "user", content: text }, { role: "assistant", content: shown, shown, note: added ? `Added ${added} shapes to the canvas` : undefined }]);
+      setTurns([...before, { role: "user", content: text }, { role: "assistant", content: shown, shown, note: added ? `Added ${added} shapes — ${data.by}` : undefined }]);
       // Move this chat to the top of the history, adding it if it is new.
       const id = data.chatId;
       setChatId(id);

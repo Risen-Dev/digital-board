@@ -24,6 +24,10 @@ export type AiSettings = { provider: AiProvider; model: string; baseUrl: string;
 export const aiSettings = (c: AiConfig | null): AiSettings | null =>
   c && { provider: c.provider, model: c.model, baseUrl: c.baseUrl, keyHint: c.apiKey ? `…${c.apiKey.slice(-4)}` : "", reasoning: reasoningOf(c) };
 
+const PROVIDER_NAME: Record<AiProvider, string> = { anthropic: "Anthropic", openai: "OpenAI-compatible", gemini: "Gemini" };
+/** "Gemini · gemini-3.8-flash · reasoning: low" — stamped on the canvas next to what the agent drew. */
+export const agentLabel = (c: AiConfig) => `${PROVIDER_NAME[c.provider]} · ${c.model} · reasoning: ${reasoningOf(c) || "default"}`;
+
 export const AI_PROVIDERS: AiProvider[] = ["anthropic", "openai", "gemini"];
 const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/openai";
 

@@ -2,10 +2,10 @@ import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { all, get, run } from "@/lib/db";
 import { guard } from "@/lib/canvas/guard";
-import { REASONING, aiConfig, askAgent, reasoningOf, workspaceModels, type Reasoning } from "@/lib/ai";
+import { REASONING, agentLabel, aiConfig, askAgent, reasoningOf, workspaceModels, type Reasoning } from "@/lib/ai";
 
 /** One stored chat turn. `content` is what the model sees again; `shown` is what the panel prints. */
-type StoredTurn = { role: "user" | "assistant"; content: string; shown?: string; drew?: boolean };
+type StoredTurn = { role: "user" | "assistant"; content: string; shown?: string; drew?: boolean; by?: string };
 const HISTORY_TURNS = 40;
 
 async function editor(id: string) {
@@ -85,12 +85,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       try {
         const { reply, flow } = await askAgent({ ...config, model, reasoning }, turns.map(({ role, content }) => ({ role, content })), (text) => send({ type: "status", text }));
 
+        const by = agentLabel({ ...config, model, reasoning });
         // Saved only once the model answered, so a failed attempt can simply be resent.
         // The flow goes back into the history as JSON so "change step 3" has something to refer to.
         const shown = reply || "Done.";
         const added = JSON.stringify([
           { role: "user", content: message },
-          { role: "assistant", content: shown + (flow ? `\n\n${JSON.stringify({ flow })}` : ""), shown, drew: !!flow },
+          { role: "assistant", content: shown + (flow ? `\n\n${JSON.stringify({ flow })}` : ""), shown, drew: !!flow, ...(flow ? { by } : {}) },
         ] satisfies StoredTurn[]);
         const now = new Date().toISOString();
         let id = chatId;
@@ -103,7 +104,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
             id, canvasId, user.id, message.split("\n")[0].slice(0, 60), added, now, now,
           );
         }
-        send({ type: "result", reply, flow, chatId: id });
+        send({ type: "result", reply, flow, chatId: id, by });
       } catch (error) {
         send({ type: "error", error: error instanceof Error ? error.message : "The AI provider failed." });
       }

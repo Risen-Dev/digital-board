@@ -44,6 +44,10 @@ const FILL: Record<FlowShape, string> = {
 };
 const GAP_X = 60;
 const GAP_Y = 90;
+const CAPTION_H = 44;
+// Excalidraw's Helvetica (system font). Its hand-drawn fonts load lazily, and text
+// measured before they arrive gets a box too narrow for it, clipping the caption.
+const CAPTION_FONT = 2;
 
 /** BFS depth from the roots; nodes nothing reaches go one row below the rest. */
 export function levels(flow: Flow): Map<string, number> {
@@ -70,7 +74,11 @@ export function levels(flow: Flow): Map<string, number> {
  * top-down with the top-left corner at `origin`. Ids are prefixed so a second
  * flow on the same sheet can't collide with the first.
  */
-export function layoutFlow(flow: Flow, origin: { x: number; y: number }, prefix = "") {
+export function layoutFlow(flow: Flow, origin: { x: number; y: number }, prefix = "", caption = "") {
+  // A gray line above the flow saying who drew it; the flow starts below it.
+  const label = caption ? [{ type: "text", x: origin.x, y: origin.y, text: caption, fontSize: 16, strokeColor: "#868e96", fontFamily: CAPTION_FONT }] : [];
+  if (caption) origin = { x: origin.x, y: origin.y + CAPTION_H };
+
   const level = levels(flow);
   const rows: FlowNode[][] = [];
   for (const n of flow.nodes) (rows[level.get(n.id)!] ??= []).push(n);
@@ -124,5 +132,5 @@ export function layoutFlow(flow: Flow, origin: { x: number; y: number }, prefix 
     };
   });
 
-  return [...shapes, ...arrows];
+  return [...label, ...shapes, ...arrows];
 }
