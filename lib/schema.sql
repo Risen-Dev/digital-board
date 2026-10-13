@@ -160,3 +160,7 @@ CREATE INDEX IF NOT EXISTS messages_workspace ON messages(workspace_id, recipien
 -- Email stays globally unique on purpose. One address is one account in one
 -- workspace, which keeps sign-in a single lookup with no "which workspace?"
 -- step. Registering with an address that already exists is refused.
+
+-- AI agent provider for the canvas, as JSON ({provider, model, baseUrl, apiKey}).
+-- Set by a workspace admin in Settings; NULL means the agent is off.
+ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS ai_config TEXT;

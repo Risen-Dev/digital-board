@@ -24,6 +24,7 @@ import { CanvasView } from "./views/canvas-view";
 import { AnalyticsView, type Stats } from "./views/analytics-view";
 import { MyTasksView, type MyTask } from "./views/my-tasks-view";
 import { MembersPanel } from "./members-panel";
+import type { AiSettings } from "@/lib/ai";
 import { ChatView, PresenceDot, UnreadBadge } from "./views/chat-view";
 
 const VIEWS = [
@@ -48,7 +49,7 @@ const SECTIONS: { key: SectionKey; Icon: typeof Home; label: string }[] = [
 type Alert = { title: string; body: string };
 
 export function Workspace({
-  user, workspace, projects, project, columns, members, assignments, presence, feed, notifications: initialNotifications, unread: initialUnread, mine, stats, sheets, today, dark,
+  user, workspace, projects, project, columns, members, assignments, presence, feed, notifications: initialNotifications, unread: initialUnread, mine, stats, sheets, today, dark, aiEnabled, ai,
 }: {
   user: User;
   workspace: string;
@@ -66,6 +67,8 @@ export function Workspace({
   presence: MemberPresence[];
   today: string;
   dark: boolean;
+  aiEnabled: boolean;
+  ai: AiSettings | null;
 }) {
   const router = useRouter();
   const [section, setSection] = useState<SectionKey>("home");
@@ -456,7 +459,7 @@ export function Workspace({
         ) : section === "chat" ? (
           <ChatView key={chatChannel} meId={user.id} initialMembers={live} initialChannel={chatChannel} />
         ) : section === "settings" ? (
-          <MembersPanel workspace={workspace} memberId={user.id} presence={live} isAdmin={user.is_admin === 1} projects={projects} assignments={assignments} activeProjectId={project?.id ?? null} />
+          <MembersPanel workspace={workspace} memberId={user.id} presence={live} isAdmin={user.is_admin === 1} projects={projects} assignments={assignments} activeProjectId={project?.id ?? null} ai={ai} />
         ) : !project ? (
           <EmptyProject />
         ) : section === "canvas" ? (
@@ -464,6 +467,7 @@ export function Workspace({
             projectId={project.id}
             sheets={sheets}
             dark={dark}
+            aiEnabled={aiEnabled}
             // Viewers can watch live but every save would be refused, so don't let them draw.
             readOnly={user.is_admin !== 1 && assignments.find((item) => item.user_id === user.id && item.project_id === project.id)?.role === "viewer"}
             onChanged={() => router.refresh()}

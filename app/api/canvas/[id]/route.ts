@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { currentUser } from "@/lib/auth";
 import { get, run, transaction } from "@/lib/db";
 import { mergeSnapshots, type Snapshot } from "@/lib/canvas/merge";
 import { broadcast, peers, type Peer } from "@/lib/canvas/hub";
+import { guard } from "@/lib/canvas/guard";
 
 /**
  * Canvas snapshots travel through a Route Handler, not a Server Action.
@@ -11,25 +11,6 @@ import { broadcast, peers, type Peer } from "@/lib/canvas/hub";
  * Route Handlers have no such cap, so raising `serverActions.bodySizeLimit`
  * would only move the failure, not remove it.
  */
-
-/**
- * The workspace check comes FIRST and applies to admins too — being an admin of
- * your own workspace must not open someone else's canvas.
- */
-async function guard(projectId: string, write = false) {
-  const user = await currentUser();
-  if (!user) return null;
-
-  const project = await get<{ workspace_id: string }>("SELECT workspace_id FROM projects WHERE id = ?", projectId);
-  if (!project || project.workspace_id !== user.workspace_id) return null;
-
-  if (user.is_admin === 1) return user;
-  const member = await get<{ role: string }>(
-    "SELECT role FROM project_members WHERE project_id = ? AND user_id = ?",
-    projectId, user.id,
-  );
-  return member && (!write || member.role !== "viewer") ? user : null;
-}
 
 /**
  * Live collaboration (lib/canvas/hub.ts): cursor moves and element changes are

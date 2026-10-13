@@ -476,3 +476,38 @@ export async function deleteCanvas(id: string) {
   broadcast(id, "", { type: "deleted" });
   revalidatePath("/board");
 }
+
+// ── AI agent ────────────────────────────────────────────────────────────────
+
+/** Admin-only. A blank API key keeps the saved one, so the key never has to round-trip to the browser. */
+export async function saveAiConfig(_prev: unknown, form: FormData) {
+  const user = await requireUser();
+  if (!user.is_admin) return { error: "Only workspace admins can configure the AI agent." };
+
+  const { AI_PROVIDERS, aiConfig } = await import("./ai");
+  const provider = String(form.get("provider") ?? "") as (typeof AI_PROVIDERS)[number];
+  const model = String(form.get("model") ?? "").trim();
+  const baseUrl = String(form.get("baseUrl") ?? "").trim();
+  const apiKey = String(form.get("apiKey") ?? "").trim();
+
+  if (form.get("disable")) {
+    await run("UPDATE workspaces SET ai_config = NULL WHERE id = ?", user.workspace_id);
+    revalidatePath("/board");
+    return { ok: "AI agent turned off." };
+  }
+  if (!AI_PROVIDERS.includes(provider)) return { error: "Pick a provider." };
+  if (!model) return { error: "Model is required." };
+  if (baseUrl && !/^https?:\/\/\S+$/.test(baseUrl)) return { error: "Base URL must start with http:// or https://." };
+
+  const saved = await aiConfig(user.workspace_id);
+  const key = apiKey || (saved?.provider === provider ? saved.apiKey : "");
+  // Ollama and other local servers need no key; Anthropic always does.
+  if (provider === "anthropic" && !key) return { error: "An API key is required for Anthropic." };
+
+  await run(
+    "UPDATE workspaces SET ai_config = ? WHERE id = ?",
+    JSON.stringify({ provider, model, baseUrl: provider === "openai" ? baseUrl : "", apiKey: key }), user.workspace_id,
+  );
+  revalidatePath("/board");
+  return { ok: "Saved." };
+}

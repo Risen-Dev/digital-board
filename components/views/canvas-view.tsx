@@ -12,6 +12,7 @@ import {
   Check,
   Pencil,
   Plus,
+  Sparkles,
   Trash2,
 } from "lucide-react";
 
@@ -31,6 +32,10 @@ import { useCanvasPersistence } from "@/hooks/use-canvas-persistence";
 import { useCanvasLive } from "@/hooks/use-canvas-live";
 
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
+import type { ExcalidrawElementSkeleton } from "@excalidraw/excalidraw/data/transform";
+
+import { layoutFlow, type Flow } from "@/lib/canvas/flow";
+import { CanvasAgent } from "@/components/canvas-agent";
 
 /**
  * Excalidraw is browser-only.
@@ -105,6 +110,7 @@ type CanvasViewProps = {
   sheets: CanvasMeta[];
   dark: boolean;
   readOnly: boolean;
+  aiEnabled: boolean;
   onChanged: () => void;
 };
 
@@ -113,8 +119,11 @@ export function CanvasView({
   sheets,
   dark,
   readOnly,
+  aiEnabled,
   onChanged,
 }: CanvasViewProps) {
+  const [agentOpen, setAgentOpen] = useState(false);
+
   const [selected, setSelected] = useState<
     string | null
   >(null);
@@ -194,6 +203,29 @@ export function CanvasView({
       onChanged();
     },
   );
+
+  /**
+   * Draws an agent flow to the right of whatever is on the sheet. It goes in as
+   * a normal scene edit, so it saves, syncs to peers and undoes like a stroke.
+   */
+  async function drawFlow(flow: Flow) {
+    const api = excalidraw?.sheetId === activeId ? excalidraw.api : null;
+    if (!api) return 0;
+    const { convertToExcalidrawElements, CaptureUpdateAction } = await import("@excalidraw/excalidraw");
+
+    const all = api.getSceneElementsIncludingDeleted();
+    const visible = all.filter((element) => !element.isDeleted);
+    const origin = visible.length
+      ? { x: Math.max(...visible.map((e) => e.x + e.width)) + 160, y: Math.min(...visible.map((e) => e.y)) }
+      : { x: 0, y: 0 };
+
+    const added = convertToExcalidrawElements(
+      layoutFlow(flow, origin, `${crypto.randomUUID().slice(0, 8)}-`) as ExcalidrawElementSkeleton[],
+    );
+    api.updateScene({ elements: [...all, ...added], captureUpdate: CaptureUpdateAction.IMMEDIATELY });
+    api.scrollToContent(added, { fitToContent: true, animate: true });
+    return added.length;
+  }
 
   async function addSheet() {
     /**
@@ -372,7 +404,21 @@ export function CanvasView({
           Sheet
         </button>}
 
-        <span className="ml-auto shrink-0 pl-3 text-[11px] text-muted-foreground">
+        {!readOnly && activeId && (
+          <button
+            type="button"
+            onClick={() => setAgentOpen((open) => !open)}
+            className={[
+              "ml-auto flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors",
+              agentOpen ? "bg-secondary text-foreground" : "text-muted-foreground hover:bg-secondary hover:text-foreground",
+            ].join(" ")}
+          >
+            <Sparkles className="size-3" />
+            Agent
+          </button>
+        )}
+
+        <span className={`${!readOnly && activeId ? "" : "ml-auto "}shrink-0 pl-3 text-[11px] text-muted-foreground`}>
           {status === "saving" ? (
             "Saving…"
           ) : status === "error" ? (
@@ -427,6 +473,16 @@ export function CanvasView({
               Create the first sheet
             </button>}
           </div>
+        )}
+
+        {activeId && agentOpen && !readOnly && (
+          <CanvasAgent
+            key={`agent-${activeId}`}
+            canvasId={activeId}
+            enabled={aiEnabled}
+            onFlow={drawFlow}
+            onClose={() => setAgentOpen(false)}
+          />
         )}
       </div>
     </div>
