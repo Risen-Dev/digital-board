@@ -44,9 +44,21 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: "That model isn't available for this workspace." }, { status: 400 });
   }
 
-  try {
-    return NextResponse.json(await askAgent({ ...config, model }, turns.map(({ role, content }) => ({ role, content }))));
-  } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "The AI provider failed." }, { status: 502 });
-  }
+  // One NDJSON line per event: progress ("status") while the model works or retries, then "result" or "error".
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    async start(controller) {
+      const send = (event: object) => controller.enqueue(encoder.encode(JSON.stringify(event) + "\n"));
+      try {
+        const result = await askAgent({ ...config, model }, turns.map(({ role, content }) => ({ role, content })), (text) => send({ type: "status", text }));
+        send({ type: "result", ...result });
+      } catch (error) {
+        send({ type: "error", error: error instanceof Error ? error.message : "The AI provider failed." });
+      }
+      controller.close();
+    },
+  });
+  return new Response(stream, {
+    headers: { "content-type": "application/x-ndjson", "cache-control": "no-store", "x-accel-buffering": "no" },
+  });
 }

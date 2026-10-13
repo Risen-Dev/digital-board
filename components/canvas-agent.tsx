@@ -26,6 +26,9 @@ export function CanvasAgent({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const end = useRef<HTMLDivElement>(null);
+  const [status, setStatus] = useState<string | null>(null);
+  const [startedAt, setStartedAt] = useState<number | null>(null);
+  const [now, setNow] = useState(0);
   const [models, setModels] = useState<string[]>([]);
   const [model, setModel] = useState("");
 
@@ -46,6 +49,14 @@ export function CanvasAgent({
     return () => { live = false; };
   }, [canvasId, enabled]);
 
+  // Ticks the "12s" counter while a request is out, so a slow model doesn't look frozen.
+  useEffect(() => {
+    if (startedAt === null) return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [startedAt]);
+  const elapsed = startedAt === null ? 0 : Math.max(0, Math.round((now - startedAt) / 1000));
+
   async function send() {
     const text = input.trim();
     if (!text || busy) return;
@@ -54,14 +65,39 @@ export function CanvasAgent({
     setInput("");
     setBusy(true);
     setError(null);
+    setStatus(null);
+    setStartedAt(Date.now());
+    setNow(Date.now());
     try {
       const res = await fetch(`/api/canvas/${canvasId}/ai`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ model: model || undefined, messages: next.map(({ role, content }) => ({ role, content })) }),
       });
-      const data = await res.json().catch(() => ({ error: `Request failed (${res.status})` }));
-      if (!res.ok) throw new Error(data.error ?? `Request failed (${res.status})`);
+      if (!res.ok || !res.body) {
+        const failed = await res.json().catch(() => null);
+        throw new Error(failed?.error ?? `Request failed (${res.status})`);
+      }
+      // NDJSON: "status" lines while the model works or retries, then one "result" or "error".
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let data: { reply?: string; flow?: Flow | null } | null = null;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        for (let nl = buffer.indexOf("\n"); nl >= 0; nl = buffer.indexOf("\n")) {
+          const line = buffer.slice(0, nl);
+          buffer = buffer.slice(nl + 1);
+          if (!line) continue;
+          const event = JSON.parse(line);
+          if (event.type === "status") setStatus(event.text);
+          else if (event.type === "error") throw new Error(event.error);
+          else if (event.type === "result") data = event;
+        }
+      }
+      if (!data) throw new Error("The agent stopped without an answer.");
       const added = data.flow ? await onFlow(data.flow) : 0;
       // The flow goes back to the model as JSON so "change step 3" has something to refer to.
       const content = (data.reply || "Done.") + (data.flow ? `\n\n${JSON.stringify({ flow: data.flow })}` : "");
@@ -72,6 +108,7 @@ export function CanvasAgent({
       setInput(text);
     } finally {
       setBusy(false);
+      setStartedAt(null);
       requestAnimationFrame(() => end.current?.scrollIntoView({ behavior: "smooth" }));
     }
   }
@@ -114,7 +151,11 @@ export function CanvasAgent({
             {t.note && <p className="mt-1 text-[11px] text-muted-foreground">✓ {t.note}</p>}
           </div>
         ))}
-        {busy && <p className="text-xs text-muted-foreground">Thinking…</p>}
+        {busy && (
+          <p className="text-xs text-muted-foreground">
+            {status ?? (elapsed < 20 ? "Thinking…" : "Still working — a big flow can take a while…")} · {elapsed}s
+          </p>
+        )}
         {error && <p className="rounded-md bg-[rgba(239,68,68,0.08)] px-3 py-2 text-xs text-[var(--chart-7)]">{error}</p>}
         <div ref={end} />
       </div>

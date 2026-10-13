@@ -39,9 +39,33 @@ Always answer with ONE JSON object and nothing else:
 - Labels are short verb phrases (max ~6 words). Use 4–25 nodes.
 - When the user asks to change a flow you made earlier, return the complete updated flow — it is drawn as a new copy.`;
 
-/** Asks the configured model; returns its reply and, if it designed one, a validated flow. */
-export async function askAgent(config: AiConfig, turns: ChatTurn[]): Promise<{ reply: string; flow: Flow | null }> {
-  const text = config.provider === "anthropic" ? await askAnthropic(config, turns) : await askOpenAi(config, turns);
+// Overloaded / rate-limited / flaky gateway: worth another try.
+const RETRYABLE = new Set([429, 500, 502, 503, 504]);
+const RETRY_DELAYS_MS = [1_000, 3_000];
+
+/**
+ * Asks the configured model; returns its reply and, if it designed one, a validated flow.
+ * Retries overloads itself (the Anthropic SDK's own retries are off) so `onStatus` can say so.
+ */
+export async function askAgent(
+  config: AiConfig,
+  turns: ChatTurn[],
+  onStatus: (text: string) => void = () => {},
+): Promise<{ reply: string; flow: Flow | null }> {
+  let text = "";
+  for (let attempt = 0; ; attempt++) {
+    try {
+      text = config.provider === "anthropic" ? await askAnthropic(config, turns) : await askOpenAi(config, turns);
+      break;
+    } catch (error) {
+      const status = error instanceof ProviderError || error instanceof Anthropic.APIError ? error.status : undefined;
+      if (!status || !RETRYABLE.has(status) || attempt >= RETRY_DELAYS_MS.length) throw error;
+      const wait = RETRY_DELAYS_MS[attempt];
+      onStatus(`${config.model} ${status === 429 ? "is rate-limited" : "is busy"} (${status}) — retrying in ${wait / 1000}s (${attempt + 1}/${RETRY_DELAYS_MS.length})…`);
+      await new Promise((resolve) => setTimeout(resolve, wait));
+      onStatus(`Retrying ${config.model}…`);
+    }
+  }
 
   // Models sometimes wrap JSON in prose or ``` fences — take the outermost object.
   const json = text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1);
@@ -54,7 +78,7 @@ export async function askAgent(config: AiConfig, turns: ChatTurn[]): Promise<{ r
 }
 
 async function askAnthropic(config: AiConfig, turns: ChatTurn[]) {
-  const client = new Anthropic({ apiKey: config.apiKey });
+  const client = new Anthropic({ apiKey: config.apiKey, maxRetries: 0 });
   const response = await client.messages.create({
     model: config.model,
     max_tokens: 16000,
@@ -71,9 +95,13 @@ const openAiAuth = (config: AiConfig): Record<string, string> => (config.apiKey 
 
 // Only the provider's own error message goes back to the browser, never the raw body:
 // the base URL is admin-set, so the response may come from anywhere. Gemini wraps it in an array.
+class ProviderError extends Error {
+  constructor(message: string, readonly status: number) { super(message); }
+}
+
 function providerError(status: number, body: unknown) {
   const message = (Array.isArray(body) ? body[0] : (body as { error?: { message?: unknown } }))?.error?.message;
-  return new Error(`Provider returned ${status}${message ? `: ${String(message).slice(0, 300)}` : ""}`);
+  return new ProviderError(`Provider returned ${status}${message ? `: ${String(message).slice(0, 300)}` : ""}`, status);
 }
 
 // Not chat models; OpenAI and Gemini list them alongside the rest.
@@ -94,10 +122,6 @@ export async function listModels(config: AiConfig): Promise<string[]> {
     .filter((id: string) => id && !NOT_CHAT.test(id));
 }
 
-// Overloaded / rate-limited / flaky gateway: worth another try. The Anthropic SDK already retries these itself.
-const RETRYABLE = new Set([429, 500, 502, 503, 504]);
-const RETRY_DELAYS_MS = [1_000, 3_000];
-
 // ponytail: per-process cache; each instance asks the provider at most every 10 min.
 const modelCache = new Map<string, { at: number; config: string; models: string[] }>();
 
@@ -112,16 +136,18 @@ export async function workspaceModels(workspaceId: string, config: AiConfig) {
 }
 
 async function askOpenAi(config: AiConfig, turns: ChatTurn[]) {
-  for (let attempt = 0; ; attempt++) {
-    const res = await fetch(`${openAiBase(config)}/chat/completions`, {
-      method: "POST",
-      headers: { "content-type": "application/json", ...openAiAuth(config) },
-      body: JSON.stringify({ model: config.model, messages: [{ role: "system", content: SYSTEM }, ...turns] }),
-      signal: AbortSignal.timeout(120_000),
-    });
-    const body = await res.json().catch(() => null);
-    if (res.ok) return String(body?.choices?.[0]?.message?.content ?? "");
-    if (!RETRYABLE.has(res.status) || attempt >= RETRY_DELAYS_MS.length) throw providerError(res.status, body);
-    await new Promise((resolve) => setTimeout(resolve, RETRY_DELAYS_MS[attempt]));
-  }
+  const res = await fetch(`${openAiBase(config)}/chat/completions`, {
+    method: "POST",
+    headers: { "content-type": "application/json", ...openAiAuth(config) },
+    body: JSON.stringify({
+      model: config.model,
+      messages: [{ role: "system", content: SYSTEM }, ...turns],
+      // Gemini 3 thinks before answering, which is most of the wait; a flowchart doesn't need deep reasoning.
+      ...(config.provider === "gemini" ? { reasoning_effort: "low" } : {}),
+    }),
+    signal: AbortSignal.timeout(120_000),
+  });
+  const body = await res.json().catch(() => null);
+  if (!res.ok) throw providerError(res.status, body);
+  return String(body?.choices?.[0]?.message?.content ?? "");
 }
