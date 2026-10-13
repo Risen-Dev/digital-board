@@ -1,17 +1,32 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Send, Sparkles, X } from "lucide-react";
+import { MessageSquarePlus, Send, Sparkles, X } from "lucide-react";
 import type { Flow } from "@/lib/canvas/flow";
 
-/** `content` goes to the model; `shown` (if set) is what the chat displays. */
-const MODEL_KEY = "agent-model";
+/** Shared with Settings. Values are lib/ai.ts `REASONING`. */
+export const REASONING_OPTIONS = [
+  ["", "Default (model decides)"],
+  ["low", "Low — fastest"],
+  ["medium", "Medium"],
+  ["high", "High — most careful, slowest"],
+] as const;
 
+const MODEL_KEY = "agent-model";
+const REASONING_KEY = "agent-reasoning";
+
+/** `content` goes to the model; `shown` (if set) is what the chat displays. */
 type Turn = { role: "user" | "assistant"; content: string; shown?: string; note?: string };
+type StoredTurn = Turn & { drew?: boolean };
+type ChatMeta = { id: string; title: string; author: string | null };
+
+const remember = (key: string, value: string) => { try { localStorage.setItem(key, value); } catch {} };
+const recall = (key: string) => { try { return localStorage.getItem(key); } catch { return null; } };
 
 /**
- * Chat with the canvas agent. The conversation lives in this component only
- * (remounted per sheet); `onFlow` draws whatever flow the agent returns.
+ * Chat with the canvas agent. Conversations are stored per sheet on the server
+ * (`agent_chats`), so anyone editing the sheet can reopen one or start a new one;
+ * `onFlow` draws whatever flow the agent returns.
  */
 export function CanvasAgent({
   canvasId, enabled, onFlow, onClose,
@@ -21,29 +36,36 @@ export function CanvasAgent({
   onFlow: (flow: Flow) => Promise<number>;
   onClose: () => void;
 }) {
+  const [chats, setChats] = useState<ChatMeta[]>([]);
+  const [chatId, setChatId] = useState<string | null>(null);
   const [turns, setTurns] = useState<Turn[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const end = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [now, setNow] = useState(0);
   const [models, setModels] = useState<string[]>([]);
   const [model, setModel] = useState("");
+  const [reasoning, setReasoning] = useState("");
+  const end = useRef<HTMLDivElement>(null);
 
-  // The models the admin's key offers; the last one picked in this browser wins if still offered.
+  // The sheet's chats, plus the models and default reasoning the admin set up;
+  // what this browser picked last wins while it is still offered.
   useEffect(() => {
     if (!enabled) return;
     let live = true;
     fetch(`/api/canvas/${canvasId}/ai`)
       .then((res) => (res.ok ? res.json() : null))
-      .then((data: { models: string[]; model: string | null } | null) => {
-        if (!live || !data?.model) return;
-        let remembered: string | null = null;
-        try { remembered = localStorage.getItem(MODEL_KEY); } catch {}
+      .then((data: { models: string[]; model: string | null; reasoning: string; chats: ChatMeta[] } | null) => {
+        if (!live || !data) return;
+        setChats(data.chats);
+        if (!data.model) return;
+        const lastModel = recall(MODEL_KEY);
+        const lastReasoning = recall(REASONING_KEY);
         setModels(data.models);
-        setModel(remembered && data.models.includes(remembered) ? remembered : data.model);
+        setModel(lastModel && data.models.includes(lastModel) ? lastModel : data.model);
+        setReasoning(lastReasoning !== null && REASONING_OPTIONS.some(([v]) => v === lastReasoning) ? lastReasoning : data.reasoning);
       })
       .catch(() => {});
     return () => { live = false; };
@@ -57,22 +79,41 @@ export function CanvasAgent({
   }, [startedAt]);
   const elapsed = startedAt === null ? 0 : Math.max(0, Math.round((now - startedAt) / 1000));
 
+  const scrollDown = () => requestAnimationFrame(() => end.current?.scrollIntoView({ behavior: "smooth" }));
+
+  function newChat() {
+    setChatId(null);
+    setTurns([]);
+    setError(null);
+  }
+
+  async function openChat(id: string) {
+    setError(null);
+    const res = await fetch(`/api/canvas/${canvasId}/ai?chat=${encodeURIComponent(id)}`);
+    if (!res.ok) return setError("That chat could not be opened — it may have been deleted with its sheet.");
+    const { turns: stored }: { turns: StoredTurn[] } = await res.json();
+    setChatId(id);
+    setTurns(stored.map(({ drew, ...turn }) => ({ ...turn, note: drew ? "Drew a flow on the canvas" : undefined })));
+    scrollDown();
+  }
+
   async function send() {
     const text = input.trim();
     if (!text || busy) return;
-    const next: Turn[] = [...turns, { role: "user", content: text }];
-    setTurns(next);
+    const before = turns;
+    setTurns([...turns, { role: "user", content: text }]);
     setInput("");
     setBusy(true);
     setError(null);
     setStatus(null);
     setStartedAt(Date.now());
     setNow(Date.now());
+    scrollDown();
     try {
       const res = await fetch(`/api/canvas/${canvasId}/ai`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ model: model || undefined, messages: next.map(({ role, content }) => ({ role, content })) }),
+        body: JSON.stringify({ chatId, message: text, model: model || undefined, reasoning }),
       });
       if (!res.ok || !res.body) {
         const failed = await res.json().catch(() => null);
@@ -82,7 +123,7 @@ export function CanvasAgent({
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
-      let data: { reply?: string; flow?: Flow | null } | null = null;
+      let data: { reply?: string; flow?: Flow | null; chatId: string } | null = null;
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -98,40 +139,49 @@ export function CanvasAgent({
         }
       }
       if (!data) throw new Error("The agent stopped without an answer.");
+
       const added = data.flow ? await onFlow(data.flow) : 0;
-      // The flow goes back to the model as JSON so "change step 3" has something to refer to.
-      const content = (data.reply || "Done.") + (data.flow ? `\n\n${JSON.stringify({ flow: data.flow })}` : "");
-      setTurns([...next, { role: "assistant", content, shown: data.reply || "Done.", note: added ? `Added ${added} shapes to the canvas` : undefined }]);
+      const shown = data.reply || "Done.";
+      setTurns([...before, { role: "user", content: text }, { role: "assistant", content: shown, shown, note: added ? `Added ${added} shapes to the canvas` : undefined }]);
+      // Move this chat to the top of the history, adding it if it is new.
+      const id = data.chatId;
+      setChatId(id);
+      setChats((list) => {
+        const existing = list.find((c) => c.id === id);
+        return [existing ?? { id, title: text.split("\n")[0].slice(0, 60), author: null }, ...list.filter((c) => c.id !== id)];
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong.");
-      setTurns(turns);
+      setTurns(before);
       setInput(text);
     } finally {
       setBusy(false);
       setStartedAt(null);
-      requestAnimationFrame(() => end.current?.scrollIntoView({ behavior: "smooth" }));
+      scrollDown();
     }
   }
+
+  const picker = "min-w-0 truncate rounded border bg-background px-1.5 py-0.5 text-xs disabled:opacity-50";
 
   return (
     <aside className="absolute inset-y-0 right-0 z-10 flex w-full max-w-sm flex-col border-l bg-background shadow-lg">
       <header className="flex items-center gap-2 border-b px-3 py-2">
-        <Sparkles className="size-4 text-[var(--chart-1)]" />
-        <span className="text-sm font-medium">Agent</span>
-        <span className="flex-1" />
-        {models.length > 1 && (
-          <select
-            aria-label="Model"
-            value={model}
-            onChange={(e) => {
-              setModel(e.target.value);
-              try { localStorage.setItem(MODEL_KEY, e.target.value); } catch {}
-            }}
-            className="min-w-0 max-w-44 truncate rounded border bg-background px-1.5 py-0.5 text-xs"
-          >
-            {models.map((id) => <option key={id} value={id}>{id}</option>)}
-          </select>
-        )}
+        <Sparkles className="size-4 shrink-0 text-[var(--chart-1)]" />
+        <select
+          aria-label="Chat history"
+          value={chatId ?? ""}
+          disabled={busy || !enabled}
+          onChange={(e) => (e.target.value ? void openChat(e.target.value) : newChat())}
+          className={`${picker} flex-1 py-1 text-sm font-medium`}
+        >
+          <option value="">New chat</option>
+          {chats.map((c) => (
+            <option key={c.id} value={c.id}>{c.title}{c.author ? ` — ${c.author}` : ""}</option>
+          ))}
+        </select>
+        <button type="button" onClick={newChat} disabled={busy || !enabled} title="New chat" className="rounded p-1 text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-40">
+          <MessageSquarePlus className="size-4" />
+        </button>
         <button type="button" onClick={onClose} title="Close" className="rounded p-1 text-muted-foreground hover:bg-secondary hover:text-foreground">
           <X className="size-4" />
         </button>
@@ -143,6 +193,7 @@ export function CanvasAgent({
         ) : turns.length === 0 ? (
           <p className="text-xs text-muted-foreground">
             Describe a business process and the agent draws it on this sheet. Try: &ldquo;Buatkan flow proses pemesanan barang dari order sampai pengiriman&rdquo;.
+            {chats.length > 0 && " Earlier chats on this sheet are in the menu above."}
           </p>
         ) : null}
         {turns.map((t, i) => (
@@ -160,21 +211,46 @@ export function CanvasAgent({
         <div ref={end} />
       </div>
 
-      <form onSubmit={(e) => { e.preventDefault(); void send(); }} className="flex items-end gap-2 border-t p-2">
-        <textarea
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send(); }
-          }}
-          disabled={!enabled}
-          rows={2}
-          placeholder={enabled ? "Describe a process…" : "Not configured"}
-          className="flex-1 resize-none rounded-md border bg-background px-2.5 py-1.5 text-sm outline-none focus:border-ring disabled:opacity-50"
-        />
-        <button type="submit" disabled={!enabled || busy || !input.trim()} title="Send" className="rounded-md bg-primary p-2 text-primary-foreground disabled:opacity-40">
-          <Send className="size-4" />
-        </button>
+      <form onSubmit={(e) => { e.preventDefault(); void send(); }} className="flex flex-col gap-1.5 border-t p-2">
+        <div className="flex items-end gap-2">
+          <textarea
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send(); }
+            }}
+            disabled={!enabled}
+            rows={2}
+            placeholder={enabled ? "Describe a process…" : "Not configured"}
+            className="flex-1 resize-none rounded-md border bg-background px-2.5 py-1.5 text-sm outline-none focus:border-ring disabled:opacity-50"
+          />
+          <button type="submit" disabled={!enabled || busy || !input.trim()} title="Send" className="rounded-md bg-primary p-2 text-primary-foreground disabled:opacity-40">
+            <Send className="size-4" />
+          </button>
+        </div>
+        {enabled && models.length > 0 && (
+          <div className="flex items-center gap-1.5">
+            <select
+              aria-label="Model"
+              value={model}
+              disabled={busy || models.length < 2}
+              onChange={(e) => { setModel(e.target.value); remember(MODEL_KEY, e.target.value); }}
+              className={`${picker} flex-1`}
+            >
+              {models.map((id) => <option key={id} value={id}>{id}</option>)}
+            </select>
+            <select
+              aria-label="Reasoning"
+              title="Reasoning: how long the model thinks before answering"
+              value={reasoning}
+              disabled={busy}
+              onChange={(e) => { setReasoning(e.target.value); remember(REASONING_KEY, e.target.value); }}
+              className={picker}
+            >
+              {REASONING_OPTIONS.map(([value, label]) => <option key={value} value={value}>Reasoning: {label.split(" — ")[0]}</option>)}
+            </select>
+          </div>
+        )}
       </form>
     </aside>
   );

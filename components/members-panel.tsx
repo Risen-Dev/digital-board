@@ -11,6 +11,7 @@ import { PresenceDot } from "./views/chat-view";
 import { Field, FormError, Select, SubmitButton } from "./form-bits";
 import type { AiProvider, AiSettings } from "@/lib/ai";
 import { EditableTitle } from "./editable-title";
+import { REASONING_OPTIONS } from "./canvas-agent";
 
 const ago = (iso: string | null) => {
   if (!iso) return "never signed in";
@@ -425,6 +426,17 @@ function AiSettingsForm({ ai }: { ai: AiSettings | null }) {
         {!loading && (
           <button type="button" onClick={() => loadModels(provider)} className="ml-1.5 underline">Refresh</button>
         )}
+      </p>
+      <Select
+        key={`reasoning-${provider}`}
+        label="Reasoning"
+        name="reasoning"
+        defaultValue={sameProvider ? ai.reasoning : provider === "gemini" ? "low" : ""}
+      >
+        {REASONING_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+      </Select>
+      <p className="-mt-2 text-[11px] text-muted-foreground">
+        The default for everyone; members can change it per message in the Agent chat. Higher thinks longer before answering.
       </p>
       <FormError error={state?.error} />
       {state?.ok && <p className="text-xs text-[var(--chart-2)]">{state.ok}</p>}

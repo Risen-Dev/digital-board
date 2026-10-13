@@ -164,3 +164,17 @@ CREATE INDEX IF NOT EXISTS messages_workspace ON messages(workspace_id, recipien
 -- AI agent provider for the canvas, as JSON ({provider, model, baseUrl, apiKey}).
 -- Set by a workspace admin in Settings; NULL means the agent is off.
 ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS ai_config TEXT;
+
+-- Canvas AI agent conversations, one row per chat, shared by the sheet's editors.
+-- `messages` is a JSON array of {role, content, shown?, drew?}; turns are appended
+-- with `||` so two people chatting in one room can't overwrite each other.
+CREATE TABLE IF NOT EXISTS agent_chats (
+  id         TEXT PRIMARY KEY,
+  canvas_id  TEXT NOT NULL REFERENCES canvases(id) ON DELETE CASCADE,
+  author_id  TEXT REFERENCES users(id) ON DELETE SET NULL,
+  title      TEXT NOT NULL,
+  messages   JSONB NOT NULL DEFAULT '[]',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS agent_chats_canvas ON agent_chats(canvas_id, updated_at);

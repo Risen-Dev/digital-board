@@ -10,13 +10,19 @@ import { parseFlow, type Flow } from "./canvas/flow";
  * same protocol at Google's fixed OpenAI-compatible endpoint.
  */
 export type AiProvider = "anthropic" | "openai" | "gemini";
-export type AiConfig = { provider: AiProvider; model: string; baseUrl: string; apiKey: string };
+/** "" = let the provider decide (and send nothing, so models without the knob don't reject it). */
+export type Reasoning = "" | "low" | "medium" | "high";
+export const REASONING: Reasoning[] = ["", "low", "medium", "high"];
+export type AiConfig = { provider: AiProvider; model: string; baseUrl: string; apiKey: string; reasoning?: Reasoning };
+
+/** Configs saved before reasoning was a setting kept Gemini on "low", which used to be hardcoded. */
+export const reasoningOf = (c: AiConfig): Reasoning => c.reasoning ?? (c.provider === "gemini" ? "low" : "");
 export type ChatTurn = { role: "user" | "assistant"; content: string };
 
 /** What Settings shows an admin: everything but the key itself. */
-export type AiSettings = { provider: AiProvider; model: string; baseUrl: string; keyHint: string };
+export type AiSettings = { provider: AiProvider; model: string; baseUrl: string; keyHint: string; reasoning: Reasoning };
 export const aiSettings = (c: AiConfig | null): AiSettings | null =>
-  c && { provider: c.provider, model: c.model, baseUrl: c.baseUrl, keyHint: c.apiKey ? `…${c.apiKey.slice(-4)}` : "" };
+  c && { provider: c.provider, model: c.model, baseUrl: c.baseUrl, keyHint: c.apiKey ? `…${c.apiKey.slice(-4)}` : "", reasoning: reasoningOf(c) };
 
 export const AI_PROVIDERS: AiProvider[] = ["anthropic", "openai", "gemini"];
 const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/openai";
@@ -79,8 +85,10 @@ export async function askAgent(
 
 async function askAnthropic(config: AiConfig, turns: ChatTurn[]) {
   const client = new Anthropic({ apiKey: config.apiKey, maxRetries: 0 });
+  const effort = reasoningOf(config);
   const response = await client.messages.create({
     model: config.model,
+    ...(effort ? { output_config: { effort } } : {}),
     max_tokens: 16000,
     system: SYSTEM,
     messages: turns,
@@ -142,8 +150,8 @@ async function askOpenAi(config: AiConfig, turns: ChatTurn[]) {
     body: JSON.stringify({
       model: config.model,
       messages: [{ role: "system", content: SYSTEM }, ...turns],
-      // Gemini 3 thinks before answering, which is most of the wait; a flowchart doesn't need deep reasoning.
-      ...(config.provider === "gemini" ? { reasoning_effort: "low" } : {}),
+      // Thinking is most of the wait on Gemini 3 and OpenAI's reasoning models; non-reasoning models reject the field.
+      ...(reasoningOf(config) ? { reasoning_effort: reasoningOf(config) } : {}),
     }),
     signal: AbortSignal.timeout(120_000),
   });

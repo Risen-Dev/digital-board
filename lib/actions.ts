@@ -484,11 +484,12 @@ export async function saveAiConfig(_prev: unknown, form: FormData) {
   const user = await requireUser();
   if (!user.is_admin) return { error: "Only workspace admins can configure the AI agent." };
 
-  const { AI_PROVIDERS, aiConfig } = await import("./ai");
+  const { AI_PROVIDERS, REASONING, aiConfig } = await import("./ai");
   const provider = String(form.get("provider") ?? "") as (typeof AI_PROVIDERS)[number];
   const model = String(form.get("model") ?? "").trim();
   const baseUrl = String(form.get("baseUrl") ?? "").trim();
   const apiKey = String(form.get("apiKey") ?? "").trim();
+  const reasoning = String(form.get("reasoning") ?? "") as (typeof REASONING)[number];
 
   if (form.get("disable")) {
     await run("UPDATE workspaces SET ai_config = NULL WHERE id = ?", user.workspace_id);
@@ -497,6 +498,7 @@ export async function saveAiConfig(_prev: unknown, form: FormData) {
   }
   if (!AI_PROVIDERS.includes(provider)) return { error: "Pick a provider." };
   if (!model) return { error: "Model is required." };
+  if (!REASONING.includes(reasoning)) return { error: "Pick a reasoning level." };
   if (baseUrl && !/^https?:\/\/\S+$/.test(baseUrl)) return { error: "Base URL must start with http:// or https://." };
 
   const saved = await aiConfig(user.workspace_id);
@@ -506,7 +508,7 @@ export async function saveAiConfig(_prev: unknown, form: FormData) {
 
   await run(
     "UPDATE workspaces SET ai_config = ? WHERE id = ?",
-    JSON.stringify({ provider, model, baseUrl: provider === "openai" ? baseUrl : "", apiKey: key }), user.workspace_id,
+    JSON.stringify({ provider, model, baseUrl: provider === "openai" ? baseUrl : "", apiKey: key, reasoning }), user.workspace_id,
   );
   revalidatePath("/board");
   return { ok: "Saved." };
