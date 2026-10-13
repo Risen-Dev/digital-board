@@ -319,7 +319,7 @@ function SetPassword({ userId, name }: { userId: string; name: string }) {
   );
 }
 
-const DEFAULT_MODEL: Record<AiProvider, string> = { anthropic: "claude-opus-5-5", openai: "gpt-4o-mini" };
+const DEFAULT_MODEL: Record<AiProvider, string> = { anthropic: "claude-opus-5-5", openai: "gpt-4o-mini", gemini: "gemini-3.8-flash" };
 
 function AiSettingsForm({ ai }: { ai: AiSettings | null }) {
   const [state, action, pending] = useActionState(saveAiConfig, null);
@@ -341,6 +341,7 @@ function AiSettingsForm({ ai }: { ai: AiSettings | null }) {
       </p>
       <Select label="Provider" name="provider" value={provider} onChange={(e) => setProvider(e.target.value as AiProvider)}>
         <option value="anthropic">Anthropic (Claude)</option>
+        <option value="gemini">Google Gemini</option>
         <option value="openai">OpenAI-compatible (OpenAI, OpenRouter, Groq, Ollama…)</option>
       </Select>
       <Field key={`model-${provider}`} label="Model" name="model" required defaultValue={sameProvider ? ai.model : DEFAULT_MODEL[provider]} />
@@ -352,6 +353,11 @@ function AiSettingsForm({ ai }: { ai: AiSettings | null }) {
           placeholder="https://api.openai.com/v1"
           hint="Leave blank for OpenAI. Ollama: http://localhost:11434/v1"
         />
+      )}
+      {provider === "gemini" && (
+        <p className="text-[11px] text-muted-foreground">
+          Get a key at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" className="underline">aistudio.google.com/apikey</a>. The free tier is rate-limited.
+        </p>
       )}
       <Field
         key={`key-${provider}-${ai?.keyHint}`}

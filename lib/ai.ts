@@ -6,9 +6,10 @@ import { parseFlow, type Flow } from "./canvas/flow";
 /**
  * Per-workspace AI provider, stored as JSON in `workspaces.ai_config`.
  * "openai" means any OpenAI-compatible /chat/completions endpoint — OpenAI,
- * OpenRouter, Groq, Ollama, LM Studio… — picked by `baseUrl`.
+ * OpenRouter, Groq, Ollama, LM Studio… — picked by `baseUrl`. "gemini" is the
+ * same protocol at Google's fixed OpenAI-compatible endpoint.
  */
-export type AiProvider = "anthropic" | "openai";
+export type AiProvider = "anthropic" | "openai" | "gemini";
 export type AiConfig = { provider: AiProvider; model: string; baseUrl: string; apiKey: string };
 export type ChatTurn = { role: "user" | "assistant"; content: string };
 
@@ -17,7 +18,8 @@ export type AiSettings = { provider: AiProvider; model: string; baseUrl: string;
 export const aiSettings = (c: AiConfig | null): AiSettings | null =>
   c && { provider: c.provider, model: c.model, baseUrl: c.baseUrl, keyHint: c.apiKey ? `…${c.apiKey.slice(-4)}` : "" };
 
-export const AI_PROVIDERS: AiProvider[] = ["anthropic", "openai"];
+export const AI_PROVIDERS: AiProvider[] = ["anthropic", "openai", "gemini"];
+const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/openai";
 
 // ponytail: API key stored in plain text in Postgres, like the rest of the data; encrypt with a key from env if DB dumps leave the box.
 export async function aiConfig(workspaceId: string): Promise<AiConfig | null> {
@@ -64,7 +66,7 @@ async function askAnthropic(config: AiConfig, turns: ChatTurn[]) {
 }
 
 async function askOpenAi(config: AiConfig, turns: ChatTurn[]) {
-  const base = (config.baseUrl || "https://api.openai.com/v1").replace(/\/+$/, "");
+  const base = (config.provider === "gemini" ? GEMINI_URL : config.baseUrl || "https://api.openai.com/v1").replace(/\/+$/, "");
   const res = await fetch(`${base}/chat/completions`, {
     method: "POST",
     headers: { "content-type": "application/json", ...(config.apiKey ? { authorization: `Bearer ${config.apiKey}` } : {}) },
@@ -74,6 +76,8 @@ async function askOpenAi(config: AiConfig, turns: ChatTurn[]) {
   const body = await res.json().catch(() => null);
   // Only the provider's own error message goes back to the browser, never the raw body:
   // the base URL is admin-set, so the response may come from anywhere.
-  if (!res.ok) throw new Error(`Provider returned ${res.status}${body?.error?.message ? `: ${String(body.error.message).slice(0, 300)}` : ""}`);
+  // Gemini wraps its error in an array.
+  const error = (Array.isArray(body) ? body[0] : body)?.error?.message;
+  if (!res.ok) throw new Error(`Provider returned ${res.status}${error ? `: ${String(error).slice(0, 300)}` : ""}`);
   return String(body?.choices?.[0]?.message?.content ?? "");
 }

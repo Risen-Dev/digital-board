@@ -501,8 +501,8 @@ export async function saveAiConfig(_prev: unknown, form: FormData) {
 
   const saved = await aiConfig(user.workspace_id);
   const key = apiKey || (saved?.provider === provider ? saved.apiKey : "");
-  // Ollama and other local servers need no key; Anthropic always does.
-  if (provider === "anthropic" && !key) return { error: "An API key is required for Anthropic." };
+  // Ollama and other local servers need no key; the hosted providers do.
+  if (provider !== "openai" && !key) return { error: "An API key is required for this provider." };
 
   await run(
     "UPDATE workspaces SET ai_config = ? WHERE id = ?",
