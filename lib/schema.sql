@@ -196,3 +196,20 @@ UPDATE tasks t SET number = x.n
           FROM tasks t2 JOIN columns c ON c.id = t2.column_id
          WHERE t2.number IS NULL) x
  WHERE t.id = x.id;
+
+-- GitHub items a webhook tied to a task (by its key), kept past the GitHub view's
+-- recent-activity window. kind matches lib/github.ts: pulls | commits | branches.
+CREATE TABLE IF NOT EXISTS task_links (
+  task_id    TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  kind       TEXT NOT NULL CHECK (kind IN ('pulls', 'commits', 'branches')),
+  ext_id     TEXT NOT NULL,
+  title      TEXT NOT NULL,
+  url        TEXT NOT NULL,
+  ref        TEXT NOT NULL,
+  state      TEXT,
+  author     TEXT,
+  sha        TEXT,
+  ci         TEXT,
+  at         TEXT,
+  PRIMARY KEY (task_id, kind, ext_id)
+);

@@ -142,6 +142,8 @@ export function Workspace({
         const card = data.notifications.find((item) => !seenCards.current.has(item.id));
         const chat = data.unread.find((item) => item.n > (seenChats.current.get(item.channel) ?? 0));
         seenCards.current = new Set(data.notifications.map((item) => item.id));
+        // New card activity may come from outside this tab (another member, the GitHub webhook): reload the board.
+        if (card) router.refresh();
         seenChats.current = new Map(data.unread.map((item) => [item.channel, item.n]));
         if (card) announce("Card updated", `${card.taskTitle} · ${card.text}`);
         else if (chat) announce("New chat message", chat.channel === "all" ? "Workspace" : data.members.find((member) => member.id === chat.channel)?.name ?? "Direct message");
@@ -158,7 +160,7 @@ export function Workspace({
       alive = false;
       clearInterval(t);
     };
-  }, [announce]);
+  }, [announce, router]);
 
   const online = live.filter((m) => m.presence === "online").length;
   const unreadTotal = section === "chat" ? 0 : unread.reduce((n, u) => n + u.n, 0);

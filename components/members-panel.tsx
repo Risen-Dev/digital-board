@@ -1,9 +1,9 @@
 "use client";
 
-import { startTransition, useActionState, useEffect, useEffectEvent, useRef, useState, useTransition } from "react";
+import { startTransition, useActionState, useEffect, useEffectEvent, useRef, useState, useSyncExternalStore, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, FolderKanban, FolderPlus, KeyRound, Plus, Settings2, Sparkles, Trash2, UserRound, Users, X } from "lucide-react";
-import { changeMyPassword, fetchAiModels, saveGithub, setProjectKey, saveAiConfig, deleteProject, inviteMember, renameProject, renameWorkspace, setMemberPassword, setProjectMember } from "@/lib/actions";
+import { changeMyPassword, fetchAiModels, rotateGithubWebhook, saveGithub, setProjectKey, saveAiConfig, deleteProject, inviteMember, renameProject, renameWorkspace, setMemberPassword, setProjectMember } from "@/lib/actions";
 import { initials } from "@/lib/board";
 import type { MemberPresence, Project, ProjectMember } from "@/lib/queries";
 import { Avatar } from "./avatar";
@@ -482,7 +482,77 @@ function GithubSettings({ project }: { project: Project }) {
           )}
         </div>
       </form>
+      {project.repo && <GithubWebhook project={project} />}
     </section>
+  );
+}
+
+const noSubscribe = () => () => {};
+
+/**
+ * Webhook setup: the URL and a secret to paste into the repo's Settings → Webhooks.
+ * The secret is shown once, right after it is generated.
+ */
+function GithubWebhook({ project }: { project: Project }) {
+  const router = useRouter();
+  const [secret, setSecret] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, startBusy] = useTransition();
+  // The address people use for this app is what GitHub must call; empty during SSR.
+  const origin = useSyncExternalStore(noSubscribe, () => window.location.origin, () => "");
+  const url = origin && `${origin}/api/integrations/github?project=${project.id}`;
+
+  const generate = () =>
+    startBusy(async () => {
+      if (project.webhookHint && !confirm("Make a new secret? The webhook stops working until you paste the new one into GitHub.")) return;
+      const res = await rotateGithubWebhook(project.id);
+      if ("error" in res) return setError(res.error ?? null);
+      setError(null);
+      setSecret(res.secret);
+      router.refresh();
+    });
+
+  const row = (label: string, value: string) => (
+    <div className="flex flex-col gap-1">
+      <span className="text-xs font-medium">{label}</span>
+      <div className="flex gap-1.5">
+        <input readOnly value={value} onFocus={(e) => e.target.select()} className="min-w-0 flex-1 rounded-md border bg-background px-2.5 py-1.5 font-mono text-[11px]" />
+        <button type="button" onClick={() => void navigator.clipboard.writeText(value)} className="rounded-md border px-2 text-[11px] text-muted-foreground hover:bg-secondary">
+          Copy
+        </button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="mt-3 flex flex-col gap-3 rounded-lg border bg-card p-3">
+      <div>
+        <h4 className="text-xs font-semibold">Webhook — move cards automatically</h4>
+        <p className="mt-0.5 text-[11px] text-muted-foreground">
+          In {project.repo} → Settings → Webhooks → Add webhook, paste the URL and secret, set content type to{" "}
+          <span className="font-mono">application/json</span>, and pick the events Pull requests, Pushes and Check suites. Then a push to a
+          card&rsquo;s branch moves it to In Progress, an opened PR to In Review, a merged PR to QA (or Done), and failing checks show in its
+          history. Cards only move forward. GitHub must be able to reach this address.
+        </p>
+      </div>
+      {url && row("Payload URL", url)}
+      {secret ? (
+        <>
+          {row("Secret", secret)}
+          <p className="-mt-1 text-[11px] text-[var(--chart-3)]">Copy it now — it won&rsquo;t be shown again.</p>
+        </>
+      ) : (
+        <p className="text-[11px] text-muted-foreground">
+          {project.webhookHint ? `Secret set (…${project.webhookHint}).` : "No secret yet."}
+        </p>
+      )}
+      {error && <FormError error={error} />}
+      <div>
+        <button type="button" disabled={busy} onClick={generate} className="rounded-md border px-3 py-1.5 text-xs hover:bg-secondary disabled:opacity-50">
+          {busy ? "Generating…" : project.webhookHint ? "Generate new secret" : "Generate secret"}
+        </button>
+      </div>
+    </div>
   );
 }
 

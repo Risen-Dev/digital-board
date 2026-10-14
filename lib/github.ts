@@ -1,6 +1,7 @@
 import "server-only";
-import { get } from "./db";
-import { ciOf, keysIn, type CiState } from "./board";
+import { all, get } from "./db";
+import { ciOf, type CiState } from "./board";
+import { keysIn } from "./github-events";
 
 /**
  * Per-project GitHub link, stored as JSON in `projects.github`: a repo and a
@@ -8,7 +9,8 @@ import { ciOf, keysIn, type CiState } from "./board";
  * public repo at GitHub's 60 requests/hour anonymous limit). The token never
  * leaves the server; the UI only ever sees `…last4` through listProjects.
  */
-export type GithubConfig = { repo: string; token: string };
+/** `webhookSecret` signs deliveries to /api/integrations/github (see lib/github-webhook.ts). */
+export type GithubConfig = { repo: string; token: string; webhookSecret?: string };
 export const GITHUB_KINDS = ["pulls", "issues", "commits", "branches"] as const;
 export type GithubKind = (typeof GITHUB_KINDS)[number];
 
@@ -134,14 +136,15 @@ async function ciFor(config: GithubConfig, sha: string): Promise<CiState> {
 
 /**
  * Which PRs, commits and branches mention which task key. Built from the same
- * cached lists as the GitHub view, so it only sees recent activity (30 PRs,
- * 30 commits, 100 branches). CI is fetched for linked open PRs only.
+ * cached lists as the GitHub view (30 PRs, 30 commits, 100 branches) plus
+ * whatever the webhook stored in task_links, so links older than that window
+ * show only for projects with the webhook set up. CI is fetched for linked open PRs only.
  */
-// ponytail: recent-activity window only; older links need paging or a webhook-fed table (stage 3).
 export async function githubLinks(projectId: string, config: GithubConfig, projectKey: string, fresh = false) {
+  // GitHub down or rate-limited: still serve what the webhook stored.
   const [pulls, commits, branches] = await Promise.all(
     (["pulls", "commits", "branches"] as const).map((k) => githubItems(projectId, config, k, fresh)),
-  );
+  ).catch(() => [[], [], []] as GithubItem[][]);
   const links: Record<string, TaskLinks> = {};
   const add = (kind: keyof TaskLinks, text: string, item: GithubItem) => {
     for (const key of keysIn(text, projectKey)) {
@@ -153,8 +156,28 @@ export async function githubLinks(projectId: string, config: GithubConfig, proje
   for (const c of commits) add("commits", c.title, c);
   for (const b of branches) add("branches", b.title, b);
 
+  // Older links the webhook stored (task_links); the live lists above win on duplicates.
+  const stored = await all<{
+    task_key: string; kind: keyof TaskLinks; ext_id: string; title: string; url: string; ref: string;
+    state: string | null; author: string | null; sha: string | null; ci: CiState; at: string | null;
+  }>(
+    `SELECT p.key || '-' || t.number AS task_key, l.kind, l.ext_id, l.title, l.url, l.ref, l.state, l.author, l.sha, l.ci, l.at
+       FROM task_links l JOIN tasks t ON t.id = l.task_id JOIN columns c ON c.id = t.column_id JOIN projects p ON p.id = c.project_id
+      WHERE c.project_id = ? ORDER BY l.at DESC NULLS LAST`,
+    projectId,
+  );
+  for (const r of stored) {
+    const entry = (links[r.task_key] ??= { pulls: [], commits: [], branches: [] });
+    if (entry[r.kind].some((i) => i.id === r.ext_id)) continue;
+    entry[r.kind].push({
+      id: r.ext_id, title: r.title, url: r.url, state: r.state, ref: r.ref, author: r.author, at: r.at, meta: [],
+      ...(r.sha ? { head: { ref: "", sha: r.sha } } : {}), ...(r.ci ? { ci: r.ci } : {}),
+    });
+  }
+
   await Promise.all(Object.values(links).flatMap((l) => l.pulls.map(async (p, i) => {
-    if (p.state === "open" || p.state === "draft") l.pulls[i] = { ...p, ci: p.head ? await ciFor(config, p.head.sha) : null };
+    // A CI state the webhook already stored saves the API call.
+    if ((p.state === "open" || p.state === "draft") && p.ci === undefined) l.pulls[i] = { ...p, ci: p.head ? await ciFor(config, p.head.sha) : null };
   })));
   return links;
 }
