@@ -47,6 +47,7 @@ Always answer with ONE JSON object and nothing else:
 - "flow": the flowchart to draw, or null when you are only answering a question or need clarification first.
 - Begin with one "start" node and end with at least one "end" node. Use "decision" for yes/no or branching steps and label its outgoing edges (e.g. "Yes"/"No").
 - Labels are short verb phrases (max ~6 words). Use 4–25 nodes.
+- Answer with language-appropriate punctuation and capitalization that match the requested language (DO NOT ANSWER IN DIFFERENT LANGUAGE FROM THE REQUESTED/PROMPT LANGUAGE).
 - When the user asks to change a flow you made earlier, return the complete updated flow — it is drawn as a new copy.`;
 
 // Overloaded / rate-limited / flaky gateway: worth another try.
