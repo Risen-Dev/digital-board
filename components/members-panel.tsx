@@ -3,7 +3,7 @@
 import { startTransition, useActionState, useEffect, useEffectEvent, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, FolderKanban, FolderPlus, KeyRound, Plus, Settings2, Sparkles, Trash2, UserRound, Users, X } from "lucide-react";
-import { changeMyPassword, fetchAiModels, saveGithub, saveAiConfig, deleteProject, inviteMember, renameProject, renameWorkspace, setMemberPassword, setProjectMember } from "@/lib/actions";
+import { changeMyPassword, fetchAiModels, saveGithub, setProjectKey, saveAiConfig, deleteProject, inviteMember, renameProject, renameWorkspace, setMemberPassword, setProjectMember } from "@/lib/actions";
 import { initials } from "@/lib/board";
 import type { MemberPresence, Project, ProjectMember } from "@/lib/queries";
 import { Avatar } from "./avatar";
@@ -342,6 +342,25 @@ function ProjectDetail({ project, memberId, presence, isAdmin, assignments, onBa
       ) : (
         <h2 className="mb-4 text-base font-semibold">{project.name}</h2>
       )}
+
+      <div className="mb-6 flex items-center gap-3">
+        <div className="min-w-0 flex-1">
+          <h3 className="text-sm font-medium">Task key</h3>
+          <p className="text-xs text-muted-foreground">
+            Cards are numbered {project.key}-1, {project.key}-2… Put the key in a branch, PR title or commit to link it to the card.
+          </p>
+        </div>
+        {canRename ? (
+          <EditableTitle
+            value={project.key}
+            onSave={(key) => setProjectKey(project.id, key).then((res) => { router.refresh(); return res; })}
+            className="shrink-0 rounded-md border bg-card px-2 py-1 font-mono text-sm"
+            inputClassName="w-24 font-mono text-sm uppercase"
+          />
+        ) : (
+          <span className="shrink-0 font-mono text-sm">{project.key}</span>
+        )}
+      </div>
 
       <h3 className="mb-1 text-sm font-medium">Members</h3>
       <p className="mb-3 text-xs text-muted-foreground">View can only look · Edit can change tasks and canvas · Admin can also rename it and manage columns. Workspace admins can open every project.</p>

@@ -181,3 +181,18 @@ CREATE INDEX IF NOT EXISTS agent_chats_canvas ON agent_chats(canvas_id, updated_
 
 -- Per-project GitHub link: JSON {repo, token}; see lib/github.ts.
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS github TEXT;
+
+-- Task keys (WEB-42): a short key per project and a number per task, so branches,
+-- PRs and commits can name a card. Backfills only touch rows still missing a value.
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS key TEXT;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS number INTEGER;
+UPDATE projects SET key = COALESCE(NULLIF(upper(left(regexp_replace(name, '[^A-Za-z]', '', 'g'), 3)), ''), 'TASK')
+ WHERE key IS NULL;
+UPDATE tasks t SET number = x.n
+  FROM (SELECT t2.id,
+               ROW_NUMBER() OVER (PARTITION BY c.project_id ORDER BY t2.created_at, t2.id)
+               + (SELECT COALESCE(MAX(t3.number), 0) FROM tasks t3 JOIN columns c3 ON c3.id = t3.column_id
+                   WHERE c3.project_id = c.project_id) AS n
+          FROM tasks t2 JOIN columns c ON c.id = t2.column_id
+         WHERE t2.number IS NULL) x
+ WHERE t.id = x.id;

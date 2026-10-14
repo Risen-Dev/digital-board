@@ -25,6 +25,7 @@ import { AnalyticsView, type Stats } from "./views/analytics-view";
 import { MyTasksView, type MyTask } from "./views/my-tasks-view";
 import { MembersPanel } from "./members-panel";
 import { GithubView } from "./views/github-view";
+import { useGithubLinks } from "@/hooks/use-github-links";
 import type { AiSettings } from "@/lib/ai";
 import { ChatView, PresenceDot, UnreadBadge } from "./views/chat-view";
 
@@ -80,6 +81,8 @@ export function Workspace({
   // Below md the sidebar is an off-canvas drawer; it always opens full width.
   const [drawer, setDrawer] = useState(false);
   const slim = collapsed && !drawer;
+  // Refetched whenever the server sends a new board (a move, a new task…).
+  const links = useGithubLinks(project?.id ?? null, !!project?.repo, columns);
   const [filters, setFilters] = useState<Filters>({});
   const [showFilters, setShowFilters] = useState(false);
   const [editing, setEditing] = useState<Task | null>(null);
@@ -511,7 +514,7 @@ export function Workspace({
         ) : view === VIEWS.length && project.repo ? (
           <GithubView key={project.id} projectId={project.id} repo={project.repo} />
         ) : view === 0 ? (
-          <BoardView columns={filtered} projectId={project.id} onOpen={setEditing} onAdd={setCreating} />
+          <BoardView columns={filtered} projectId={project.id} links={links} onOpen={setEditing} onAdd={setCreating} />
         ) : view === 1 ? (
           <ListView columns={filtered} onOpen={setEditing} />
         ) : view === 2 ? (
@@ -528,6 +531,7 @@ export function Workspace({
           columns={columns}
           members={members}
           defaultColumnId={creating ?? undefined}
+          links={editing?.key ? links[editing.key] : undefined}
           onClose={close}
         />
       )}

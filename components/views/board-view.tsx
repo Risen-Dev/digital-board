@@ -11,6 +11,7 @@ import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrate
 import { Pencil, Plus } from "lucide-react";
 import { columnOf, PALETTE, placeTask, type Column, type Task } from "@/lib/board";
 import { addColumn, deleteColumn, moveColumn, moveTask, updateColumn } from "@/lib/actions";
+import type { TaskLinks } from "@/lib/github";
 import { SortableTaskCard, TaskCard } from "../task-card";
 import { ColumnEditor } from "../column-editor";
 
@@ -48,10 +49,12 @@ function DropZone({ id, children }: { id: string; children: React.ReactNode }) {
 }
 
 export function BoardView({
-  columns, projectId, onOpen, onAdd,
+  columns, projectId, links = {}, onOpen, onAdd,
 }: {
   columns: Column[];
   projectId: string;
+  /** Task key → linked GitHub items, when the project has a repo. */
+  links?: Record<string, TaskLinks>;
   onOpen: (t: Task) => void;
   onAdd: (columnId: string) => void;
 }) {
@@ -187,7 +190,7 @@ export function BoardView({
               <div className="flex flex-1 flex-col gap-2 overflow-y-auto px-1 pb-4">
                 <SortableContext items={col.tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
                   {col.tasks.map((task) => (
-                    <SortableTaskCard key={task.id} task={task} onOpen={() => onOpen(task)} />
+                    <SortableTaskCard key={task.id} task={task} links={task.key ? links[task.key] : undefined} onOpen={() => onOpen(task)} />
                   ))}
                 </SortableContext>
                 {col.tasks.length === 0 && (
@@ -227,7 +230,7 @@ export function BoardView({
           </div>
         </div>
 
-        <DragOverlay>{activeTask ? <TaskCard task={activeTask} overlay /> : null}</DragOverlay>
+        <DragOverlay>{activeTask ? <TaskCard task={activeTask} links={activeTask.key ? links[activeTask.key] : undefined} overlay /> : null}</DragOverlay>
       </DndContext>
     </main>
   );
