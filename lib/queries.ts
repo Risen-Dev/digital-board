@@ -30,22 +30,24 @@ const toTask = (r: TaskRow): Task => ({
       : null,
 });
 
-export type Project = { id: string; name: string };
+/** `repo` / `tokenHint` describe the GitHub link; the token itself never leaves the server. */
+export type Project = { id: string; name: string; repo: string | null; tokenHint: string | null };
+const PROJECT_COLS = `p.id, p.name, p.github::jsonb ->> 'repo' AS repo, right(p.github::jsonb ->> 'token', 4) AS "tokenHint"`;
 
 export const workspaceName = async (workspaceId: string) =>
   (await get<{ name: string }>("SELECT name FROM workspaces WHERE id = ?", workspaceId))?.name ?? "Workspace";
 
 export const listProjects = (workspaceId: string, userId: string, isAdmin: boolean) =>
   isAdmin
-    ? all<Project>("SELECT id, name FROM projects WHERE workspace_id = ? ORDER BY position, created_at", workspaceId)
+    ? all<Project>(`SELECT ${PROJECT_COLS} FROM projects p WHERE p.workspace_id = ? ORDER BY p.position, p.created_at`, workspaceId)
     : all<Project>(
-        `SELECT p.id, p.name FROM projects p JOIN project_members pm ON pm.project_id = p.id
+        `SELECT ${PROJECT_COLS} FROM projects p JOIN project_members pm ON pm.project_id = p.id
          WHERE p.workspace_id = ? AND pm.user_id = ? ORDER BY p.position, p.created_at`,
         workspaceId, userId,
       );
 
 export const firstProject = (workspaceId: string) =>
-  get<Project>("SELECT id, name FROM projects WHERE workspace_id = ? ORDER BY position, created_at LIMIT 1", workspaceId);
+  get<Project>(`SELECT ${PROJECT_COLS} FROM projects p WHERE p.workspace_id = ? ORDER BY p.position, p.created_at LIMIT 1`, workspaceId);
 
 export const listMembers = (workspaceId: string) =>
   all<Member>("SELECT id, name, color FROM users WHERE workspace_id = ? ORDER BY created_at", workspaceId);

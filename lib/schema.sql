@@ -178,3 +178,6 @@ CREATE TABLE IF NOT EXISTS agent_chats (
   updated_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS agent_chats_canvas ON agent_chats(canvas_id, updated_at);
+
+-- Per-project GitHub link: JSON {repo, token}; see lib/github.ts.
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS github TEXT;

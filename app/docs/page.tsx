@@ -307,6 +307,7 @@ WantedBy=multi-user.target`}</Code>
               [<strong className="text-foreground">Access</strong>, <>A workspace admin picks a member&rsquo;s project roles while adding them, and changes them later under Settings → Projects → the project — <C>viewer</C> reads, <C>editor</C> changes tasks and canvases, <C>admin</C> also renames the project and manages its columns. Workspace admins reach every project. No role means the project is not listed and its rows are never sent to that browser. Every action re-checks the role server-side.</>],
               [<strong className="text-foreground">Presence</strong>, <>Online / away / offline per member, derived from activity rather than stored.</>],
               [<strong className="text-foreground">Projects</strong>, <>Add and delete from Settings, switch from the sidebar, and rename workspace or project names from Settings or their titles. New projects start with the columns of the template you pick (General, Software / Tech, Sales, Marketing, Support, Recruiting).</>],
+              [<strong className="text-foreground">GitHub</strong>, <>A project admin links a repo under Settings → Projects → the project, with a fine-grained read-only token (optional for public repos). The board then gets a GitHub view listing the repo&rsquo;s pull requests, issues, commits and branches, cached for a minute. The token stays on the server; Settings only shows its last four characters.</>],
             ]}
           />
 
