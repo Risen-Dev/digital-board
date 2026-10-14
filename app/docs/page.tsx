@@ -122,8 +122,10 @@ export default function DocsPage() {
           <H id="overview">Overview</H>
           <p className="text-sm text-muted-foreground">
             Digital Board is a self-hosted work tracker. A kanban board with List, Calendar and Analytics views over
-            the same tasks, a free-form drawing canvas with multiple sheets, and workspace chat with direct messages.
-            Everything lives in a PostgreSQL database on your own machine.
+            the same tasks, project templates for engineering, sales, marketing, support and hiring, a GitHub
+            integration that moves cards as branches and pull requests progress, a free-form drawing canvas with
+            multiple sheets, and workspace chat with direct messages. Everything lives in a PostgreSQL database on your
+            own machine.
           </p>
           <p className="text-sm text-muted-foreground">
             It is built for a team small enough to share one server: a homelab, a VPS, a machine in the office. There
@@ -175,14 +177,14 @@ npm start`}</Code>
           <ul className="flex list-disc flex-col gap-1.5 pl-5 text-sm text-muted-foreground">
             <li><strong className="text-foreground">Workspace name</strong> — shown in the sidebar; click it later to rename it.</li>
             <li><strong className="text-foreground">First project</strong> — a board. You can add more later.</li>
-            <li><strong className="text-foreground">Board columns</strong> — pick from the presets or type your own. Columns can be added, renamed, recoloured, reordered and deleted from the board afterwards, so this is not a decision you are locked into.</li>
+            <li><strong className="text-foreground">Template</strong> — General, Software / Tech, Sales pipeline, Marketing / Content, Customer Support or Recruiting. Each card previews the template&rsquo;s columns. Tick <em>Add example tasks and a canvas sheet</em> to start with sample cards and a drawn process flow. The columns below the picker can still be unticked or extended, and later added, renamed, recoloured, reordered and deleted from the board, so this is not a decision you are locked into.</li>
             <li><strong className="text-foreground">Admin account</strong> — name, email and a password of at least 8 characters. This account becomes the workspace admin.</li>
           </ul>
           <p className="text-sm text-muted-foreground">
             Submitting creates everything, signs you in and drops you on the board. Each registration is a separate
             workspace; set <C>REGISTRATION_CLOSED=1</C> once yours exists to make the instance invite-only.
           </p>
-          <Shot src="/screenshots/setup.png" alt="The first-run wizard — workspace, first project, columns and the admin account" />
+          <Shot src="/screenshots/setup.png" alt="Create a workspace — workspace, first project, the template picker with column previews, and the admin account" />
 
           <H id="config">Configuration</H>
           <p className="text-sm text-muted-foreground">Environment variables only. There is no config file.</p>
@@ -306,11 +308,15 @@ WantedBy=multi-user.target`}</Code>
               [<strong className="text-foreground">Chat</strong>, <>A workspace channel everyone reads, plus a direct message thread per member. Unread badges, file attachments with inline image previews, and 15 minutes to edit your own message.</>],
               [<strong className="text-foreground">Access</strong>, <>A workspace admin picks a member&rsquo;s project roles while adding them, and changes them later under Settings → Projects → the project — <C>viewer</C> reads, <C>editor</C> changes tasks and canvases, <C>admin</C> also renames the project and manages its columns. Workspace admins reach every project. No role means the project is not listed and its rows are never sent to that browser. Every action re-checks the role server-side.</>],
               [<strong className="text-foreground">Presence</strong>, <>Online / away / offline per member, derived from activity rather than stored.</>],
+              [<strong className="text-foreground">Settings</strong>, <>Tabs on the left: General (workspace name), Members (list, and <em>Add member</em> with project access), Projects (each project&rsquo;s key, members and roles, GitHub link, webhook, deletion), AI agent (admins), Account (your password).</>],
+              [<strong className="text-foreground">Phones</strong>, <>Below 768px the sidebar becomes a drawer behind the ☰ button, the header goes icon-only, and Settings tabs become a scrolling row.</>],
               [<strong className="text-foreground">Projects</strong>, <>Add and delete from Settings, switch from the sidebar, and rename workspace or project names from Settings or their titles. New projects start with the columns of the template you pick (General, Software / Tech, Sales, Marketing, Support, Recruiting).</>],
               [<strong className="text-foreground">GitHub</strong>, <>A project admin links a repo under Settings → Projects → the project, with a fine-grained read-only token (optional for public repos). The board then gets a GitHub view listing the repo&rsquo;s pull requests, issues, commits and branches, cached for a minute. The token stays on the server; Settings only shows its last four characters. Every card has a key such as <C>WEB-42</C> (the prefix is editable per project). A PR title or branch, a commit message or a branch name that mentions the key shows on the card as a PR badge with its CI status, and in the task&rsquo;s GitHub section. &ldquo;Copy branch name&rdquo; gives <C>feat/WEB-42-title</C> (or <C>fix/</C> for bug labels). Without a webhook only recent activity is matched (the last 30 PRs and commits, 100 branches). With the webhook set up (Settings → the project → GitHub → Generate secret, then add it in the repo with the events Pull requests, Pushes and Check suites), cards move on their own and only forward: a push to a card&rsquo;s branch → In Progress, an opened PR → In Review, a merged PR → QA (or Done). Failing checks are added to the card&rsquo;s history, and every link is stored, so older ones stay visible. Deliveries are verified with the HMAC secret and ignored if they come from a different repo.</>],
             ]}
           />
 
+          <Shot src="/screenshots/github.png" alt="GitHub view — the linked repo's pull requests, issues, commits and branches" />
+          <Shot src="/screenshots/task.png" alt="A task linked to GitHub — its key, Copy branch name, the linked PR with CI status, and GitHub entries in its history" />
           <Shot src="/screenshots/canvas.png" alt="Canvas — Excalidraw sheets, one drawing per tab, saved as you draw" />
           <Shot src="/screenshots/chat.png" alt="Chat — the workspace channel plus a direct message thread per member" />
           <Shot src="/screenshots/analytics.png" alt="Analytics — tasks per column, priority split, workload per member and 14-day activity" />
@@ -318,21 +324,24 @@ WantedBy=multi-user.target`}</Code>
 
           <H id="data">Data model</H>
           <p className="text-sm text-muted-foreground">
-            Thirteen tables, defined in <C>lib/schema.sql</C> as plain SQL and applied on first use. Foreign keys
+            Sixteen tables, defined in <C>lib/schema.sql</C> as plain SQL and applied on first use. Foreign keys
             cascade, so deleting a parent row cleans up after itself.
           </p>
           <Table
             head={["Table", "Holds"]}
             rows={[
+              [<C>workspaces</C>, <>One per registration: its name and the AI agent configuration.</>],
               [<C>users</C>, <>Accounts: email, name, scrypt password hash, avatar colour, admin flag, last-seen stamp, activity-notification read cursor.</>],
               [<C>sessions</C>, <>Login sessions: a random token, its owner, an expiry.</>],
               [<C>settings</C>, <>Key/value. Currently just the workspace name.</>],
-              [<C>projects</C>, <>Boards.</>],
+              [<C>projects</C>, <>Boards, each with a task <C>key</C> (the <C>WEB</C> in <C>WEB-42</C>) and an optional <C>github</C> link (repo, token, webhook secret — never sent to the browser).</>],
               [<C>project_members</C>, <>Who may see a project, and as <C>admin</C>, <C>editor</C> or <C>viewer</C>.</>],
               [<C>columns</C>, <>Board columns, ordered by a dense <C>position</C>.</>],
-              [<C>tasks</C>, <>Cards: title, details, label, priority, assignee, due date, position within a column.</>],
+              [<C>tasks</C>, <>Cards: title, details, label, priority, assignee, due date, position within a column, and a per-project <C>number</C>.</>],
+              [<C>task_links</C>, <>Pull requests, commits and branches the GitHub webhook tied to a task, with state and CI.</>],
               [<C>task_events</C>, <>The history log — one row per change, with the actor.</>],
               [<C>canvases</C>, <>Canvas sheets and their Excalidraw scenes.</>],
+              [<C>agent_chats</C>, <>The canvas AI agent&rsquo;s conversations, per sheet.</>],
               [<C>messages</C>, <>Chat. A <C>NULL</C> recipient is the workspace channel; a user id is a direct message.</>],
               [<C>message_reads</C>, <>One read cursor per person per conversation, which is what drives unread badges.</>],
               [<C>attachments</C>, <>Uploaded-file metadata and bytes.</>],
@@ -433,6 +442,8 @@ pm2 restart digital-board        # or: systemctl restart digital-board`}</Code>
             <li>Chat has no deletion, reactions, threads or typing indicators, and polling means near-real-time, not instant.</li>
             <li>Columns move one step at a time from the editor; there is no drag-to-reorder for columns themselves.</li>
             <li>Project roles gate tasks, canvases and project structure. Chat is workspace-wide — it has no per-project scoping.</li>
+            <li>Without the webhook, GitHub links only cover recent activity: the last 30 pull requests and commits and 100 branches. Webhook moves reach open tabs on the next presence poll, within 45 seconds.</li>
+            <li>The GitHub cache is per server process; with several instances each one fetches on its own.</li>
                         <li>Every route renders dynamically, because the root layout reads the theme cookie.</li>
           </ul>
 

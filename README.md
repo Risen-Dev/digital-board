@@ -5,10 +5,11 @@
 [![PostgreSQL](https://img.shields.io/badge/postgres-%E2%89%A514-336791.svg)](https://www.postgresql.org)
 
 Self-hosted work tracker. A kanban board with List, Calendar and Analytics views
-over the same tasks, a free-form drawing canvas with multiple sheets, and
+over the same tasks, project templates for engineering, sales, marketing,
+support and hiring, a GitHub integration that moves cards as branches and pull
+requests progress, a free-form drawing canvas with multiple sheets, and
 workspace chat with direct messages. Multi-user, with per-project roles.
-Runs on your own machine against your own PostgreSQL — no third-party services,
-no per-seat billing.
+Runs on your own machine against your own PostgreSQL — no per-seat billing.
 
 ![The board](public/screenshots/board.png)
 
@@ -18,8 +19,12 @@ no per-seat billing.
     <td width="50%"><img src="public/screenshots/analytics.png" alt="Analytics"><br><sub><b>Analytics</b> — column, priority, workload, 14-day activity</sub></td>
   </tr>
   <tr>
+    <td><img src="public/screenshots/github.png" alt="GitHub view"><br><sub><b>GitHub</b> — the repo's PRs, issues, commits and branches</sub></td>
+    <td><img src="public/screenshots/task.png" alt="Task linked to GitHub"><br><sub><b>Task</b> — linked PRs with CI, branch name to copy</sub></td>
+  </tr>
+  <tr>
     <td><img src="public/screenshots/chat.png" alt="Chat"><br><sub><b>Chat</b> — workspace channel and direct messages</sub></td>
-    <td><img src="public/screenshots/settings.png" alt="Settings"><br><sub><b>Settings</b> — members, presence, per-project roles</sub></td>
+    <td><img src="public/screenshots/settings.png" alt="Settings"><br><sub><b>Settings</b> — members, projects, GitHub, AI agent, account</sub></td>
   </tr>
 </table>
 
@@ -41,10 +46,12 @@ npm start
 ```
 
 Open <http://localhost:3000> and choose **Create a workspace** (`/register`) — it asks
-for the workspace name, your first project, the board columns and the admin account.
+for the workspace name, your first project, a template (General, Software / Tech,
+Sales, Marketing, Support or Recruiting — each sets the columns, optionally with
+example tasks and a canvas sheet) and the admin account.
 Anyone can register a workspace of their own; set `REGISTRATION_CLOSED=1` to stop that.
 
-![First-run setup](public/screenshots/setup.png)
+![Create a workspace, with the template picker](public/screenshots/setup.png)
  Tables create themselves on first use; there is no migration
 command.
 
@@ -62,7 +69,10 @@ Requires **Node 22+** and **PostgreSQL 14+** (verified on 16). For development,
 | **Chat** | Workspace channel plus direct messages, with unread badges, attachments and a 15-minute edit window. |
 | **Notifications** | Bell dropdown combines unread card activity and chat. Card items open Inbox; chat items open their conversation; card items can be marked read. Enable alerts there for browser notifications, an in-app popup, and sound. |
 | **Accounts** | Multi-user with `scrypt` password hashing and cookie sessions. Presence shows who is online. |
-| **Access** | Per-project roles — admin, editor, viewer — assigned from Settings by a workspace admin. A project you hold no role in is not listed and its data never reaches your browser. Enforced server-side in every action, not just hidden in the UI. |
+| **Templates** | Six project templates with their own columns. Each can also seed example tasks and a canvas flow. The spec and agent prompts are in [`templates.md`](templates.md). |
+| **GitHub** | Link a repo per project (fine-grained read-only token, optional for public repos). You get a GitHub view of PRs, issues, commits and branches. Every card has a key (`WEB-42`), and a branch, PR or commit that names it shows on the card with its CI status. With the webhook, cards move by themselves, and only forward: push → In Progress, PR opened → In Review, PR merged → QA or Done. |
+| **Access** | Per-project roles — admin, editor, viewer. A workspace admin picks them while adding a member and changes them per project in Settings. A project you hold no role in is not listed and its data never reaches your browser. Enforced server-side in every action, not just hidden in the UI. |
+| **Phones** | Below 768px the sidebar becomes a drawer and the header goes icon-only. |
 
 ## Configuration
 
