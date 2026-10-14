@@ -107,6 +107,9 @@ class CanvasBoundary extends Component<
   }
 }
 
+// Half of Excalidraw's limit, leaving room for the flow itself.
+const NEAR = 500_000;
+
 /**
  * Draws an agent flow to the right of whatever is on the sheet. It goes in as
  * a normal scene edit, so it saves, syncs to peers and undoes like a stroke.
@@ -115,9 +118,12 @@ async function drawFlow(api: ExcalidrawImperativeAPI, flow: Flow, by: string) {
   const { convertToExcalidrawElements, CaptureUpdateAction } = await import("@excalidraw/excalidraw");
 
   const all = api.getSceneElementsIncludingDeleted();
-  const visible = all.filter((element) => !element.isDeleted);
-  const origin = visible.length
-    ? { x: Math.max(...visible.map((e) => e.x + e.width)) + 160, y: Math.min(...visible.map((e) => e.y)) }
+  // Excalidraw rejects new elements beyond ±1e6. A stray element far off on the
+  // sheet would push the flow out there, so only nearby ones decide the spot.
+  const near = (v: number) => Math.abs(v) < NEAR;
+  const placed = all.filter((e) => !e.isDeleted && near(e.x) && near(e.y) && near(e.x + e.width));
+  const origin = placed.length
+    ? { x: Math.max(...placed.map((e) => e.x + e.width)) + 160, y: Math.min(...placed.map((e) => e.y)) }
     : { x: 0, y: 0 };
 
   const added = convertToExcalidrawElements(
