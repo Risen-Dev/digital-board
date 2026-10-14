@@ -91,8 +91,12 @@ export const run = async (sql: string, ...args: unknown[]) => {
   await query<pg.QueryResultRow>(sql, args);
 };
 
-/** Runs `fn` in a transaction. Rolls back on throw. */
+/**
+ * Runs `fn` in a transaction. Rolls back on throw. Nested calls join the
+ * outer transaction instead of opening a second one on another client.
+ */
 export async function transaction<T>(fn: () => Promise<T>): Promise<T> {
+  if (tx.getStore()) return fn();
   await ready();
   const client = await pool().connect();
   try {

@@ -33,8 +33,9 @@ const toTask = (r: TaskRow): Task => ({
 });
 
 /** `repo` / `tokenHint` describe the GitHub link; the token itself never leaves the server. */
-export type Project = { id: string; name: string; key: string; repo: string | null; tokenHint: string | null };
-const PROJECT_COLS = `p.id, p.name, p.key, p.github::jsonb ->> 'repo' AS repo, right(p.github::jsonb ->> 'token', 4) AS "tokenHint"`;
+export type Project = { id: string; name: string; key: string; repo: string | null; tokenHint: string | null; webhookHint: string | null };
+const PROJECT_COLS = `p.id, p.name, p.key, p.github::jsonb ->> 'repo' AS repo, right(p.github::jsonb ->> 'token', 4) AS "tokenHint",
+  right(p.github::jsonb ->> 'webhookSecret', 4) AS "webhookHint"`;
 
 export const workspaceName = async (workspaceId: string) =>
   (await get<{ name: string }>("SELECT name FROM workspaces WHERE id = ?", workspaceId))?.name ?? "Workspace";

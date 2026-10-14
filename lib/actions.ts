@@ -7,6 +7,7 @@ import { all, get, run, transaction } from "./db";
 import { createUser, createWorkspace, currentUser, endSession, login, passwordOf, setPassword, startSession, verifyPassword } from "./auth";
 import { projectKeyOf, PROJECT_KEY_RE, templateOf, PALETTE, PRIORITIES, reorder, type Priority } from "./board";
 import { broadcast } from "./canvas/hub";
+import { relocateTask } from "./tasks";
 import type { Flow } from "./canvas/flow";
 import examplesData from "./template-examples.json";
 
@@ -284,23 +285,7 @@ export async function moveTask(taskId: string, toColumnId: string, toIndex: numb
   const fromTitle = ((await get<{ title: string }>("SELECT title FROM columns WHERE id = ?", fromColumnId)))?.title ?? "?";
 
   await transaction(async () => {
-    const siblings = (
-      await all<{ id: string }>(
-        "SELECT id FROM tasks WHERE column_id = ? AND id != ? ORDER BY position",
-        toColumnId,
-        taskId,
-      )
-    ).map((r) => r.id);
-    siblings.splice(Math.max(0, Math.min(toIndex, siblings.length)), 0, taskId);
-
-    await run("UPDATE tasks SET column_id = ? WHERE id = ?", toColumnId, taskId);
-    for (const [i, sid] of siblings.entries()) await run("UPDATE tasks SET position = ? WHERE id = ?", i, sid);
-
-    if (fromColumnId !== toColumnId) {
-      const rest = await all<{ id: string }>("SELECT id FROM tasks WHERE column_id = ? ORDER BY position", fromColumnId);
-      for (const [i, r] of rest.entries()) await run("UPDATE tasks SET position = ? WHERE id = ?", i, r.id);
-    }
-
+    await relocateTask(taskId, fromColumnId, toColumnId, toIndex);
     await logEvent(
       taskId,
       user.id,
@@ -415,6 +400,24 @@ export async function renameWorkspace(name: string) {
   return { ok: true };
 }
 
+/**
+ * Makes a new webhook secret for the project's GitHub link and returns it once;
+ * afterwards only its last 4 characters are ever shown. The old secret stops working.
+ */
+export async function rotateGithubWebhook(projectId: string) {
+  const user = await requireUser();
+  const role = await projectRole(user, projectId);
+  if (role !== "workspace-admin" && role !== "admin") return { error: "You cannot manage this project." };
+  const { githubConfig } = await import("./github");
+  const saved = await githubConfig(projectId);
+  if (!saved) return { error: "Connect a repository first." };
+  const { randomBytes } = await import("node:crypto");
+  const webhookSecret = randomBytes(24).toString("hex");
+  await run("UPDATE projects SET github = ? WHERE id = ?", JSON.stringify({ ...saved, webhookSecret }), projectId);
+  revalidatePath("/board");
+  return { secret: webhookSecret };
+}
+
 /** Changes the project's task key prefix; existing tasks keep their numbers, so WEB-42 becomes APP-42. */
 export async function setProjectKey(projectId: string, key: string) {
   const user = await requireUser();
@@ -447,10 +450,12 @@ export async function saveGithub(projectId: string, repo: string, token: string)
   let full = clean;
 
   // Blank keeps the saved token; with none saved, the repo is read anonymously (public repos only).
-  const key = token.trim() || (await githubConfig(projectId))?.token || "";
+  const saved = await githubConfig(projectId);
+  const key = token.trim() || saved?.token || "";
   try {
     full = await verifyGithub({ repo: clean, token: key });
-    await run("UPDATE projects SET github = ? WHERE id = ?", JSON.stringify({ repo: full, token: key }), projectId);
+    // Keep the webhook secret: re-saving the token must not break the configured webhook.
+    await run("UPDATE projects SET github = ? WHERE id = ?", JSON.stringify({ ...saved, repo: full, token: key }), projectId);
   } catch (e) {
     return { error: e instanceof GithubError ? e.message : "Could not reach GitHub." };
   }

@@ -1,7 +1,8 @@
 // Run: node --experimental-strip-types lib/board.check.ts
 import assert from "node:assert/strict";
-import { applyFilters, branchNameOf, ciOf, columnOf, initials, keysIn, placeTask, projectKeyOf, reorder, TEMPLATES, templateOf, type Column } from "./board.ts";
+import { applyFilters, branchNameOf, ciOf, columnOf, initials, placeTask, projectKeyOf, reorder, TEMPLATES, templateOf, type Column } from "./board.ts";
 import { parseFlow } from "./canvas/flow.ts";
+import { columnFor, keysIn, planEvent } from "./github-events.ts";
 import examples from "./template-examples.json" with { type: "json" };
 
 const mk = (id: string, title: string, n: number): Column["tasks"][number] => ({
@@ -90,5 +91,35 @@ assert.equal(ciOf([]), null);
 assert.equal(ciOf([run("completed", "success"), run("completed", "skipped")]), "success");
 assert.equal(ciOf([run("completed", "success"), run("in_progress", null)]), "pending");
 assert.equal(ciOf([run("in_progress", null), run("completed", "failure")]), "failure", "failure beats pending");
+
+// GitHub webhook planning
+const pr = (action: string, extra: Record<string, unknown> = {}) => ({
+  action,
+  pull_request: {
+    number: 12, title: "Login page WEB-42", html_url: "u", state: "open", draft: false, merged: false,
+    user: { login: "ada" }, updated_at: "t", head: { ref: "feat/web-42-login", sha: "abc" }, ...extra,
+  },
+});
+const moves = (steps: ReturnType<typeof planEvent>) => steps.flatMap((s) => ("move" in s ? [`${s.key}:${s.move}`] : []));
+assert.deepEqual(moves(planEvent("pull_request", pr("opened"), "WEB")), ["WEB-42:review"]);
+assert.deepEqual(moves(planEvent("pull_request", pr("opened", { draft: true }), "WEB")), [], "draft PRs don't move cards");
+assert.deepEqual(moves(planEvent("pull_request", pr("closed", { state: "closed", merged: true }), "WEB")), ["WEB-42:merged"]);
+assert.deepEqual(moves(planEvent("pull_request", pr("closed", { state: "closed" }), "WEB")), [], "closed unmerged: link only");
+assert.equal(planEvent("pull_request", pr("closed", { state: "closed", merged: true }), "WEB").filter((s) => "link" in s).length, 1);
+const push = planEvent("push", {
+  ref: "refs/heads/feat/WEB-7-x", repository: { html_url: "https://github.com/o/r" },
+  commits: [{ id: "c0ffee1234", message: "fix WEB-8\n\nbody", url: "cu", timestamp: "t", author: { name: "Ada" } }],
+}, "WEB");
+assert.deepEqual(moves(push), ["WEB-7:progress"], "only the branch name moves");
+assert.deepEqual(push.flatMap((s) => ("link" in s ? [`${s.key}:${s.link.kind}`] : [])), ["WEB-7:branches", "WEB-8:commits"]);
+assert.ok(planEvent("push", { ref: "refs/heads/WEB-7", deleted: true }, "WEB").some((s) => "unlink" in s), "deleted branch unlinks");
+assert.deepEqual(planEvent("push", { ref: "refs/tags/WEB-7" }, "WEB"), [], "tags are ignored");
+const failed = planEvent("check_suite", { action: "completed", check_suite: { conclusion: "failure", head_branch: "fix/WEB-3-crash", head_sha: "s" } }, "WEB");
+assert.ok(failed.some((s) => "note" in s && s.key === "WEB-3") && failed.some((s) => "ci" in s && s.ci === "failure"));
+const cols = [{ id: "b", title: "Backlog", position: 0 }, { id: "p", title: "In Progress", position: 1 }, { id: "r", title: "In Review", position: 2 }, { id: "d", title: "Done", position: 3 }];
+assert.equal(columnFor("review", cols, 0)?.id, "r");
+assert.equal(columnFor("merged", cols, 2)?.id, "d", "no QA column: merged goes to Done");
+assert.equal(columnFor("progress", cols, 3), null, "never moves a card backwards");
+assert.equal(columnFor("review", [{ id: "x", title: "Todo", position: 0 }], 0), null, "no matching column: stay");
 
 console.log("board.check ok");

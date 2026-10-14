@@ -153,9 +153,3 @@ export function ciOf(runs: { status: string; conclusion: string | null }[]): CiS
   if (runs.some((r) => r.status !== "completed")) return "pending";
   return "success";
 }
-
-/** Every task key (WEB-42) a piece of text mentions, for this project's key only, normalised to upper case. */
-export function keysIn(text: string, projectKey: string) {
-  const re = new RegExp(`\\b${projectKey}-(\\d+)\\b`, "gi");
-  return [...new Set([...text.matchAll(re)].map((m) => `${projectKey}-${Number(m[1])}`))];
-}
