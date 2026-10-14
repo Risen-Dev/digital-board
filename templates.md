@@ -89,6 +89,7 @@ An agent reads this file to (a) build the template picker and seed data, or
 - ✅ Columns, labels, priority, assignee, due date, history (`task_events`), canvas for architecture diagrams.
 - 🟡 Task key per project (`WEB-42`) so branches and commits can reference a card.
 - 🟡 "Copy branch name" on the task dialog → `feat/WEB-42-login-page`.
+- ✅ GitHub view (read-only): link a repo + fine-grained token under Settings → Projects → the project; the board gets a GitHub view with PRs, issues, commits and branches (`lib/github.ts`, `app/api/projects/[id]/github`, `components/views/github-view.tsx`).
 - 🔴 Git/CI webhook (auto-move cards, PR/CI badges on the card).
 - 🔴 Sprints / releases (group tasks by iteration), burndown in Analytics.
 - 🔴 Bug template text in the description when label = Bug (steps / expected / actual).

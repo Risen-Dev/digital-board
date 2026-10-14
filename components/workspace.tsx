@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   BarChart3, Bell, Calendar, Check, CheckSquare, Filter, Home, Inbox,
-  LayoutGrid, List, LogOut, Menu, MessageSquare, PenLine, Plus, Search, Settings, X,
+  GitPullRequest, LayoutGrid, List, LogOut, Menu, MessageSquare, PenLine, Plus, Search, Settings, X,
 } from "lucide-react";
 import { applyFilters, initials, type Column, type Filters, type Member, type Task } from "@/lib/board";
 import { logoutAction, renameProject, renameWorkspace } from "@/lib/actions";
@@ -24,6 +24,7 @@ import { CanvasView } from "./views/canvas-view";
 import { AnalyticsView, type Stats } from "./views/analytics-view";
 import { MyTasksView, type MyTask } from "./views/my-tasks-view";
 import { MembersPanel } from "./members-panel";
+import { GithubView } from "./views/github-view";
 import type { AiSettings } from "@/lib/ai";
 import { ChatView, PresenceDot, UnreadBadge } from "./views/chat-view";
 
@@ -33,6 +34,8 @@ const VIEWS = [
   { Icon: Calendar, label: "Calendar" },
   { Icon: BarChart3, label: "Analytics" },
 ];
+/** Only offered when the project is linked to a repo (Settings → Projects). */
+const GITHUB_VIEW = { Icon: GitPullRequest, label: "GitHub" };
 
 type SectionKey = "home" | "board" | "canvas" | "chat" | "inbox" | "mine" | "settings";
 
@@ -329,7 +332,7 @@ export function Workspace({
 
           {onBoard && project && (
             <div className="flex items-center gap-0.5 rounded-md border bg-secondary p-0.5">
-              {VIEWS.map(({ Icon, label }, i) => (
+              {(project?.repo ? [...VIEWS, GITHUB_VIEW] : VIEWS).map(({ Icon, label }, i) => (
                 <button
                   key={label}
                   onClick={() => setView(i)}
@@ -349,7 +352,7 @@ export function Workspace({
           <div className="flex-1" />
 
           <div className="flex shrink-0 items-center gap-1 sm:gap-2">
-            {onBoard && project && (
+            {onBoard && project && view !== VIEWS.length && (
               <>
                 <label className="hidden min-w-[180px] items-center gap-1.5 rounded-md border bg-secondary px-2.5 py-1.5 text-xs sm:flex">
                   <Search className="size-3.5 shrink-0 text-muted-foreground" />
@@ -425,7 +428,7 @@ export function Workspace({
         </header>
 
         {/* Filter bar */}
-        {onBoard && showFilters && project && (
+        {onBoard && showFilters && project && view !== VIEWS.length && (
           <div className="flex shrink-0 flex-wrap items-center gap-2 border-b bg-secondary/50 px-5 py-2.5 text-xs">
             <select
               value={filters.assignee ?? ""}
@@ -505,6 +508,8 @@ export function Workspace({
           <FeedView feed={notifications} onMarkRead={markNotificationItemsRead} onMarkAll={markCardNotificationsRead} />
         ) : section === "mine" ? (
           <MyTasksView tasks={mine} onOpen={(id) => setEditing(columns.flatMap((c) => c.tasks).find((t) => t.id === id) ?? null)} />
+        ) : view === VIEWS.length && project.repo ? (
+          <GithubView key={project.id} projectId={project.id} repo={project.repo} />
         ) : view === 0 ? (
           <BoardView columns={filtered} projectId={project.id} onOpen={setEditing} onAdd={setCreating} />
         ) : view === 1 ? (

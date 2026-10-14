@@ -3,7 +3,7 @@
 import { startTransition, useActionState, useEffect, useEffectEvent, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, FolderKanban, FolderPlus, KeyRound, Plus, Settings2, Sparkles, Trash2, UserRound, Users, X } from "lucide-react";
-import { changeMyPassword, fetchAiModels, saveAiConfig, deleteProject, inviteMember, renameProject, renameWorkspace, setMemberPassword, setProjectMember } from "@/lib/actions";
+import { changeMyPassword, fetchAiModels, saveGithub, saveAiConfig, deleteProject, inviteMember, renameProject, renameWorkspace, setMemberPassword, setProjectMember } from "@/lib/actions";
 import { initials } from "@/lib/board";
 import type { MemberPresence, Project, ProjectMember } from "@/lib/queries";
 import { Avatar } from "./avatar";
@@ -390,6 +390,8 @@ function ProjectDetail({ project, memberId, presence, isAdmin, assignments, onBa
       )}
       {error && <p className="mt-2 text-xs text-[var(--chart-7)]">{error}</p>}
 
+      {canRename && <GithubSettings project={project} />}
+
       {isAdmin && (
         <div className="mt-8 flex items-center gap-3 rounded-lg border border-[rgba(239,68,68,0.3)] px-3 py-2.5">
           <div className="min-w-0 flex-1">
@@ -402,6 +404,66 @@ function ProjectDetail({ project, memberId, presence, isAdmin, assignments, onBa
         </div>
       )}
     </>
+  );
+}
+
+/** Repo + fine-grained token for the project's GitHub view. The token is write-only from here. */
+function GithubSettings({ project }: { project: Project }) {
+  const router = useRouter();
+  const [repo, setRepo] = useState(project.repo ?? "");
+  const [token, setToken] = useState("");
+  const [msg, setMsg] = useState<{ ok?: string; error?: string; repo?: string } | null>(null);
+  const [busy, startBusy] = useTransition();
+
+  const save = (nextRepo: string) =>
+    startBusy(async () => {
+      const res = await saveGithub(project.id, nextRepo, token);
+      setMsg(res);
+      if (res.ok) {
+        setToken("");
+        setRepo(res.repo ?? "");
+        router.refresh();
+      }
+    });
+
+  return (
+    <section className="mt-8">
+      <h3 className="mb-1 text-sm font-medium">GitHub</h3>
+      <p className="mb-3 text-xs text-muted-foreground">
+        Shows this repo&rsquo;s pull requests, issues, commits and branches in the project&rsquo;s GitHub view. Use a{" "}
+        <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noreferrer" className="underline">
+          fine-grained token
+        </a>{" "}
+        limited to this repo with read-only Contents, Issues, Pull requests and Metadata.
+      </p>
+      <form
+        onSubmit={(e) => { e.preventDefault(); save(repo); }}
+        className="flex flex-col gap-3 rounded-lg border bg-card p-3"
+      >
+        <Field label="Repository" value={repo} onChange={(e) => setRepo(e.target.value)} placeholder="owner/name" autoComplete="off" />
+        <Field
+          label="Token"
+          hint="Optional for a public repo (GitHub then allows 60 requests an hour)."
+          type="password"
+          value={token}
+          onChange={(e) => setToken(e.target.value)}
+          autoComplete="off"
+          placeholder={project.tokenHint ? `Saved (…${project.tokenHint}) — leave blank to keep` : "github_pat_…"}
+        />
+        {msg?.error && <FormError error={msg.error} />}
+        {msg?.ok && <p className="text-xs text-[var(--chart-2)]">{msg.ok}</p>}
+        <div className="flex items-center gap-2">
+          <button disabled={busy || !repo.trim()} className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">
+            {busy ? "Checking…" : project.repo ? "Save" : "Connect"}
+          </button>
+          {project.repo && (
+            <button type="button" disabled={busy} onClick={() => save("")} className="rounded-md border px-3 py-2 text-xs text-muted-foreground hover:bg-secondary">
+              Disconnect
+            </button>
+          )}
+        </div>
+      </form>
+    </section>
   );
 }
 

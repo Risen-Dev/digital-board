@@ -399,6 +399,37 @@ export async function renameWorkspace(name: string) {
   return { ok: true };
 }
 
+/**
+ * Links a project to a GitHub repo. A blank token keeps the saved one; an empty
+ * repo disconnects. The pair is checked against GitHub before it is stored.
+ */
+export async function saveGithub(projectId: string, repo: string, token: string) {
+  const user = await requireUser();
+  const role = await projectRole(user, projectId);
+  if (role !== "workspace-admin" && role !== "admin") return { error: "You cannot manage this project." };
+
+  const { REPO_RE, GithubError, githubConfig, verifyGithub } = await import("./github");
+  const clean = repo.trim().replace(/^https:\/\/github\.com\//, "").replace(/\.git$|\/$/g, "");
+  if (!clean) {
+    await run("UPDATE projects SET github = NULL WHERE id = ?", projectId);
+    revalidatePath("/board");
+    return { ok: "Disconnected." };
+  }
+  if (!REPO_RE.test(clean)) return { error: "Repository must look like owner/name." };
+  let full = clean;
+
+  // Blank keeps the saved token; with none saved, the repo is read anonymously (public repos only).
+  const key = token.trim() || (await githubConfig(projectId))?.token || "";
+  try {
+    full = await verifyGithub({ repo: clean, token: key });
+    await run("UPDATE projects SET github = ? WHERE id = ?", JSON.stringify({ repo: full, token: key }), projectId);
+  } catch (e) {
+    return { error: e instanceof GithubError ? e.message : "Could not reach GitHub." };
+  }
+  revalidatePath("/board");
+  return { ok: "Connected.", repo: full };
+}
+
 export async function renameProject(id: string, name: string) {
   const user = await requireUser();
   const role = await projectRole(user, id);
