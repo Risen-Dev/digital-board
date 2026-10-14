@@ -42,3 +42,9 @@ export async function saveCanvasSnapshot(
     );
   }
 }
+
+/** Takes a template sheet's example flow; only the first caller gets it (see the seed route). */
+export async function claimCanvasSeed(canvasId: string): Promise<{ flow: unknown; by: string } | null> {
+  const response = await fetch(`/api/canvas/${canvasId}/seed`, { method: "POST" });
+  return response.ok ? response.json() : null;
+}

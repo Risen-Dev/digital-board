@@ -27,7 +27,7 @@ import {
 
 import type { CanvasMeta } from "@/lib/queries";
 
-import { loadCanvasSnapshot } from "@/lib/canvas/api";
+import { claimCanvasSeed, loadCanvasSnapshot } from "@/lib/canvas/api";
 
 import { useCanvasPersistence } from "@/hooks/use-canvas-persistence";
 import { useCanvasLive } from "@/hooks/use-canvas-live";
@@ -35,7 +35,7 @@ import { useCanvasLive } from "@/hooks/use-canvas-live";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import type { ExcalidrawElementSkeleton } from "@excalidraw/excalidraw/data/transform";
 
-import { layoutFlow, type Flow } from "@/lib/canvas/flow";
+import { layoutFlow, parseFlow, type Flow } from "@/lib/canvas/flow";
 import { CanvasAgent } from "@/components/canvas-agent";
 import { registerDrawer } from "@/hooks/use-agent-session";
 
@@ -247,11 +247,15 @@ export function CanvasView({
     void Promise.resolve(initialData).then((saved) => {
       if (cancelled) return;
       unregister = registerDrawer(activeId, (flow, by) => drawFlow(api, flow, by));
-      // A template's example sheet arrives as a bare flow. Drawing it saves a real
-      // scene, and that save drops `seed` from the snapshot.
-      // ponytail: two editors opening the fresh sheet at once both draw it; delete one copy.
-      const seed = (saved as { seed?: { flow: Flow; by: string } } | null)?.seed;
-      if (seed && !api.getSceneElements().length) void drawFlow(api, seed.flow, seed.by);
+      // A template's example sheet arrives as a bare flow. The server hands it to one
+      // tab only (claimCanvasSeed); that tab draws it and the rest get it over live sync.
+      // ponytail: if the winning tab closes before its first save, the example is lost.
+      if ((saved as { seed?: unknown } | null)?.seed) {
+        void claimCanvasSeed(activeId).then((seed) => {
+          const flow = seed && parseFlow(seed.flow);
+          if (flow && !cancelled) void drawFlow(api, flow, seed.by);
+        });
+      }
     });
     return () => { cancelled = true; unregister(); };
   }, [api, activeId, initialData, readOnly]);
