@@ -1,5 +1,6 @@
 import "server-only";
 import { get } from "./db";
+import { ciOf, keysIn, type CiState } from "./board";
 
 /**
  * Per-project GitHub link, stored as JSON in `projects.github`: a repo and a
@@ -24,6 +25,8 @@ export type GithubItem = {
   at: string | null;
   /** Small extra facts: labels, head→base, comment count. */
   meta: string[];
+  /** Pull requests only: head branch and sha, for linking and CI. */
+  head?: { ref: string; sha: string };
 };
 
 export const REPO_RE = /^[\w.-]+\/[\w.-]+$/;
@@ -60,7 +63,7 @@ export async function verifyGithub(config: GithubConfig) {
 }
 
 type User = { login: string } | null;
-type Pull = { number: number; title: string; html_url: string; state: string; draft: boolean; merged_at: string | null; user: User; updated_at: string; head: { ref: string }; base: { ref: string } };
+type Pull = { number: number; title: string; html_url: string; state: string; draft: boolean; merged_at: string | null; user: User; updated_at: string; head: { ref: string; sha: string }; base: { ref: string } };
 type Issue = { number: number; title: string; html_url: string; state: string; user: User; updated_at: string; comments: number; labels: { name: string }[]; pull_request?: unknown };
 type Commit = { sha: string; html_url: string; commit: { message: string; author: { name: string; date: string } | null }; author: User };
 type Branch = { name: string; protected: boolean; commit: { sha: string } };
@@ -75,6 +78,7 @@ async function load(config: GithubConfig, kind: GithubKind): Promise<GithubItem[
         id: String(p.number), title: p.title, url: p.html_url,
         state: p.merged_at ? "merged" : p.draft && p.state === "open" ? "draft" : p.state,
         ref: `#${p.number}`, author: p.user?.login ?? null, at: p.updated_at, meta: [`${p.head.ref} → ${p.base.ref}`],
+        head: { ref: p.head.ref, sha: p.head.sha },
       }));
     case "issues":
       // The issues endpoint also returns PRs; those live in their own tab.
@@ -111,4 +115,46 @@ export async function githubItems(projectId: string, config: GithubConfig, kind:
   const items = await load(config, kind);
   cache.set(key, { at: Date.now(), items });
   return items;
+}
+
+export type TaskLinks = { pulls: (GithubItem & { ci?: CiState })[]; commits: GithubItem[]; branches: GithubItem[] };
+
+type CheckRuns = { check_runs: { status: string; conclusion: string | null }[] };
+
+const ciCache = new Map<string, { at: number; ci: CiState }>();
+
+async function ciFor(config: GithubConfig, sha: string): Promise<CiState> {
+  const hit = ciCache.get(sha);
+  if (hit && Date.now() - hit.at < TTL) return hit.ci;
+  // A token without the Checks permission gets 403 here; that only hides the badge.
+  const ci = await gh<CheckRuns>(config, `/commits/${sha}/check-runs?per_page=100`).then((r) => ciOf(r.check_runs), () => null);
+  ciCache.set(sha, { at: Date.now(), ci });
+  return ci;
+}
+
+/**
+ * Which PRs, commits and branches mention which task key. Built from the same
+ * cached lists as the GitHub view, so it only sees recent activity (30 PRs,
+ * 30 commits, 100 branches). CI is fetched for linked open PRs only.
+ */
+// ponytail: recent-activity window only; older links need paging or a webhook-fed table (stage 3).
+export async function githubLinks(projectId: string, config: GithubConfig, projectKey: string, fresh = false) {
+  const [pulls, commits, branches] = await Promise.all(
+    (["pulls", "commits", "branches"] as const).map((k) => githubItems(projectId, config, k, fresh)),
+  );
+  const links: Record<string, TaskLinks> = {};
+  const add = (kind: keyof TaskLinks, text: string, item: GithubItem) => {
+    for (const key of keysIn(text, projectKey)) {
+      const entry = (links[key] ??= { pulls: [], commits: [], branches: [] });
+      entry[kind].push(item);
+    }
+  };
+  for (const p of pulls) add("pulls", `${p.title} ${p.head?.ref ?? ""}`, p);
+  for (const c of commits) add("commits", c.title, c);
+  for (const b of branches) add("branches", b.title, b);
+
+  await Promise.all(Object.values(links).flatMap((l) => l.pulls.map(async (p, i) => {
+    if (p.state === "open" || p.state === "draft") l.pulls[i] = { ...p, ci: p.head ? await ciFor(config, p.head.sha) : null };
+  })));
+  return links;
 }
