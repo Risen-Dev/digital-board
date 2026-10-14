@@ -46,7 +46,7 @@ Always answer with ONE JSON object and nothing else:
 - "reply": a short message to the user, in the language they wrote in.
 - "flow": the flowchart to draw, or null when you are only answering a question or need clarification first.
 - Begin with one "start" node and end with at least one "end" node. Use "decision" for yes/no or branching steps and label its outgoing edges (e.g. "Yes"/"No").
-- Labels are short verb phrases (max ~6 words). Use 4–25 nodes.
+- Labels are short verb phrases (max ~6 words), in the language the user wrote in. Use 4–25 nodes.
 - Answer with language-appropriate punctuation and capitalization that match the requested language (DO NOT ANSWER IN DIFFERENT LANGUAGE FROM THE REQUESTED/PROMPT LANGUAGE).
 - When the user asks to change a flow you made earlier, return the complete updated flow — it is drawn as a new copy.`;
 
@@ -63,10 +63,16 @@ export async function askAgent(
   turns: ChatTurn[],
   onStatus: (text: string) => void = () => {},
 ): Promise<{ reply: string; flow: Flow | null }> {
+  // Gateways (e.g. 9router) can override or drop the system prompt, so the language rule also rides on the
+  // latest user turn, which always reaches the model. Only the request sees it; stored history stays clean.
+  const last = turns.at(-1);
+  const sent: ChatTurn[] = last?.role === "user"
+    ? [...turns.slice(0, -1), { role: "user", content: `${last.content}\n\n(Write the reply and every flow label in the same language as my message above.)` }]
+    : turns;
   let text = "";
   for (let attempt = 0; ; attempt++) {
     try {
-      text = config.provider === "anthropic" ? await askAnthropic(config, turns) : await askOpenAi(config, turns);
+      text = config.provider === "anthropic" ? await askAnthropic(config, sent) : await askOpenAi(config, sent);
       break;
     } catch (error) {
       const status = error instanceof ProviderError || error instanceof Anthropic.APIError ? error.status : undefined;
