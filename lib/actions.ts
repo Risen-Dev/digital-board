@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { all, get, run, transaction } from "./db";
 import { createUser, createWorkspace, currentUser, endSession, login, passwordOf, setPassword, startSession, verifyPassword } from "./auth";
-import { templateOf, PALETTE, PRIORITIES, reorder, type Priority } from "./board";
+import { projectKeyOf, PROJECT_KEY_RE, templateOf, PALETTE, PRIORITIES, reorder, type Priority } from "./board";
 import { broadcast } from "./canvas/hub";
 import type { Flow } from "./canvas/flow";
 import examplesData from "./template-examples.json";
@@ -84,14 +84,27 @@ export async function registerAction(_prev: unknown, form: FormData) {
 
     const projectId = randomUUID();
     await run(
-      "INSERT INTO projects (id, workspace_id, name, position, created_at) VALUES (?,?,?,0,?)",
-      projectId, workspaceId, project, now(),
+      "INSERT INTO projects (id, workspace_id, name, key, position, created_at) VALUES (?,?,?,?,0,?)",
+      projectId, workspaceId, project, projectKeyOf(project), now(),
     );
     await seedProject(projectId, form.get("template"), columns, form.get("examples") === "on", userId);
   });
 
   await startSession(userId);
   redirect("/board");
+}
+
+/**
+ * The next task number in a project (the 42 in WEB-42). Must run inside a
+ * transaction: the project row lock keeps two concurrent creates from taking
+ * the same number.
+ */
+async function nextTaskNumber(projectId: string) {
+  await get("SELECT id FROM projects WHERE id = ? FOR UPDATE", projectId);
+  return (await get<{ n: number }>(
+    `SELECT COALESCE(MAX(t.number), 0) + 1 n FROM tasks t JOIN columns c ON c.id = t.column_id WHERE c.project_id = ?`,
+    projectId,
+  ))!.n;
 }
 
 /**
@@ -122,9 +135,9 @@ async function seedProject(projectId: string, templateId: unknown, titles: strin
     const due = t.dueInDays === undefined ? null : new Date(Date.now() + t.dueInDays * 86_400_000).toLocaleDateString("en-CA");
     const id = randomUUID();
     await run(
-      `INSERT INTO tasks (id, column_id, title, description, label, priority, assignee_id, due_date, position, created_at)
-       VALUES (?,?,?,?,?,?,NULL,?,?,?)`,
-      id, columnId, t.title, t.description ?? null, t.label, t.priority, due, position, now(),
+      `INSERT INTO tasks (id, column_id, title, description, label, priority, assignee_id, due_date, position, number, created_at)
+       VALUES (?,?,?,?,?,?,NULL,?,?,?,?)`,
+      id, columnId, t.title, t.description ?? null, t.label, t.priority, due, position, await nextTaskNumber(projectId), now(),
     );
     await logEvent(id, actorId, "Task created");
   }
@@ -245,14 +258,17 @@ export async function createTask(_prev: unknown, form: FormData) {
   const invalid = await invalidTaskFields(user, priority, assignee);
   if (invalid) return { error: invalid };
 
-  const next = ((await get<{ n: number }>("SELECT COALESCE(MAX(position) + 1, 0) n FROM tasks WHERE column_id = ?", columnId)))!.n;
   const id = randomUUID();
-  await run(
-    `INSERT INTO tasks (id, column_id, title, description, label, priority, assignee_id, due_date, position, created_at)
-     VALUES (?,?,?,?,?,?,?,?,?,?)`,
-    id, columnId, title, description, label, priority, assignee, dueDate, next, now(),
-  );
-  await logEvent(id, user.id, "Task created");
+  await transaction(async () => {
+    const { project_id } = (await get<{ project_id: string }>("SELECT project_id FROM columns WHERE id = ?", columnId))!;
+    const next = ((await get<{ n: number }>("SELECT COALESCE(MAX(position) + 1, 0) n FROM tasks WHERE column_id = ?", columnId)))!.n;
+    await run(
+      `INSERT INTO tasks (id, column_id, title, description, label, priority, assignee_id, due_date, position, number, created_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+      id, columnId, title, description, label, priority, assignee, dueDate, next, await nextTaskNumber(project_id), now(),
+    );
+    await logEvent(id, user.id, "Task created");
+  });
   revalidatePath("/board");
   return { ok: true };
 }
@@ -367,8 +383,8 @@ export async function addProject(name: string, templateId?: string, examples = f
   ))!.n;
   await transaction(async () => {
     await run(
-      "INSERT INTO projects (id, workspace_id, name, position, created_at) VALUES (?,?,?,?,?)",
-      id, user.workspace_id, clean, next, now(),
+      "INSERT INTO projects (id, workspace_id, name, key, position, created_at) VALUES (?,?,?,?,?,?)",
+      id, user.workspace_id, clean, projectKeyOf(clean), next, now(),
     );
     // A project with no columns is a dead end, so seed the template's.
     await seedProject(id, templateId, null, examples, user.id);
@@ -395,6 +411,18 @@ export async function renameWorkspace(name: string) {
   const clean = name.trim();
   if (!clean) return { error: "Workspace name is required." };
   await run("UPDATE workspaces SET name = ? WHERE id = ?", clean, user.workspace_id);
+  revalidatePath("/board");
+  return { ok: true };
+}
+
+/** Changes the project's task key prefix; existing tasks keep their numbers, so WEB-42 becomes APP-42. */
+export async function setProjectKey(projectId: string, key: string) {
+  const user = await requireUser();
+  const role = await projectRole(user, projectId);
+  if (role !== "workspace-admin" && role !== "admin") return { error: "You cannot manage this project." };
+  const clean = key.trim().toUpperCase();
+  if (!PROJECT_KEY_RE.test(clean)) return { error: "2–10 letters or digits, starting with a letter." };
+  await run("UPDATE projects SET key = ? WHERE id = ?", clean, projectId);
   revalidatePath("/board");
   return { ok: true };
 }

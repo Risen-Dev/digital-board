@@ -1,9 +1,11 @@
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
-import { History, Trash2, X } from "lucide-react";
+import { Check, GitBranch, GitPullRequest, History, Trash2, X } from "lucide-react";
 import { createTask, deleteTask, fetchHistory, updateTask } from "@/lib/actions";
-import { PRIORITIES, PRIORITY_CFG, type Column, type Entry, type Member, type Task } from "@/lib/board";
+import { branchNameOf, PRIORITIES, PRIORITY_CFG, type Column, type Entry, type Member, type Task } from "@/lib/board";
+import type { TaskLinks } from "@/lib/github";
+import { TaskGithubLinks } from "./views/github-view";
 import { Field, FormError, Select, SubmitButton } from "./form-bits";
 
 type Props = {
@@ -11,13 +13,17 @@ type Props = {
   columns: Column[];
   members: Member[];
   defaultColumnId?: string;
+  /** Linked PRs / branches / commits, when the project has a GitHub repo. */
+  links?: TaskLinks;
   onClose: () => void;
 };
 
-export function TaskDialog({ task, columns, members, defaultColumnId, onClose }: Props) {
+export function TaskDialog({ task, columns, members, defaultColumnId, links, onClose }: Props) {
   const editing = task !== null;
   const [state, action] = useActionState(editing ? updateTask : createTask, null);
   const [history, setHistory] = useState<Entry[]>([]);
+  const [copied, setCopied] = useState(false);
+  const linked = links ? links.pulls.length + links.branches.length + links.commits.length : 0;
 
   useEffect(() => {
     if (state?.ok) onClose();
@@ -35,9 +41,26 @@ export function TaskDialog({ task, columns, members, defaultColumnId, onClose }:
       >
         <div className="flex shrink-0 items-center gap-2 border-b px-5 py-3">
           <h2 className="text-sm font-semibold">{editing ? "Edit task" : "New task"}</h2>
+          {task?.key && <span className="font-mono text-xs text-muted-foreground">{task.key}</span>}
+          {task?.key && (
+            <button
+              type="button"
+              onClick={() => {
+                void navigator.clipboard.writeText(branchNameOf(task)).then(() => {
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 1500);
+                });
+              }}
+              title={branchNameOf(task)}
+              className="ml-auto flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+            >
+              {copied ? <Check className="size-3" /> : <GitBranch className="size-3" />}
+              {copied ? "Copied" : "Copy branch name"}
+            </button>
+          )}
           <button
             onClick={onClose}
-            className="ml-auto rounded p-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+            className={`${task?.key ? "" : "ml-auto "}rounded p-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground`}
           >
             <X className="size-4" />
           </button>
@@ -103,6 +126,18 @@ export function TaskDialog({ task, columns, members, defaultColumnId, onClose }:
             )}
           </div>
         </form>
+
+        {links && linked > 0 && (
+          <div className="shrink-0 border-t px-5 py-4">
+            <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+              <GitPullRequest className="size-3.5" />
+              GitHub
+            </h3>
+            <div className="max-h-40 overflow-y-auto">
+              <TaskGithubLinks links={links} />
+            </div>
+          </div>
+        )}
 
         {editing && (
           <div className="shrink-0 border-t px-5 py-4">

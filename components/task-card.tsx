@@ -4,10 +4,13 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { CalendarDays } from "lucide-react";
 import { initials, PRIORITY_CFG, type Task } from "@/lib/board";
+import type { TaskLinks } from "@/lib/github";
 import { Avatar } from "./avatar";
+import { PullBadge, primaryPull } from "./views/github-view";
 
-export function TaskCard({ task, onOpen, overlay = false }: { task: Task; onOpen?: () => void; overlay?: boolean }) {
+export function TaskCard({ task, links, onOpen, overlay = false }: { task: Task; links?: TaskLinks; onOpen?: () => void; overlay?: boolean }) {
   const priority = PRIORITY_CFG[task.priority];
+  const pull = primaryPull(links);
   return (
     <div
       onClick={onOpen}
@@ -15,6 +18,12 @@ export function TaskCard({ task, onOpen, overlay = false }: { task: Task; onOpen
         overlay ? "rotate-1 cursor-grabbing shadow-lg" : "cursor-grab hover:-translate-y-px hover:shadow-md"
       }`}
     >
+      {task.key && (
+        <div className="mb-1 flex items-center gap-2 text-[10px] text-muted-foreground">
+          <span className="font-mono">{task.key}</span>
+          {pull && <PullBadge pull={pull} />}
+        </div>
+      )}
       <p className="mb-2.5 text-sm font-medium leading-snug">{task.title}</p>
       {task.description && (
         <p className="mb-2.5 overflow-hidden whitespace-pre-line text-xs leading-relaxed text-muted-foreground [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:3]">
@@ -51,7 +60,7 @@ export function TaskCard({ task, onOpen, overlay = false }: { task: Task; onOpen
   );
 }
 
-export function SortableTaskCard({ task, onOpen }: { task: Task; onOpen: () => void }) {
+export function SortableTaskCard({ task, links, onOpen }: { task: Task; links?: TaskLinks; onOpen: () => void }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
   return (
     <div
@@ -61,7 +70,7 @@ export function SortableTaskCard({ task, onOpen }: { task: Task; onOpen: () => v
       {...attributes}
       {...listeners}
     >
-      <TaskCard task={task} onOpen={onOpen} />
+      <TaskCard task={task} links={links} onOpen={onOpen} />
     </div>
   );
 }

@@ -1,12 +1,12 @@
 // Run: node --experimental-strip-types lib/board.check.ts
 import assert from "node:assert/strict";
-import { applyFilters, columnOf, initials, placeTask, reorder, TEMPLATES, templateOf, type Column } from "./board.ts";
+import { applyFilters, branchNameOf, ciOf, columnOf, initials, keysIn, placeTask, projectKeyOf, reorder, TEMPLATES, templateOf, type Column } from "./board.ts";
 import { parseFlow } from "./canvas/flow.ts";
 import examples from "./template-examples.json" with { type: "json" };
 
 const mk = (id: string, title: string, n: number): Column["tasks"][number] => ({
   id, columnId: title, title: `task ${n}`, description: n % 2 ? "Detail" : null, label: n % 2 ? "Design" : "QA",
-  priority: n % 2 ? "high" : "low", assignee: n === 1 ? { id: "u1", name: "Ada L", color: "#000" } : null, dueDate: null,
+  priority: n % 2 ? "high" : "low", assignee: n === 1 ? { id: "u1", name: "Ada L", color: "#000" } : null, dueDate: null, key: null,
 });
 
 const board: Column[] = [
@@ -77,5 +77,18 @@ for (const t of TEMPLATES) {
   const flow = parseFlow(raw);
   assert.ok(flow && flow.nodes.length === raw.nodes.length && flow.edges.length === raw.edges.length, `${t.id}: flow parses`);
 }
+
+// task keys and GitHub linking
+assert.equal(projectKeyOf("Web app 2"), "WEB");
+assert.equal(projectKeyOf("123"), "TASK", "no letters falls back");
+assert.deepEqual(keysIn("feat/web-42-login fixes WEB-42 and WEB-7, not WEBX-1 or WEB-42a", "WEB"), ["WEB-42", "WEB-7"]);
+assert.deepEqual(keysIn("WEB-007", "WEB"), ["WEB-7"], "leading zeros normalised");
+assert.equal(branchNameOf({ key: "WEB-42", title: "Login page: email + password!", label: "Feature" }), "feat/WEB-42-login-page-email-password");
+assert.equal(branchNameOf({ key: "WEB-3", title: "Fix crash", label: "Bug" }), "fix/WEB-3-fix-crash");
+const run = (status: string, conclusion: string | null) => ({ status, conclusion });
+assert.equal(ciOf([]), null);
+assert.equal(ciOf([run("completed", "success"), run("completed", "skipped")]), "success");
+assert.equal(ciOf([run("completed", "success"), run("in_progress", null)]), "pending");
+assert.equal(ciOf([run("in_progress", null), run("completed", "failure")]), "failure", "failure beats pending");
 
 console.log("board.check ok");

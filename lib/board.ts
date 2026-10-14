@@ -13,6 +13,8 @@ export type Task = {
   priority: Priority;
   assignee: Member | null;
   dueDate: string | null;
+  /** "WEB-42": the project key plus this task's number in the project. */
+  key: string | null;
 };
 
 export type Column = { id: string; title: string; color: string; tasks: Task[] };
@@ -130,4 +132,30 @@ export function applyFilters(columns: Column[], f: Filters): Column[] {
         (!f.label || t.label === f.label),
     ),
   }));
+}
+
+/** Default project key from its name: first three letters, upper-cased (same rule as the schema backfill). */
+export const projectKeyOf = (name: string) => name.replace(/[^A-Za-z]/g, "").slice(0, 3).toUpperCase() || "TASK";
+export const PROJECT_KEY_RE = /^[A-Z][A-Z0-9]{1,9}$/;
+
+/** Git branch name for a task: `fix/` for bug-ish labels, else `feat/`, then key and a title slug. */
+export const branchNameOf = (task: Pick<Task, "key" | "title" | "label">) => {
+  const slug = task.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40).replace(/-$/, "");
+  return `${/bug|fix/i.test(task.label ?? "") ? "fix" : "feat"}/${task.key}${slug ? `-${slug}` : ""}`;
+};
+
+export type CiState = "success" | "failure" | "pending" | null;
+
+/** One state for a commit's check runs: any failure wins, then anything unfinished, else success; none → null. */
+export function ciOf(runs: { status: string; conclusion: string | null }[]): CiState {
+  if (!runs.length) return null;
+  if (runs.some((r) => ["failure", "timed_out", "cancelled", "action_required", "startup_failure"].includes(r.conclusion ?? ""))) return "failure";
+  if (runs.some((r) => r.status !== "completed")) return "pending";
+  return "success";
+}
+
+/** Every task key (WEB-42) a piece of text mentions, for this project's key only, normalised to upper case. */
+export function keysIn(text: string, projectKey: string) {
+  const re = new RegExp(`\\b${projectKey}-(\\d+)\\b`, "gi");
+  return [...new Set([...text.matchAll(re)].map((m) => `${projectKey}-${Number(m[1])}`))];
 }

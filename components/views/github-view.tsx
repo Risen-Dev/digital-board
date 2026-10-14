@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { CircleCheck, CircleDot, ExternalLink, GitBranch, GitCommitHorizontal, GitMerge, GitPullRequest, RefreshCw } from "lucide-react";
-import type { GithubItem, GithubKind } from "@/lib/github";
+import type { CiState } from "@/lib/board";
+import type { GithubItem, GithubKind, TaskLinks } from "@/lib/github";
 
 const TABS: { kind: GithubKind; label: string }[] = [
   { kind: "pulls", label: "Pull requests" },
@@ -22,8 +23,8 @@ const ago = (iso: string | null) => {
 };
 
 /** Icon + colour per state, GitHub's own convention: green open, purple merged, grey closed/draft. */
-function StateIcon({ kind, state }: { kind: GithubKind; state: string | null }) {
-  const cls = "size-4 shrink-0";
+function StateIcon({ kind, state, size = "size-4" }: { kind: GithubKind; state: string | null; size?: string }) {
+  const cls = `${size} shrink-0`;
   if (kind === "commits") return <GitCommitHorizontal className={`${cls} text-muted-foreground`} />;
   if (kind === "branches") return <GitBranch className={`${cls} text-muted-foreground`} />;
   const color = state === "open" ? "text-[var(--chart-2)]" : state === "merged" ? "text-[var(--chart-6)]" : "text-muted-foreground";
@@ -132,5 +133,57 @@ export function GithubView({ projectId, repo }: { projectId: string; repo: strin
         )}
       </div>
     </div>
+  );
+}
+
+/** The PR that best represents a task: an open one first, then merged, then closed. */
+export function primaryPull(links: TaskLinks | undefined) {
+  const rank = (s: string | null) => (s === "open" || s === "draft" ? 0 : s === "merged" ? 1 : 2);
+  return links?.pulls.toSorted((a, b) => rank(a.state) - rank(b.state))[0];
+}
+
+const CI_STYLE: Record<NonNullable<CiState>, { label: string; color: string }> = {
+  success: { label: "Checks passed", color: "var(--chart-2)" },
+  failure: { label: "Checks failed", color: "var(--chart-7)" },
+  pending: { label: "Checks running", color: "var(--chart-3)" },
+};
+
+export function CiDot({ ci }: { ci: CiState | undefined }) {
+  if (!ci) return null;
+  const s = CI_STYLE[ci];
+  return <span title={s.label} aria-label={s.label} className="size-1.5 shrink-0 rounded-full" style={{ background: s.color }} />;
+}
+
+/** Compact "#12 ●" badge for a card: PR state icon, number, CI dot. */
+export function PullBadge({ pull }: { pull: TaskLinks["pulls"][number] }) {
+  return (
+    <span className="flex items-center gap-1" title={`${pull.ref} ${pull.title} (${pull.state})`}>
+      <StateIcon kind="pulls" state={pull.state} size="size-3" />
+      <span className="font-mono">{pull.ref}</span>
+      <CiDot ci={pull.ci} />
+    </span>
+  );
+}
+
+/** The task dialog's list of linked PRs, branches and commits. */
+export function TaskGithubLinks({ links }: { links: TaskLinks }) {
+  const rows: { kind: GithubKind; item: TaskLinks["pulls"][number] }[] = [
+    ...links.pulls.map((item) => ({ kind: "pulls" as const, item })),
+    ...links.branches.map((item) => ({ kind: "branches" as const, item })),
+    ...links.commits.map((item) => ({ kind: "commits" as const, item })),
+  ];
+  return (
+    <ul className="flex flex-col gap-1">
+      {rows.map(({ kind, item }) => (
+        <li key={`${kind}:${item.id}`}>
+          <a href={item.url} target="_blank" rel="noreferrer" className="flex items-center gap-2 rounded-md px-1.5 py-1 text-xs hover:bg-secondary">
+            <StateIcon kind={kind} state={item.state} size="size-3.5" />
+            <span className="min-w-0 flex-1 truncate">{item.title}</span>
+            <span className="shrink-0 font-mono text-[11px] text-muted-foreground">{item.ref}</span>
+            <CiDot ci={item.ci} />
+          </a>
+        </li>
+      ))}
+    </ul>
   );
 }

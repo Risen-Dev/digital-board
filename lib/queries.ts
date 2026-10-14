@@ -11,6 +11,7 @@ type TaskRow = {
   label: string | null;
   priority: Priority;
   due_date: string | null;
+  task_key: string | null;
   assignee_id: string | null;
   assignee_name: string | null;
   assignee_color: string | null;
@@ -24,6 +25,7 @@ const toTask = (r: TaskRow): Task => ({
   label: r.label,
   priority: r.priority,
   dueDate: r.due_date,
+  key: r.task_key,
   assignee:
     r.assignee_id && r.assignee_name && r.assignee_color
       ? { id: r.assignee_id, name: r.assignee_name, color: r.assignee_color }
@@ -31,8 +33,8 @@ const toTask = (r: TaskRow): Task => ({
 });
 
 /** `repo` / `tokenHint` describe the GitHub link; the token itself never leaves the server. */
-export type Project = { id: string; name: string; repo: string | null; tokenHint: string | null };
-const PROJECT_COLS = `p.id, p.name, p.github::jsonb ->> 'repo' AS repo, right(p.github::jsonb ->> 'token', 4) AS "tokenHint"`;
+export type Project = { id: string; name: string; key: string; repo: string | null; tokenHint: string | null };
+const PROJECT_COLS = `p.id, p.name, p.key, p.github::jsonb ->> 'repo' AS repo, right(p.github::jsonb ->> 'token', 4) AS "tokenHint"`;
 
 export const workspaceName = async (workspaceId: string) =>
   (await get<{ name: string }>("SELECT name FROM workspaces WHERE id = ?", workspaceId))?.name ?? "Workspace";
@@ -67,9 +69,11 @@ export async function getBoard(projectId: string): Promise<Column[]> {
   );
   const rows = await all<TaskRow>(
     `SELECT t.id, t.column_id, t.title, t.description, t.label, t.priority, t.due_date,
+            p.key || '-' || t.number AS task_key,
             u.id AS assignee_id, u.name AS assignee_name, u.color AS assignee_color
        FROM tasks t
        JOIN columns c ON c.id = t.column_id
+       JOIN projects p ON p.id = c.project_id
        LEFT JOIN users u ON u.id = t.assignee_id
       WHERE c.project_id = ?
       ORDER BY t.position`,
@@ -148,6 +152,7 @@ export async function markActivityItemsRead(userId: string, eventIds: number[]) 
 export const myTasks = async (userId: string) =>
   (await all<TaskRow & { column_title: string; column_color: string; project_name: string }>(
     `SELECT t.id, t.column_id, t.title, t.description, t.label, t.priority, t.due_date,
+            p.key || '-' || t.number AS task_key,
             u.id AS assignee_id, u.name AS assignee_name, u.color AS assignee_color,
             c.title AS column_title, c.color AS column_color, p.name AS project_name
        FROM tasks t
