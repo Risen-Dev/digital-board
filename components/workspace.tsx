@@ -116,6 +116,12 @@ export function Workspace({
   // Keep presence and unread badges live outside the Chat section. The ping is
   // also what keeps this user's own status "online" while they sit on a board.
   const [live, setLive] = useState<MemberPresence[]>(presence);
+  // A server refresh (e.g. after adding a member) brings a new list; don't wait for the next ping.
+  const [prevPresence, setPrevPresence] = useState(presence);
+  if (presence !== prevPresence) {
+    setPrevPresence(presence);
+    setLive(presence);
+  }
   const [unread, setUnread] = useState<Unread[]>(initialUnread);
   useEffect(() => {
     let alive = true;

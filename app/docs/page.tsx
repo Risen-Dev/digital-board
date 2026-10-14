@@ -304,16 +304,16 @@ WantedBy=multi-user.target`}</Code>
               [<strong className="text-foreground">Task history</strong>, <>Creation, column moves, reorders, and title/details/priority/assignee/due-date edits are all recorded. Open a task to see its timeline.</>],
               [<strong className="text-foreground">Canvas</strong>, <>Excalidraw with sheet tabs. Each sheet keeps its own drawing, saved on an 800ms debounce as you draw and flushed when you switch sheets or close the tab; switching sheets never disturbs another one. Pasted images are embedded in the sheet&rsquo;s snapshot rather than stored as attachments, so an image-heavy sheet becomes a large row.</>],
               [<strong className="text-foreground">Chat</strong>, <>A workspace channel everyone reads, plus a direct message thread per member. Unread badges, file attachments with inline image previews, and 15 minutes to edit your own message.</>],
-              [<strong className="text-foreground">Access</strong>, <>A workspace admin assigns each member a role per project from Settings — <C>viewer</C> reads, <C>editor</C> changes tasks and canvases, <C>admin</C> also manages the project&rsquo;s structure and members. No role means the project is not listed and its rows are never sent to that browser. Every action re-checks the role server-side.</>],
+              [<strong className="text-foreground">Access</strong>, <>A workspace admin picks a member&rsquo;s project roles while adding them, and changes them later under Settings → Projects → the project — <C>viewer</C> reads, <C>editor</C> changes tasks and canvases, <C>admin</C> also renames the project and manages its columns. Workspace admins reach every project. No role means the project is not listed and its rows are never sent to that browser. Every action re-checks the role server-side.</>],
               [<strong className="text-foreground">Presence</strong>, <>Online / away / offline per member, derived from activity rather than stored.</>],
-              [<strong className="text-foreground">Projects</strong>, <>Add and delete from Settings, switch from the sidebar, and rename workspace or project names from Settings or their titles. New projects start with the default columns.</>],
+              [<strong className="text-foreground">Projects</strong>, <>Add and delete from Settings, switch from the sidebar, and rename workspace or project names from Settings or their titles. New projects start with the columns of the template you pick (General, Software / Tech, Sales, Marketing, Support, Recruiting).</>],
             ]}
           />
 
           <Shot src="/screenshots/canvas.png" alt="Canvas — Excalidraw sheets, one drawing per tab, saved as you draw" />
           <Shot src="/screenshots/chat.png" alt="Chat — the workspace channel plus a direct message thread per member" />
           <Shot src="/screenshots/analytics.png" alt="Analytics — tasks per column, priority split, workload per member and 14-day activity" />
-          <Shot src="/screenshots/settings.png" alt="Settings — workspace name, members with presence, and the per-project role matrix" />
+          <Shot src="/screenshots/settings.png" alt="Settings — workspace, members, projects, AI agent and account tabs" />
 
           <H id="data">Data model</H>
           <p className="text-sm text-muted-foreground">

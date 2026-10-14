@@ -244,8 +244,14 @@ export function CanvasView({
     if (!api || !activeId || readOnly) return;
     let unregister = () => {};
     let cancelled = false;
-    void Promise.resolve(initialData).then(() => {
-      if (!cancelled) unregister = registerDrawer(activeId, (flow, by) => drawFlow(api, flow, by));
+    void Promise.resolve(initialData).then((saved) => {
+      if (cancelled) return;
+      unregister = registerDrawer(activeId, (flow, by) => drawFlow(api, flow, by));
+      // A template's example sheet arrives as a bare flow. Drawing it saves a real
+      // scene, and that save drops `seed` from the snapshot.
+      // ponytail: two editors opening the fresh sheet at once both draw it; delete one copy.
+      const seed = (saved as { seed?: { flow: Flow; by: string } } | null)?.seed;
+      if (seed && !api.getSceneElements().length) void drawFlow(api, seed.flow, seed.by);
     });
     return () => { cancelled = true; unregister(); };
   }, [api, activeId, initialData, readOnly]);

@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { currentUser } from "@/lib/auth";
-import { DEFAULT_COLUMNS } from "@/lib/board";
 import { LogoMark } from "@/components/logo-mark";
 import { RegisterForm } from "@/components/register-form";
 
@@ -21,7 +20,7 @@ export default async function RegisterPage() {
             <p className="text-sm text-muted-foreground">Your own board, projects and chat. You become its admin.</p>
           </div>
         </div>
-        <RegisterForm defaultColumns={DEFAULT_COLUMNS} />
+        <RegisterForm />
         <p className="mt-6 text-center text-sm text-muted-foreground">
           Already have an account?{" "}
           <Link href="/login" className="font-medium text-foreground underline underline-offset-2">Sign in</Link>

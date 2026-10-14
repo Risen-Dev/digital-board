@@ -1,0 +1,645 @@
+{
+  "tech": {
+    "tasks": [
+      {
+        "column": "Backlog",
+        "title": "Set up CI pipeline (lint, test, build)",
+        "label": "Chore",
+        "priority": "high",
+        "description": "Run on every pull request. Block merge when it fails."
+      },
+      {
+        "column": "Todo",
+        "title": "Login page",
+        "label": "Feature",
+        "priority": "medium",
+        "description": "Acceptance criteria:\n- Email + password\n- Error on wrong password\n- Redirect to dashboard",
+        "dueInDays": 7
+      },
+      {
+        "column": "In Progress",
+        "title": "Fix: session expires too early",
+        "label": "Bug",
+        "priority": "high",
+        "description": "Steps to reproduce:\n1. Log in\n2. Wait 10 minutes\nExpected: still logged in. Actual: redirected to /login."
+      },
+      {
+        "column": "Backlog",
+        "title": "Write README setup section",
+        "label": "Docs",
+        "priority": "low"
+      }
+    ],
+    "canvas": {
+      "title": "Release flow",
+      "flow": {
+        "nodes": [
+          {
+            "id": "a",
+            "label": "Ticket picked",
+            "shape": "start"
+          },
+          {
+            "id": "b",
+            "label": "Branch + commits",
+            "shape": "process"
+          },
+          {
+            "id": "c",
+            "label": "Pull request",
+            "shape": "process"
+          },
+          {
+            "id": "d",
+            "label": "CI passes?",
+            "shape": "decision"
+          },
+          {
+            "id": "e",
+            "label": "Code review",
+            "shape": "process"
+          },
+          {
+            "id": "f",
+            "label": "Deploy to staging + QA",
+            "shape": "process"
+          },
+          {
+            "id": "g",
+            "label": "Deploy to production",
+            "shape": "end"
+          }
+        ],
+        "edges": [
+          {
+            "from": "a",
+            "to": "b"
+          },
+          {
+            "from": "b",
+            "to": "c"
+          },
+          {
+            "from": "c",
+            "to": "d"
+          },
+          {
+            "from": "d",
+            "to": "b",
+            "label": "no"
+          },
+          {
+            "from": "d",
+            "to": "e",
+            "label": "yes"
+          },
+          {
+            "from": "e",
+            "to": "f"
+          },
+          {
+            "from": "f",
+            "to": "g"
+          }
+        ]
+      }
+    }
+  },
+  "sales": {
+    "tasks": [
+      {
+        "column": "Lead",
+        "title": "PT Contoh Jaya: website redesign",
+        "label": "Inbound",
+        "priority": "medium",
+        "description": "Contact: Budi (Marketing Lead), budi@example.com\nValue: Rp 50.000.000\nSource: contact form\nNext step: intro call",
+        "dueInDays": 2
+      },
+      {
+        "column": "Proposal",
+        "title": "Acme Corp: annual license",
+        "label": "Outbound",
+        "priority": "high",
+        "description": "Contact: Sarah (CFO)\nValue: $12,000/yr\nExpected close: end of month\nNext step: send revised quote",
+        "dueInDays": 5
+      },
+      {
+        "column": "Negotiation",
+        "title": "Globex: renewal + 10 seats",
+        "label": "Renewal",
+        "priority": "high",
+        "description": "Value: $8,000\nBlocker: legal review of the contract",
+        "dueInDays": 3
+      }
+    ],
+    "canvas": {
+      "title": "Sales process",
+      "flow": {
+        "nodes": [
+          {
+            "id": "a",
+            "label": "New lead",
+            "shape": "start"
+          },
+          {
+            "id": "b",
+            "label": "First contact",
+            "shape": "process"
+          },
+          {
+            "id": "c",
+            "label": "Budget + need + timing fit?",
+            "shape": "decision"
+          },
+          {
+            "id": "d",
+            "label": "Demo / discovery call",
+            "shape": "process"
+          },
+          {
+            "id": "e",
+            "label": "Send proposal",
+            "shape": "process"
+          },
+          {
+            "id": "f",
+            "label": "Accepted?",
+            "shape": "decision"
+          },
+          {
+            "id": "g",
+            "label": "Won: hand off to onboarding",
+            "shape": "end"
+          },
+          {
+            "id": "h",
+            "label": "Lost: record reason",
+            "shape": "end"
+          }
+        ],
+        "edges": [
+          {
+            "from": "a",
+            "to": "b"
+          },
+          {
+            "from": "b",
+            "to": "c"
+          },
+          {
+            "from": "c",
+            "to": "d",
+            "label": "yes"
+          },
+          {
+            "from": "c",
+            "to": "h",
+            "label": "no"
+          },
+          {
+            "from": "d",
+            "to": "e"
+          },
+          {
+            "from": "e",
+            "to": "f"
+          },
+          {
+            "from": "f",
+            "to": "g",
+            "label": "yes"
+          },
+          {
+            "from": "f",
+            "to": "h",
+            "label": "no"
+          }
+        ]
+      }
+    }
+  },
+  "marketing": {
+    "tasks": [
+      {
+        "column": "Ideas",
+        "title": "Customer story: how X saved 10 hours a week",
+        "label": "Blog",
+        "priority": "low"
+      },
+      {
+        "column": "Planned",
+        "title": "Product launch announcement",
+        "label": "Email",
+        "priority": "high",
+        "description": "Audience: all subscribers\nCTA: start free trial\nAssets: hero image, 30s video",
+        "dueInDays": 10
+      },
+      {
+        "column": "Writing / Design",
+        "title": "Carousel: 5 tips for getting started",
+        "label": "Instagram",
+        "priority": "medium",
+        "dueInDays": 4
+      },
+      {
+        "column": "Review",
+        "title": "Monthly newsletter",
+        "label": "Email",
+        "priority": "medium",
+        "dueInDays": 2
+      }
+    ],
+    "canvas": {
+      "title": "Content workflow",
+      "flow": {
+        "nodes": [
+          {
+            "id": "a",
+            "label": "Idea",
+            "shape": "start"
+          },
+          {
+            "id": "b",
+            "label": "Brief: audience, goal, channel",
+            "shape": "process"
+          },
+          {
+            "id": "c",
+            "label": "Draft + visuals",
+            "shape": "process"
+          },
+          {
+            "id": "d",
+            "label": "Approved?",
+            "shape": "decision"
+          },
+          {
+            "id": "e",
+            "label": "Schedule",
+            "shape": "process"
+          },
+          {
+            "id": "f",
+            "label": "Publish",
+            "shape": "process"
+          },
+          {
+            "id": "g",
+            "label": "Measure results",
+            "shape": "end"
+          }
+        ],
+        "edges": [
+          {
+            "from": "a",
+            "to": "b"
+          },
+          {
+            "from": "b",
+            "to": "c"
+          },
+          {
+            "from": "c",
+            "to": "d"
+          },
+          {
+            "from": "d",
+            "to": "c",
+            "label": "changes"
+          },
+          {
+            "from": "d",
+            "to": "e",
+            "label": "yes"
+          },
+          {
+            "from": "e",
+            "to": "f"
+          },
+          {
+            "from": "f",
+            "to": "g"
+          }
+        ]
+      }
+    }
+  },
+  "support": {
+    "tasks": [
+      {
+        "column": "New",
+        "title": "Cannot log in after password reset",
+        "label": "Account",
+        "priority": "high",
+        "description": "Requester: rina@example.com\nPlan: Pro\nReported via: email",
+        "dueInDays": 0
+      },
+      {
+        "column": "Triaged",
+        "title": "Invoice shows the wrong company name",
+        "label": "Billing",
+        "priority": "medium",
+        "description": "Requester: finance@acme.example",
+        "dueInDays": 1
+      },
+      {
+        "column": "Waiting on Customer",
+        "title": "Export to CSV missing columns",
+        "label": "Bug",
+        "priority": "medium",
+        "description": "Asked customer for a screenshot and browser version."
+      }
+    ],
+    "canvas": {
+      "title": "Escalation path",
+      "flow": {
+        "nodes": [
+          {
+            "id": "a",
+            "label": "Ticket received",
+            "shape": "start"
+          },
+          {
+            "id": "b",
+            "label": "Triage: set severity + owner",
+            "shape": "process"
+          },
+          {
+            "id": "c",
+            "label": "Known answer?",
+            "shape": "decision"
+          },
+          {
+            "id": "d",
+            "label": "Reply with solution",
+            "shape": "process"
+          },
+          {
+            "id": "e",
+            "label": "Is it a bug?",
+            "shape": "decision"
+          },
+          {
+            "id": "f",
+            "label": "Create ticket on Tech board",
+            "shape": "data"
+          },
+          {
+            "id": "g",
+            "label": "Investigate",
+            "shape": "process"
+          },
+          {
+            "id": "h",
+            "label": "Resolved + confirm with customer",
+            "shape": "end"
+          }
+        ],
+        "edges": [
+          {
+            "from": "a",
+            "to": "b"
+          },
+          {
+            "from": "b",
+            "to": "c"
+          },
+          {
+            "from": "c",
+            "to": "d",
+            "label": "yes"
+          },
+          {
+            "from": "c",
+            "to": "e",
+            "label": "no"
+          },
+          {
+            "from": "e",
+            "to": "f",
+            "label": "yes"
+          },
+          {
+            "from": "e",
+            "to": "g",
+            "label": "no"
+          },
+          {
+            "from": "f",
+            "to": "h"
+          },
+          {
+            "from": "g",
+            "to": "d"
+          },
+          {
+            "from": "d",
+            "to": "h"
+          }
+        ]
+      }
+    }
+  },
+  "recruiting": {
+    "tasks": [
+      {
+        "column": "Applied",
+        "title": "Andi Pratama: Frontend Engineer",
+        "label": "Frontend",
+        "priority": "medium",
+        "description": "Source: LinkedIn\nExpected salary: -\nCV: attach here"
+      },
+      {
+        "column": "Interview",
+        "title": "Maya Lestari: Product Designer",
+        "label": "Design",
+        "priority": "high",
+        "description": "Next: portfolio review with design lead",
+        "dueInDays": 3
+      },
+      {
+        "column": "Offer",
+        "title": "Rizky: Backend Engineer",
+        "label": "Backend",
+        "priority": "high",
+        "description": "Offer sent, waiting for an answer",
+        "dueInDays": 5
+      }
+    ],
+    "canvas": {
+      "title": "Hiring process",
+      "flow": {
+        "nodes": [
+          {
+            "id": "a",
+            "label": "Application",
+            "shape": "start"
+          },
+          {
+            "id": "b",
+            "label": "CV screening",
+            "shape": "process"
+          },
+          {
+            "id": "c",
+            "label": "Fit?",
+            "shape": "decision"
+          },
+          {
+            "id": "d",
+            "label": "HR interview",
+            "shape": "process"
+          },
+          {
+            "id": "e",
+            "label": "Technical / case interview",
+            "shape": "process"
+          },
+          {
+            "id": "f",
+            "label": "Hire?",
+            "shape": "decision"
+          },
+          {
+            "id": "g",
+            "label": "Offer + onboarding",
+            "shape": "end"
+          },
+          {
+            "id": "h",
+            "label": "Reject with feedback",
+            "shape": "end"
+          }
+        ],
+        "edges": [
+          {
+            "from": "a",
+            "to": "b"
+          },
+          {
+            "from": "b",
+            "to": "c"
+          },
+          {
+            "from": "c",
+            "to": "d",
+            "label": "yes"
+          },
+          {
+            "from": "c",
+            "to": "h",
+            "label": "no"
+          },
+          {
+            "from": "d",
+            "to": "e"
+          },
+          {
+            "from": "e",
+            "to": "f"
+          },
+          {
+            "from": "f",
+            "to": "g",
+            "label": "yes"
+          },
+          {
+            "from": "f",
+            "to": "h",
+            "label": "no"
+          }
+        ]
+      }
+    }
+  },
+  "general": {
+    "tasks": [
+      {
+        "column": "To Do",
+        "title": "Book venue",
+        "label": "Vendor",
+        "priority": "high",
+        "dueInDays": 7
+      },
+      {
+        "column": "Backlog",
+        "title": "Draft budget",
+        "label": "Finance",
+        "priority": "medium",
+        "dueInDays": 10
+      },
+      {
+        "column": "Blocked",
+        "title": "Sign catering contract",
+        "label": "Vendor",
+        "priority": "high",
+        "description": "Waiting on: venue confirmation"
+      }
+    ],
+    "canvas": {
+      "title": "Plan",
+      "flow": {
+        "nodes": [
+          {
+            "id": "a",
+            "label": "Goal",
+            "shape": "start"
+          },
+          {
+            "id": "b",
+            "label": "Plan + budget",
+            "shape": "process"
+          },
+          {
+            "id": "c",
+            "label": "Execute",
+            "shape": "process"
+          },
+          {
+            "id": "d",
+            "label": "Blocked?",
+            "shape": "decision"
+          },
+          {
+            "id": "e",
+            "label": "Escalate / unblock",
+            "shape": "process"
+          },
+          {
+            "id": "f",
+            "label": "Review + close",
+            "shape": "end"
+          }
+        ],
+        "edges": [
+          {
+            "from": "a",
+            "to": "b"
+          },
+          {
+            "from": "b",
+            "to": "c"
+          },
+          {
+            "from": "c",
+            "to": "d"
+          },
+          {
+            "from": "d",
+            "to": "e",
+            "label": "yes"
+          },
+          {
+            "from": "e",
+            "to": "c"
+          },
+          {
+            "from": "d",
+            "to": "f",
+            "label": "no"
+          }
+        ]
+      }
+    }
+  }
+}
