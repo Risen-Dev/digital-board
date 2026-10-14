@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   BarChart3, Bell, Calendar, Check, CheckSquare, Filter, Home, Inbox,
-  LayoutGrid, List, LogOut, MessageSquare, PenLine, Plus, Search, Settings, X,
+  LayoutGrid, List, LogOut, Menu, MessageSquare, PenLine, Plus, Search, Settings, X,
 } from "lucide-react";
 import { applyFilters, initials, type Column, type Filters, type Member, type Task } from "@/lib/board";
 import { logoutAction, renameProject, renameWorkspace } from "@/lib/actions";
@@ -74,6 +74,9 @@ export function Workspace({
   const [section, setSection] = useState<SectionKey>("home");
   const [view, setView] = useState(0);
   const [collapsed, setCollapsed] = useState(false);
+  // Below md the sidebar is an off-canvas drawer; it always opens full width.
+  const [drawer, setDrawer] = useState(false);
+  const slim = collapsed && !drawer;
   const [filters, setFilters] = useState<Filters>({});
   const [showFilters, setShowFilters] = useState(false);
   const [editing, setEditing] = useState<Task | null>(null);
@@ -188,15 +191,22 @@ export function Workspace({
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       {/* Sidebar */}
+      {drawer && <div className="fixed inset-0 z-30 bg-black/40 md:hidden" onClick={() => setDrawer(false)} />}
       <aside
-        style={{ width: collapsed ? 54 : 220, transition: "width 200ms cubic-bezier(0.4,0,0.2,1)" }}
-        className="flex shrink-0 flex-col overflow-hidden border-r"
+        style={{ width: slim ? 54 : 220, transition: "width 200ms cubic-bezier(0.4,0,0.2,1), transform 200ms cubic-bezier(0.4,0,0.2,1)" }}
+        className={`fixed inset-y-0 left-0 z-40 flex shrink-0 flex-col overflow-hidden border-r bg-background md:static md:z-auto md:translate-x-0 ${
+          drawer ? "translate-x-0" : "-translate-x-full"
+        }`}
       >
         <div className="flex h-14 items-center gap-2 border-b px-3">
-          <button aria-label="Collapse sidebar" onClick={() => setCollapsed((c) => !c)} className="shrink-0">
+          <button
+            aria-label={drawer ? "Close menu" : "Collapse sidebar"}
+            onClick={() => (drawer ? setDrawer(false) : setCollapsed((c) => !c))}
+            className="shrink-0"
+          >
             <LogoMark size={28} />
           </button>
-          {!collapsed && (
+          {!slim && (
             <EditableTitle
               value={workspace}
               onSave={(name) => renameWorkspace(name).then((r) => { router.refresh(); return r; })}
@@ -213,14 +223,15 @@ export function Workspace({
               onClick={() => {
                 setSection(key);
                 if (key === "chat") setChatChannel("all");
+                setDrawer(false);
               }}
               className={`flex items-center gap-2.5 rounded-md px-2 py-1.5 text-sm transition-all ${
                 section === key ? "bg-secondary font-medium text-foreground" : "text-muted-foreground"
               }`}
             >
               <Icon className="size-4 shrink-0" />
-              {!collapsed && <span className="whitespace-nowrap">{label}</span>}
-              {!collapsed && key === "chat" && (
+              {!slim && <span className="whitespace-nowrap">{label}</span>}
+              {!slim && key === "chat" && (
                 unreadTotal > 0 ? (
                   <UnreadBadge n={unreadTotal} />
                 ) : online > 0 ? (
@@ -230,12 +241,12 @@ export function Workspace({
                   </span>
                 ) : null
               )}
-              {!collapsed && key === "inbox" && notifications.length > 0 && (
+              {!slim && key === "inbox" && notifications.length > 0 && (
                 <span className="ml-auto rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground">
                   {notifications.length}
                 </span>
               )}
-              {!collapsed && key === "mine" && mine.length > 0 && (
+              {!slim && key === "mine" && mine.length > 0 && (
                 <span className="ml-auto rounded-full border bg-secondary px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
                   {mine.length}
                 </span>
@@ -244,13 +255,14 @@ export function Workspace({
           ))}
         </nav>
 
-        {!collapsed && projects.length > 0 && (
+        {!slim && projects.length > 0 && (
           <div className="border-t p-2">
             <p className="mb-1.5 px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Projects</p>
             {projects.map((p) => (
               <Link
                 key={p.id}
                 href={`/board?project=${p.id}`}
+                onClick={() => setDrawer(false)}
                 className={`flex w-full items-center gap-2 rounded-md px-2 py-1 transition-colors hover:bg-secondary ${
                   p.id === project?.id ? "bg-secondary" : ""
                 }`}
@@ -268,12 +280,13 @@ export function Workspace({
         <div className="border-t p-2">
           <div className="flex items-center gap-2.5 rounded-md px-2 py-1.5">
             <Avatar initials={initials(user.name)} color={user.color} size={26} />
-            {!collapsed && (
+            {!slim && (
               <>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-xs font-medium">{user.name}</p>
                   <p className="truncate text-[10px] text-muted-foreground">{user.email}</p>
                 </div>
+                <span className="md:hidden"><ThemeToggle /></span>
                 <form action={logoutAction}>
                   <button title="Sign out" className="rounded p-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
                     <LogOut className="size-3.5" />
@@ -287,16 +300,23 @@ export function Workspace({
 
       {/* Main */}
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 shrink-0 items-center gap-4 border-b px-5">
+        <header className="flex h-14 shrink-0 items-center gap-2 border-b px-3 sm:gap-4 sm:px-5">
+          <button
+            aria-label="Open menu"
+            onClick={() => setDrawer(true)}
+            className="-ml-1 rounded-md p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground md:hidden"
+          >
+            <Menu className="size-4" />
+          </button>
           {onBoard && project ? (
             <EditableTitle
               value={project.name}
               onSave={(name) => renameProject(project.id, name).then((r) => { router.refresh(); return r; })}
-              className="text-sm font-semibold"
+              className="min-w-0 truncate text-sm font-semibold"
               inputClassName="text-sm font-semibold w-48"
             />
           ) : (
-            <h1 className="text-sm font-semibold">
+            <h1 className="min-w-0 truncate text-sm font-semibold">
               {onBoard ? "Board" : SECTIONS.find((s) => s.key === section)!.label}
             </h1>
           )}
@@ -307,12 +327,14 @@ export function Workspace({
                 <button
                   key={label}
                   onClick={() => setView(i)}
-                  className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-xs transition-all ${
+                  title={label}
+                  aria-label={label}
+                  className={`flex items-center gap-1.5 rounded px-1.5 py-1 text-xs transition-all sm:px-2.5 ${
                     view === i ? "bg-card font-medium text-foreground shadow-sm" : "text-muted-foreground"
                   }`}
                 >
                   <Icon className="size-3.5" />
-                  {label}
+                  <span className="hidden sm:inline">{label}</span>
                 </button>
               ))}
             </div>
@@ -320,7 +342,7 @@ export function Workspace({
 
           <div className="flex-1" />
 
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-1 sm:gap-2">
             {onBoard && project && (
               <>
                 <label className="hidden min-w-[180px] items-center gap-1.5 rounded-md border bg-secondary px-2.5 py-1.5 text-xs sm:flex">
@@ -339,14 +361,15 @@ export function Workspace({
                   }`}
                 >
                   <Filter className="size-3.5" />
-                  Filter
+                  <span className="hidden sm:inline">Filter</span>
                   {activeFilters > 0 && (
                     <span className="rounded-full bg-primary px-1.5 text-[10px] text-primary-foreground">{activeFilters}</span>
                   )}
                 </button>
               </>
             )}
-            <ThemeToggle />
+            {/* On phones the toggle lives in the drawer's footer instead. */}
+            <span className="hidden md:contents"><ThemeToggle /></span>
             <div className="relative">
               <button
                 aria-label="Notifications"
@@ -389,7 +412,7 @@ export function Workspace({
                 className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90"
               >
                 <Plus className="size-3" />
-                New Task
+                <span className="hidden sm:inline">New Task</span>
               </button>
             )}
           </div>
