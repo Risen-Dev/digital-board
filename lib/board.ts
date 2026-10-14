@@ -36,12 +36,44 @@ export const PRIORITY_CFG: Record<Priority, { label: string; color: string; bg: 
  */
 export const PALETTE = Array.from({ length: 7 }, (_, i) => `var(--chart-${i + 1})`);
 
-export const DEFAULT_COLUMNS = [
-  { title: "Backlog", color: "var(--muted-foreground)" },
-  { title: "In Progress", color: PALETTE[0] },
-  { title: "In Review", color: PALETTE[2] },
-  { title: "Done", color: PALETTE[1] },
+export type TemplateColumn = { title: string; color: string };
+export type Template = { id: string; name: string; description: string; columns: TemplateColumn[] };
+
+const col = (title: string, n: number): TemplateColumn => ({
+  title,
+  color: n === 0 ? "var(--muted-foreground)" : PALETTE[n - 1],
+});
+
+/** Project templates offered at create time; the spec lives in templates.md. First one is the default. */
+export const TEMPLATES: Template[] = [
+  {
+    id: "general", name: "General", description: "Simple board for any kind of work.",
+    columns: [col("Backlog", 0), col("To Do", 4), col("In Progress", 1), col("Blocked", 6), col("Done", 2)],
+  },
+  {
+    id: "tech", name: "Software / Tech", description: "Sprint board for engineering teams.",
+    columns: [col("Backlog", 0), col("Todo", 4), col("In Progress", 1), col("In Review", 3), col("QA", 5), col("Done", 2)],
+  },
+  {
+    id: "sales", name: "Sales pipeline", description: "Track deals from first lead to won or lost.",
+    columns: [col("Lead", 0), col("Contacted", 4), col("Qualified", 1), col("Proposal", 3), col("Negotiation", 5), col("Won", 2), col("Lost", 6)],
+  },
+  {
+    id: "marketing", name: "Marketing / Content", description: "Content calendar from idea to published.",
+    columns: [col("Ideas", 0), col("Planned", 4), col("Writing / Design", 1), col("Review", 3), col("Scheduled", 5), col("Published", 2)],
+  },
+  {
+    id: "support", name: "Customer Support", description: "Helpdesk queue with severity-based response times.",
+    columns: [col("New", 0), col("Triaged", 4), col("In Progress", 1), col("Waiting on Customer", 5), col("Resolved", 2)],
+  },
+  {
+    id: "recruiting", name: "Recruiting", description: "Hiring pipeline from application to offer.",
+    columns: [col("Applied", 0), col("Screening", 4), col("Interview", 1), col("Offer", 3), col("Hired", 2), col("Rejected", 6)],
+  },
 ];
+
+/** Unknown or missing ids fall back to the first (General) template. */
+export const templateOf = (id: unknown) => TEMPLATES.find((t) => t.id === id) ?? TEMPLATES[0];
 
 export const initials = (name: string) =>
   name

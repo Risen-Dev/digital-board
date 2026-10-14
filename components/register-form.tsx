@@ -3,12 +3,18 @@
 import { useActionState, useState } from "react";
 import { Check, Plus, X } from "lucide-react";
 import { registerAction } from "@/lib/actions";
+import { TEMPLATES, templateOf } from "@/lib/board";
 import { Field, FormError, SubmitButton } from "./form-bits";
+import { TemplatePicker } from "./template-picker";
 
-export function RegisterForm({ defaultColumns }: { defaultColumns: { title: string; color: string }[] }) {
+export function RegisterForm() {
   const [state, action] = useActionState(registerAction, null);
+  const [templateId, setTemplateId] = useState(TEMPLATES[0].id);
+  const template = templateOf(templateId);
+  const defaultColumns = template.columns;
   const [picked, setPicked] = useState(defaultColumns.map((c) => c.title));
   const [custom, setCustom] = useState("");
+  const [withExamples, setWithExamples] = useState(false);
 
   const toggle = (title: string) =>
     setPicked((p) => (p.includes(title) ? p.filter((t) => t !== title) : [...p, title]));
@@ -31,7 +37,20 @@ export function RegisterForm({ defaultColumns }: { defaultColumns: { title: stri
       </section>
 
       <section className="flex flex-col gap-2">
-        <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Board columns</h2>
+        <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Template</h2>
+        <TemplatePicker
+          value={templateId}
+          withExamples={withExamples}
+          onChange={(id) => {
+            setTemplateId(id);
+            setPicked(templateOf(id).columns.map((c) => c.title));
+          }}
+        />
+        <label className="flex items-center gap-2 text-xs">
+          <input type="checkbox" name="examples" checked={withExamples} onChange={(e) => setWithExamples(e.target.checked)} className="accent-primary" />
+          Add example tasks and a canvas sheet
+        </label>
+        <p className="mt-2 text-xs font-medium">Columns</p>
         <div className="flex flex-wrap gap-2">
           {defaultColumns.map((c) => {
             const on = picked.includes(c.title);

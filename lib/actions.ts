@@ -5,8 +5,16 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { all, get, run, transaction } from "./db";
 import { createUser, createWorkspace, currentUser, endSession, login, passwordOf, setPassword, startSession, verifyPassword } from "./auth";
-import { DEFAULT_COLUMNS, PALETTE, PRIORITIES, reorder, type Priority } from "./board";
+import { templateOf, PALETTE, PRIORITIES, reorder, type Priority } from "./board";
 import { broadcast } from "./canvas/hub";
+import type { Flow } from "./canvas/flow";
+import examplesData from "./template-examples.json";
+
+/** Example data per template id, generated from the JSON blocks in templates.md. */
+type TemplateExamples = Record<string, {
+  tasks: { column: string; title: string; label: string; priority: Priority; description?: string; dueInDays?: number }[];
+  canvas: { title: string; flow: Flow };
+}>;
 
 async function requireUser() {
   const user = await currentUser();
@@ -79,21 +87,52 @@ export async function registerAction(_prev: unknown, form: FormData) {
       "INSERT INTO projects (id, workspace_id, name, position, created_at) VALUES (?,?,?,0,?)",
       projectId, workspaceId, project, now(),
     );
-    for (const [i, title] of columns.entries()) {
-      const preset = DEFAULT_COLUMNS.find((d) => d.title === title);
-      await run(
-        "INSERT INTO columns (id, project_id, title, color, position) VALUES (?,?,?,?,?)",
-        randomUUID(),
-        projectId,
-        title,
-        preset?.color ?? "var(--muted-foreground)",
-        i,
-      );
-    }
+    await seedProject(projectId, form.get("template"), columns, form.get("examples") === "on", userId);
   });
 
   await startSession(userId);
   redirect("/board");
+}
+
+/**
+ * Seeds a new project from its template: the columns (`titles`, or all of the
+ * template's), and with `examples` its starter tasks plus one canvas sheet. The
+ * sheet stores only the flow; the canvas draws it on first open (`seed`).
+ */
+async function seedProject(projectId: string, templateId: unknown, titles: string[] | null, examples: boolean, actorId: string) {
+  const template = templateOf(templateId);
+  const columnIds = new Map<string, string>();
+  for (const [i, title] of (titles ?? template.columns.map((c) => c.title)).entries()) {
+    const id = randomUUID();
+    columnIds.set(title, id);
+    await run(
+      "INSERT INTO columns (id, project_id, title, color, position) VALUES (?,?,?,?,?)",
+      id, projectId, title, template.columns.find((c) => c.title === title)?.color ?? "var(--muted-foreground)", i,
+    );
+  }
+  if (!examples) return;
+
+  const { tasks, canvas } = (examplesData as TemplateExamples)[template.id];
+  const positions = new Map<string, number>();
+  for (const t of tasks) {
+    const columnId = columnIds.get(t.column);
+    if (!columnId) continue; // that column was unticked at register
+    const position = positions.get(columnId) ?? 0;
+    positions.set(columnId, position + 1);
+    const due = t.dueInDays === undefined ? null : new Date(Date.now() + t.dueInDays * 86_400_000).toLocaleDateString("en-CA");
+    const id = randomUUID();
+    await run(
+      `INSERT INTO tasks (id, column_id, title, description, label, priority, assignee_id, due_date, position, created_at)
+       VALUES (?,?,?,?,?,?,NULL,?,?,?)`,
+      id, columnId, t.title, t.description ?? null, t.label, t.priority, due, position, now(),
+    );
+    await logEvent(id, actorId, "Task created");
+  }
+  await run(
+    "INSERT INTO canvases (id, project_id, name, position, snapshot, updated_at) VALUES (?,?,?,0,?,?)",
+    randomUUID(), projectId, canvas.title,
+    JSON.stringify({ elements: [], seed: { flow: canvas.flow, by: `${template.name} template` } }), now(),
+  );
 }
 
 // ── Auth ────────────────────────────────────────────────────────────────────
@@ -122,10 +161,23 @@ export async function inviteMember(_prev: unknown, form: FormData) {
   if (!name || !email || password.length < 8) return { error: "Name, email and a password of at least 8 characters are required." };
   if (await get("SELECT 1 FROM users WHERE email = ?", email.toLowerCase())) return { error: "That email is already registered." };
 
-  await createUser(user.workspace_id, email, name, password);
+  // Project access chosen in the same form: `access:<projectId>` = viewer | editor | admin.
+  const access = [...form.entries()].flatMap(([key, value]) =>
+    key.startsWith("access:") && PROJECT_ROLES.includes(value as never) ? [[key.slice(7), String(value)] as const] : [],
+  );
+  await transaction(async () => {
+    const userId = await createUser(user.workspace_id, email, name, password);
+    for (const [projectId, role] of access) {
+      // Only this workspace's projects; anything else is silently dropped.
+      if (await projectRole(user, projectId) === null) continue;
+      await run("INSERT INTO project_members (project_id, user_id, role) VALUES (?,?,?)", projectId, userId, role);
+    }
+  });
   revalidatePath("/board");
   return { ok: true };
 }
+
+const PROJECT_ROLES = ["admin", "editor", "viewer"];
 
 // ── Passwords ───────────────────────────────────────────────────────────────
 // No mail server here, so there is no emailed reset link. Two paths instead:
@@ -303,7 +355,7 @@ export async function setProjectMember(projectId: string, userId: string, role: 
   return { ok: true };
 }
 
-export async function addProject(name: string) {
+export async function addProject(name: string, templateId?: string, examples = false) {
   const user = await requireUser();
   if (!user.is_admin) return { error: "Only workspace admins can create projects." };
   const clean = name.trim();
@@ -318,13 +370,8 @@ export async function addProject(name: string) {
       "INSERT INTO projects (id, workspace_id, name, position, created_at) VALUES (?,?,?,?,?)",
       id, user.workspace_id, clean, next, now(),
     );
-    // A project with no columns is a dead end, so seed the defaults.
-    for (const [i, c] of DEFAULT_COLUMNS.entries()) {
-      await run(
-        "INSERT INTO columns (id, project_id, title, color, position) VALUES (?,?,?,?,?)",
-        randomUUID(), id, c.title, c.color, i,
-      );
-    }
+    // A project with no columns is a dead end, so seed the template's.
+    await seedProject(id, templateId, null, examples, user.id);
   });
   revalidatePath("/board");
   return { ok: true, id };
