@@ -4,7 +4,7 @@ import { applyFilters, branchNameOf, ciOf, columnOf, initials, placeTask, projec
 import { parseFlow } from "./canvas/flow.ts";
 import { columnFor, keysIn, planEvent } from "./github-events.ts";
 import { resolveActions } from "./board-agent.ts";
-import { parseInbound } from "./inbound.ts";
+import { addressOf, emailOf, parseInbound } from "./inbound.ts";
 import examples from "./template-examples.json" with { type: "json" };
 
 const mk = (id: string, title: string, n: number): Column["tasks"][number] => ({
@@ -174,5 +174,15 @@ assert.ok("error" in parseInbound({}), "title required");
 assert.ok("error" in parseInbound({ title: "x", priority: "urgent" }), "unknown priority");
 assert.ok("error" in parseInbound({ title: "x", due_date: "31/01/2026" }), "bad date");
 assert.equal((parseInbound({ title: "t".repeat(300) }) as { title: string }).title.length, 200, "title capped");
+
+// inbound email: Postmark JSON, Mailgun form fields, HTML-only, quoted thread, not-an-email
+assert.deepEqual(emailOf({ FromFull: { Email: "ada@x.io", Name: "Ada" }, Subject: "Re: FW: Login broken", TextBody: "Still broken.\n\nOn Mon, Ben wrote:\n> old" }),
+  { from: "Ada <ada@x.io>", subject: "Login broken", text: "Still broken." });
+assert.deepEqual(emailOf({ sender: "ben@y.io", subject: "", "body-plain": "full", "stripped-text": "short" }),
+  { from: "ben@y.io", subject: "(no subject)", text: "short" });
+assert.equal(emailOf({ from: "a@b.c", subject: "s", html: "<p>Hi<br>there</p><style>p{}</style>" })!.text, "Hi\nthere");
+assert.equal(emailOf({ title: "card", from: "a@b.c" }), null, "a card body is not an email");
+assert.equal(emailOf({ subject: "no sender" }), null);
+assert.equal(addressOf("Ada L <ADA@x.io>"), "ada@x.io");
 
 console.log("board.check ok");
