@@ -241,6 +241,8 @@ export type ChatMessage = {
   author_id: string;
   author_name: string;
   author_color: string;
+  /** Written by the AI agent on behalf of `author_id`, who called it. */
+  agent: boolean;
   attachments: Attachment[];
 };
 
@@ -249,7 +251,7 @@ const channelKey = (withUser: string | null) => withUser ?? "all";
 
 /** `withUser` null means the workspace channel; otherwise the DM thread with that person. */
 export async function conversation(workspaceId: string, meId: string, withUser: string | null, afterId = 0): Promise<ChatMessage[]> {
-  const base = `SELECT m.id, m.body, m.created_at, m.edited_at, m.author_id,
+  const base = `SELECT m.id, m.body, m.created_at, m.edited_at, m.author_id, m.agent,
                        u.name AS author_name, u.color AS author_color
                   FROM messages m JOIN users u ON u.id = m.author_id
                  WHERE m.workspace_id = ? AND m.id > ? AND `;

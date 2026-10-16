@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, Hash, Paperclip, Pencil, Send, X } from "lucide-react";
+import { Check, Hash, Paperclip, Pencil, Send, Sparkles, X } from "lucide-react";
 import { initials } from "@/lib/board";
-import { cursorOf, mergeMessages } from "@/lib/chat";
+import { AGENT_MENTION, cursorOf, mergeMessages } from "@/lib/chat";
 import type { Attachment, ChatMessage, MemberPresence, Presence, Unread } from "@/lib/queries";
 import { Avatar } from "../avatar";
 
@@ -97,6 +97,17 @@ export function ChatView({ meId, initialMembers, initialChannel = "all" }: { meI
             Workspace
             <UnreadBadge n={countFor("all")} />
           </button>
+          {/* The private agent thread is a DM to yourself; every message there is answered. */}
+          <button
+            onClick={() => setActive(meId)}
+            className={`mb-1 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors ${
+              active === meId ? "bg-secondary font-medium" : "text-muted-foreground hover:bg-secondary"
+            }`}
+          >
+            <Sparkles className="size-3.5 shrink-0" />
+            Agent
+            <UnreadBadge n={countFor(meId)} />
+          </button>
 
           <p className="mb-1 mt-3 px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
             Direct messages
@@ -153,6 +164,10 @@ function Thread({
   const [editing, setEditing] = useState<number | null>(null);
   const [editDraft, setEditDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // The cursor when a sent message called the agent; it is waiting until an agent reply lands past it (or for 2 minutes).
+  const [calledAt, setCalledAt] = useState<number | null>(null);
+  const waiting = calledAt !== null && !messages.some((m) => m.agent && m.id > calledAt);
+  const agentThread = active === meId;
   const bottom = useRef<HTMLDivElement>(null);
   const picker = useRef<HTMLInputElement>(null);
   const lastId = useRef(0);
@@ -198,7 +213,13 @@ function Thread({
 
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [messages, waiting]);
+
+  useEffect(() => {
+    if (calledAt === null) return;
+    const t = setTimeout(() => setCalledAt(null), 120_000);
+    return () => clearTimeout(t);
+  }, [calledAt]);
 
   async function send() {
     const body = draft.trim();
@@ -222,6 +243,7 @@ function Thread({
         setFiles(snapshot.files);
         setError(await res.text());
       } else {
+        if (agentThread || AGENT_MENTION.test(body)) setCalledAt(lastId.current);
         await poll();
       }
     } catch {
@@ -249,12 +271,18 @@ function Thread({
   // Only "is it mine" is decided here. The 15-minute window is the server's
   // call — reading a clock during render is impure, and the server is the
   // authority anyway; a late attempt comes back as "Edit window closed".
-  const editable = (m: ChatMessage) => m.author_id === meId;
+  const editable = (m: ChatMessage) => m.author_id === meId && !m.agent;
 
   return (
     <div className="flex min-w-0 flex-1 flex-col">
       <div className="flex h-11 shrink-0 items-center gap-2 border-b px-4">
-        {member ? (
+        {agentThread ? (
+          <>
+            <Sparkles className="size-3.5 text-muted-foreground" />
+            <span className="text-sm font-medium">Agent</span>
+            <span className="text-[11px] text-muted-foreground">only you can see this thread</span>
+          </>
+        ) : member ? (
           <>
             <PresenceDot presence={member.presence} />
             <span className="text-sm font-medium">{member.name}</span>
@@ -271,17 +299,22 @@ function Thread({
 
       <div className="flex-1 overflow-y-auto px-4 py-3">
         {messages.length === 0 ? (
-          <p className="mt-10 text-center text-sm text-muted-foreground">No messages yet. Say something.</p>
+          <p className="mt-10 text-center text-sm text-muted-foreground">
+            {agentThread ? "Ask the agent about your boards. It can read them but not change them." : "No messages yet. Say something. Type @agent to ask the AI agent."}
+          </p>
         ) : (
           <ul className="flex flex-col gap-3">
             {messages.map((m) => {
-              const mine = m.author_id === meId;
+              const mine = m.author_id === meId && !m.agent;
               return (
                 <li key={m.id} className={`group flex gap-2.5 ${mine ? "flex-row-reverse" : ""}`}>
-                  <Avatar initials={initials(m.author_name)} color={m.author_color} size={26} />
+                  {m.agent ? <AgentAvatar /> : <Avatar initials={initials(m.author_name)} color={m.author_color} size={26} />}
                   <div className={`flex max-w-[70%] flex-col ${mine ? "items-end" : ""}`}>
                     <div className="flex items-baseline gap-2">
-                      <span className="text-xs font-medium">{mine ? "You" : m.author_name}</span>
+                      <span className="text-xs font-medium">
+                        {m.agent ? "Agent" : mine ? "You" : m.author_name}
+                        {m.agent && !agentThread && <span className="font-normal text-muted-foreground"> · asked by {m.author_id === meId ? "you" : m.author_name}</span>}
+                      </span>
                       <span className="text-[10px] text-muted-foreground">
                         {new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                         {m.edited_at && " · edited"}
@@ -343,6 +376,12 @@ function Thread({
             })}
           </ul>
         )}
+        {waiting && (
+          <div className="mt-3 flex items-center gap-2.5 text-xs text-muted-foreground">
+            <AgentAvatar />
+            <span className="animate-pulse">Agent is thinking…</span>
+          </div>
+        )}
         <div ref={bottom} />
       </div>
 
@@ -394,7 +433,7 @@ function Thread({
               }
             }}
             rows={1}
-            placeholder={member ? `Message ${member.name}…` : "Message the workspace…"}
+            placeholder={agentThread ? "Ask the agent…" : member ? `Message ${member.name}… (@agent asks the AI)` : "Message the workspace… (@agent asks the AI)"}
             className="max-h-32 min-h-9 flex-1 resize-y rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-ring"
           />
           <button
@@ -407,5 +446,13 @@ function Thread({
         </div>
       </div>
     </div>
+  );
+}
+
+function AgentAvatar() {
+  return (
+    <span className="flex size-[26px] shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
+      <Sparkles className="size-3.5" />
+    </span>
   );
 }

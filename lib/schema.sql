@@ -255,3 +255,7 @@ UPDATE tasks SET assignee_id = NULL WHERE assignee_id IS NOT NULL;
 -- The column that means "done" (Completed counts, repeating cards, due reminders).
 -- NULL falls back to the project's last column.
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS done_column_id TEXT REFERENCES columns(id) ON DELETE SET NULL;
+
+-- Chat messages written by the AI agent (called with "@agent" or in a member's private
+-- agent thread, a DM to themselves). author_id is the member who called it.
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS agent BOOLEAN NOT NULL DEFAULT false;
