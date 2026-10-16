@@ -2,6 +2,7 @@ import "server-only";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { all, get, run, transaction } from "./db";
 import { columnFor, type Step } from "./github-events";
+import { notify } from "./outgoing";
 import { relocateTask } from "./tasks";
 
 /** GitHub signs each delivery with the project's secret: `X-Hub-Signature-256: sha256=<hex hmac of the raw body>`. */
@@ -18,6 +19,7 @@ const event = (taskId: string, text: string) =>
 /** Applies a planned delivery to one project. Unknown keys are skipped; the whole delivery is one transaction. */
 export async function applySteps(projectId: string, steps: Step[]) {
   const done = { linked: 0, moved: 0, noted: 0 };
+  const moves: [string, string][] = [];
   await transaction(async () => {
     const columns = await all<{ id: string; title: string; position: number }>(
       "SELECT id, title, position FROM columns WHERE project_id = ? ORDER BY position", projectId,
@@ -63,6 +65,7 @@ export async function applySteps(projectId: string, steps: Step[]) {
         const from = columns.find((c) => c.id === t.column_id)?.title ?? "?";
         await relocateTask(t.id, t.column_id, to.id, 0);
         await event(t.id, `GitHub: ${step.why} — moved from ${from} to ${to.title}`);
+        moves.push([t.id, `GitHub: ${step.why} — moved from ${from} to ${to.title}`]);
         done.moved++;
       } else {
         await event(t.id, step.note);
@@ -70,5 +73,6 @@ export async function applySteps(projectId: string, steps: Step[]) {
       }
     }
   });
+  for (const [id, why] of moves) await notify("task.moved", id, why, null);
   return done;
 }

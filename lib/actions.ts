@@ -8,6 +8,7 @@ import { createUser, createWorkspace, currentUser, endSession, login, passwordOf
 import { projectKeyOf, PROJECT_KEY_RE, templateOf, PALETTE, PRIORITIES, reorder, type Priority } from "./board";
 import { broadcast } from "./canvas/hub";
 import { projectRole } from "./canvas/guard";
+import { notify } from "./outgoing";
 import { nextTaskNumber, relocateTask } from "./tasks";
 import type { Flow } from "./canvas/flow";
 import examplesData from "./template-examples.json";
@@ -253,6 +254,7 @@ export async function createTask(_prev: unknown, form: FormData) {
     );
     await logEvent(id, user.id, "Task created");
   });
+  await notify("task.created", id, "Task created", user.name);
   revalidatePath("/board");
   return { ok: true };
 }
@@ -275,6 +277,7 @@ export async function moveTask(taskId: string, toColumnId: string, toIndex: numb
       fromColumnId === toColumnId ? `Reordered in ${dest.title}` : `Moved from ${fromTitle} to ${dest.title}`,
     );
   });
+  if (fromColumnId !== toColumnId) await notify("task.moved", taskId, `Moved from ${fromTitle} to ${dest.title}`, user.name);
 
   revalidatePath("/board");
 }
@@ -302,14 +305,17 @@ export async function updateTask(_prev: unknown, form: FormData) {
     "UPDATE tasks SET title = ?, description = ?, label = ?, priority = ?, assignee_id = ?, due_date = ? WHERE id = ?",
     title, description, label, priority, assignee, dueDate, id,
   );
-  if (before.title !== title) await logEvent(id, user.id, `Title changed to "${title}"`);
-  if (before.description !== description) await logEvent(id, user.id, "Details updated");
-  if (before.priority !== priority) await logEvent(id, user.id, `Priority changed to ${priority}`);
+  const changes: string[] = [];
+  if (before.title !== title) changes.push(`Title changed to "${title}"`);
+  if (before.description !== description) changes.push("Details updated");
+  if (before.priority !== priority) changes.push(`Priority changed to ${priority}`);
   if (before.assignee_id !== assignee) {
     const who = assignee ? ((await get<{ name: string }>("SELECT name FROM users WHERE id = ?", assignee)))?.name : null;
-    await logEvent(id, user.id, who ? `Assigned to ${who}` : "Assignee cleared");
+    changes.push(who ? `Assigned to ${who}` : "Assignee cleared");
   }
-  if (before.due_date !== dueDate) await logEvent(id, user.id, dueDate ? `Due date set to ${dueDate}` : "Due date cleared");
+  if (before.due_date !== dueDate) changes.push(dueDate ? `Due date set to ${dueDate}` : "Due date cleared");
+  for (const c of changes) await logEvent(id, user.id, c);
+  if (changes.length) await notify("task.updated", id, changes.join("; "), user.name);
 
   revalidatePath("/board");
   return { ok: true };
@@ -319,6 +325,7 @@ export async function deleteTask(id: string) {
   const user = await requireUser();
   const task = await get<{ column_id: string }>("SELECT column_id FROM tasks WHERE id = ?", id);
   if (!task || !await writableColumn(user, task.column_id)) return;
+  await notify("task.deleted", id, "Task deleted", user.name); // before the row is gone
   await run("DELETE FROM tasks WHERE id = ?", id);
   revalidatePath("/board");
 }
@@ -423,6 +430,47 @@ export async function calendarFeedToken(projectId: string, reset = false) {
     randomBytes(24).toString("hex"), projectId,
   );
   return { token: row!.ical_token };
+}
+
+/**
+ * Saves the project's outgoing webhook. An empty URL turns it off. The signing secret is
+ * made on first save and returned only then (or with `rotate`); later saves keep it.
+ */
+export async function saveOutgoing(projectId: string, url: string, events: string[], rotate = false) {
+  const user = await requireUser();
+  if (!await canManage(user, projectId)) return { error: "You cannot manage this project." };
+  const clean = url.trim();
+  if (!clean) {
+    await run("UPDATE projects SET outgoing = NULL WHERE id = ?", projectId);
+    revalidatePath("/board");
+    return { ok: "Turned off." };
+  }
+  if (!URL.canParse(clean) || !/^https?:$/.test(new URL(clean).protocol)) return { error: "URL must start with http:// or https://." };
+  const { OUTGOING_EVENTS } = await import("./outgoing-events");
+  const picked = OUTGOING_EVENTS.filter((e) => events.includes(e));
+  if (!picked.length) return { error: "Pick at least one event." };
+
+  const saved = (await get<{ outgoing: { secret: string } | null }>("SELECT outgoing FROM projects WHERE id = ?", projectId))?.outgoing;
+  const secret = !saved || rotate ? randomBytes(24).toString("hex") : saved.secret;
+  await run("UPDATE projects SET outgoing = ? WHERE id = ?", JSON.stringify({ url: clean, secret, events: picked }), projectId);
+  revalidatePath("/board");
+  return { ok: "Saved.", secret: secret === saved?.secret ? undefined : secret };
+}
+
+/** Sends a `ping` now and returns the receiver's HTTP status (or "timeout" / "unreachable"). */
+export async function testOutgoing(projectId: string) {
+  const user = await requireUser();
+  if (!await canManage(user, projectId)) return { error: "You cannot manage this project." };
+  const p = await get<{ name: string; key: string; outgoing: import("./outgoing").OutgoingConfig | null }>(
+    "SELECT name, key, outgoing FROM projects WHERE id = ?", projectId,
+  );
+  if (!p?.outgoing) return { error: "Save a URL first." };
+  const { deliver } = await import("./outgoing");
+  const { outgoingPayload } = await import("./outgoing-events");
+  const body = JSON.stringify(outgoingPayload("ping", { id: projectId, name: p.name, key: p.key }, null, "Test delivery", user.name));
+  const status = await deliver(projectId, p.outgoing, "ping", body);
+  revalidatePath("/board");
+  return { status };
 }
 
 /** Changes the project's task key prefix; existing tasks keep their numbers, so WEB-42 becomes APP-42. */

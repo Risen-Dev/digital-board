@@ -7,6 +7,7 @@ import { resolveActions } from "./board-agent.ts";
 import { addressOf, emailOf, parseInbound } from "./inbound.ts";
 
 import { toIcal } from "./ical.ts";
+import { outgoingPayload } from "./outgoing-events.ts";
 import examples from "./template-examples.json" with { type: "json" };
 
 const mk = (id: string, title: string, n: number): Column["tasks"][number] => ({
@@ -199,5 +200,15 @@ assert.ok(ics.includes("DESCRIPTION:Column: Done\\n\\na\\nb"));
 assert.ok(ics.includes("DTSTAMP:20261016T080000Z"));
 assert.ok(ics.split("\r\n").every((l) => new TextEncoder().encode(l).length <= 75), "folded to 75 octets");
 assert.ok(!ics.replace(/\r\n/g, "").includes("\n"), "only CRLF line ends");
+
+// outgoing webhook body: readable line for chat webhooks, change text only where it adds something
+const proj = { id: "p1", name: "Web App", key: "WEB" };
+const card = { id: "t1", key: "WEB-42", title: "Login page", description: null, label: null, priority: "high", dueDate: null, column: "In Review", assignee: null };
+const hook = outgoingPayload("task.moved", proj, card, "Moved from Todo to In Review", "Ada", new Date("2026-10-16T08:00:00Z"));
+assert.equal(hook.text, 'WEB-42 "Login page": Moved from Todo to In Review by Ada · Web App');
+assert.equal(hook.content, hook.text, "Discord reads content");
+assert.equal(hook.at, "2026-10-16T08:00:00.000Z");
+assert.equal(outgoingPayload("task.created", proj, card, "Created by inbound webhook", null).text, 'WEB-42 "Login page": Created by inbound webhook · Web App');
+assert.equal(outgoingPayload("ping", proj, null, "Test delivery", "Ada").text, "Test delivery from Web App");
 
 console.log("board.check ok");

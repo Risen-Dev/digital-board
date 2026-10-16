@@ -221,3 +221,7 @@ ALTER TABLE projects ADD COLUMN IF NOT EXISTS inbound_token TEXT;
 -- iCal feed (GET /api/integrations/ical): a read-only link calendar apps subscribe to.
 -- Stored as-is because members copy the link again later; resetting it revokes old links.
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS ical_token TEXT;
+
+-- Outgoing webhook: JSON {url, secret, events[], last{status, event, at}}; see lib/outgoing.ts.
+-- The secret signs each delivery and never leaves the server after it is first shown.
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS outgoing JSONB;
