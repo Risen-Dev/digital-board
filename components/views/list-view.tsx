@@ -1,7 +1,7 @@
 "use client";
 
-import { initials, PRIORITY_CFG, type Column, type Task } from "@/lib/board";
-import { Avatar } from "../avatar";
+import { PRIORITY_CFG, type Column, type Task } from "@/lib/board";
+import { Assignees } from "../task-card";
 
 export function ListView({ columns, onOpen }: { columns: Column[]; onOpen: (t: Task) => void }) {
   const rows = columns.flatMap((c) => c.tasks.map((t) => ({ task: t, column: c })));
@@ -45,10 +45,10 @@ export function ListView({ columns, onOpen }: { columns: Column[]; onOpen: (t: T
                 </td>
                 <td className="px-3 py-2.5 text-xs text-muted-foreground">{task.dueDate ?? "—"}</td>
                 <td className="px-3 py-2.5">
-                  {task.assignee ? (
+                  {task.assignees.length ? (
                     <span className="flex items-center gap-2 text-xs">
-                      <Avatar initials={initials(task.assignee.name)} color={task.assignee.color} size={22} />
-                      {task.assignee.name}
+                      <Assignees task={task} />
+                      {task.assignees.length === 1 && task.assignees[0].name}
                     </span>
                   ) : (
                     <span className="text-xs text-muted-foreground">—</span>

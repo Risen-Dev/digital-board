@@ -8,8 +8,9 @@ export type TaskFields = {
   description: string | null;
   label: string | null;
   priority: "low" | "medium" | "high";
-  assigneeId: string | null;
+  assigneeIds: string[];
   dueDate: string | null;
+  repeat: string | null;
 };
 export type AgentOp =
   | { op: "create"; columnId: string; fields: TaskFields; summary: string }
@@ -46,7 +47,7 @@ Always answer with ONE JSON object and nothing else:
 /** The board as the model sees it, appended to the system prompt. */
 export function boardBrief(project: string, today: string, columns: Column[], members: Member[]) {
   const line = (t: Task) =>
-    `- ${t.key ?? "(no key)"} "${t.title}" · ${t.priority}${t.assignee ? ` · ${t.assignee.name}` : ""}${t.dueDate ? ` · due ${t.dueDate}` : ""}${t.label ? ` · ${t.label}` : ""}`;
+    `- ${t.key ?? "(no key)"} "${t.title}" · ${t.priority}${t.assignees.length ? ` · ${t.assignees.map((a) => a.name).join(", ")}` : ""}${t.dueDate ? ` · due ${t.dueDate}` : ""}${t.label ? ` · ${t.label}` : ""}`;
   // ponytail: whole board in the prompt, capped per column; search/tool calls if boards outgrow it.
   return [
     `Project: ${project}. Today: ${today}.`,
@@ -136,8 +137,9 @@ export function resolveActions(raw: unknown, columns: Column[], members: Member[
           description: text(a.description, 5000),
           label: text(a.label, 40),
           priority: (has("priority") ? norm(a.priority) : "medium") as TaskFields["priority"],
-          assigneeId: assigneeId ?? null,
+          assigneeIds: assigneeId ? [assigneeId] : [],
           dueDate: due ?? null,
+          repeat: null,
         },
         summary: `Created "${title}" in ${col.title}`,
       });
@@ -154,8 +156,10 @@ export function resolveActions(raw: unknown, columns: Column[], members: Member[
           description: has("description") ? text(a.description, 5000) : task.description,
           label: has("label") ? text(a.label, 40) : task.label,
           priority: (has("priority") ? norm(a.priority) : task.priority) as TaskFields["priority"],
-          assigneeId: assigneeId === undefined ? task.assignee?.id ?? null : assigneeId,
+          // "assignee" replaces the whole list with one person; left out, everyone stays.
+          assigneeIds: assigneeId === undefined ? task.assignees.map((a) => a.id) : assigneeId ? [assigneeId] : [],
           dueDate: due === undefined ? task.dueDate : due,
+          repeat: task.repeat,
         },
         summary: `Updated ${task.key ?? `"${task.title}"`}${moveTo ? ` → ${columns.find((c) => c.id === moveTo)!.title}` : ""}`,
       });

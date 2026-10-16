@@ -12,7 +12,10 @@ const HISTORY_TURNS = 20;
 
 const formOf = (fields: TaskFields, extra: Record<string, string>) => {
   const form = new FormData();
-  for (const [k, v] of Object.entries({ ...extra, ...fields })) form.set(k, v ?? "");
+  for (const [k, v] of Object.entries({ ...extra, ...fields })) {
+    if (Array.isArray(v)) for (const item of v) form.append(k, item);
+    else form.set(k, v ?? "");
+  }
   return form;
 };
 

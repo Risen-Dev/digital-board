@@ -20,7 +20,7 @@ export async function GET(req: Request) {
   const tasks = await all<IcalTask>(
     `SELECT t.id, p.key || '-' || t.number AS key, t.title, t.description, t.due_date AS "dueDate", c.title AS "column"
        FROM tasks t JOIN columns c ON c.id = t.column_id JOIN projects p ON p.id = c.project_id
-      WHERE c.project_id = ? AND t.due_date IS NOT NULL
+      WHERE c.project_id = ? AND t.due_date IS NOT NULL AND t.archived_at IS NULL
       ORDER BY t.due_date`,
     projectId,
   );

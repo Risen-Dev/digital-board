@@ -16,9 +16,10 @@ export async function notify(event: OutgoingEvent, taskId: string, change: strin
   const row = await get<OutgoingTask & { outgoing: OutgoingConfig; pid: string; pname: string; pkey: string }>(
     `SELECT p.outgoing, p.id AS pid, p.name AS pname, p.key AS pkey,
             t.id, p.key || '-' || t.number AS key, t.title, t.description, t.label, t.priority,
-            t.due_date AS "dueDate", c.title AS "column", u.name AS assignee
+            t.due_date AS "dueDate", c.title AS "column",
+            (SELECT string_agg(u.name, ', ' ORDER BY u.name) FROM task_assignees ta JOIN users u ON u.id = ta.user_id
+              WHERE ta.task_id = t.id) AS assignee
        FROM tasks t JOIN columns c ON c.id = t.column_id JOIN projects p ON p.id = c.project_id
-       LEFT JOIN users u ON u.id = t.assignee_id
       WHERE t.id = ? AND p.outgoing IS NOT NULL`,
     taskId,
   );

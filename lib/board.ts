@@ -9,18 +9,43 @@ export type Task = {
   columnId: string;
   title: string;
   description: string | null;
+  /** Comma-separated; split with `labelsOf`. */
   label: string | null;
   priority: Priority;
-  assignee: Member | null;
+  assignees: Member[];
   dueDate: string | null;
   /** "WEB-42": the project key plus this task's number in the project. */
   key: string | null;
+  checklist: CheckItem[];
+  repeat: Repeat | null;
+  comments: number;
 };
+
+export type CheckItem = { text: string; done: boolean };
+
+export const REPEATS = ["daily", "weekly", "monthly"] as const;
+export type Repeat = (typeof REPEATS)[number];
+
+/** The due date of a repeating task's next copy. Monthly keeps the day, clamped to short months (Jan 31 → Feb 28). */
+export function nextDue(date: string, repeat: Repeat) {
+  const [y, m, d] = date.split("-").map(Number);
+  if (repeat === "monthly") {
+    const last = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+    return new Date(Date.UTC(y, m, Math.min(d, last))).toISOString().slice(0, 10);
+  }
+  return new Date(Date.UTC(y, m - 1, d + (repeat === "daily" ? 1 : 7))).toISOString().slice(0, 10);
+}
+
+/** "Design, QA" → ["Design", "QA"]. */
+export const labelsOf = (label: string | null) => (label ?? "").split(",").map((l) => l.trim()).filter(Boolean);
+/** What `label` stores: trimmed, de-duplicated ignoring case (first spelling wins), comma-joined; null when empty. */
+export const joinLabels = (raw: string) =>
+  labelsOf(raw).filter((l, i, all) => all.findIndex((x) => x.toLowerCase() === l.toLowerCase()) === i).join(", ") || null;
 
 export type Column = { id: string; title: string; color: string; tasks: Task[] };
 
 /** `atLabel` is formatted on the server — see lib/format.ts for why. */
-export type Entry = { at: string; atLabel: string; text: string; actor: string | null };
+export type Entry = { at: string; atLabel: string; text: string; actor: string | null; kind: "event" | "comment" };
 
 export const PRIORITIES: Priority[] = ["low", "medium", "high"];
 
@@ -126,9 +151,9 @@ export function applyFilters(columns: Column[], f: Filters): Column[] {
     tasks: c.tasks.filter(
       (t) =>
         (!q || t.title.toLowerCase().includes(q) || (t.label ?? "").toLowerCase().includes(q)) &&
-        (!f.assignee || t.assignee?.id === f.assignee) &&
+        (!f.assignee || t.assignees.some((a) => a.id === f.assignee)) &&
         (!f.priority || t.priority === f.priority) &&
-        (!f.label || t.label === f.label),
+        (!f.label || labelsOf(t.label).includes(f.label)),
     ),
   }));
 }
