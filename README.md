@@ -73,12 +73,103 @@ Requires **Node 22+** and **PostgreSQL 14+** (verified on 16). For development,
 | **Notifications** | Bell dropdown combines unread card activity and chat. Card items open Inbox; chat items open their conversation; card items can be marked read. Enable alerts there for browser notifications, an in-app popup, and sound. |
 | **Accounts** | Multi-user with `scrypt` password hashing and cookie sessions. Presence shows who is online. |
 | **Templates** | Six project templates with their own columns. Each can also seed example tasks and a canvas flow. The spec and agent prompts are in [`templates.md`](templates.md). |
-| **GitHub** | Link a repo per project (fine-grained read-only token, optional for public repos). You get a GitHub view of PRs, issues, commits and branches. Every card has a key (`WEB-42`), and a branch, PR or commit that names it shows on the card with its CI status. With the webhook, cards move by themselves, and only forward: push → In Progress, PR opened → In Review, PR merged → QA or Done. |
-| **Inbound webhook** | One URL + token per project (Settings → Projects → the project). Zapier, Make, a form tool or `curl` POSTs JSON or form fields (`title`, `description`, `label`, `priority`, `due_date`, `column`) and a card is created. |
-| **Email-to-ticket** | Point Postmark, SendGrid Inbound Parse or Mailgun at the inbound webhook URL (`&token=`). Each email becomes a card; a reply from the same sender (subject with the card key, or the same subject after `Re:`) is appended to that card. |
-| **Calendar feed** | Calendar view → Subscribe gives a per-project iCal link. Google Calendar, Apple Calendar or Outlook subscribe to it and show every task with a due date as an all-day event. Managers can reset the link. |
+| **GitHub** | Link a repo per project (fine-grained read-only token, optional for public repos). You get a GitHub view of PRs, issues, commits and branches. Every card has a key (`WEB-42`), and a branch, PR or commit that names it shows on the card with its CI status. With the webhook, cards move by themselves, and only forward: push → In Progress, PR opened → In Review, PR merged → QA or Done. See [Integrations](#integrations). |
+| **Inbound webhook** | One URL + token per project (Settings → Projects → the project). Zapier, Make, a form tool or `curl` POSTs JSON or form fields (`title`, `description`, `label`, `priority`, `due_date`, `column`) and a card is created. See [Integrations](#integrations). |
+| **Email-to-ticket** | Point Postmark, SendGrid Inbound Parse or Mailgun at the inbound webhook URL (`&token=`). Each email becomes a card; a reply from the same sender (subject with the card key, or the same subject after `Re:`) is appended to that card. See [Integrations](#integrations). |
+| **Calendar feed** | Calendar view → Subscribe gives a per-project iCal link. Google Calendar, Apple Calendar or Outlook subscribe to it and show every task with a due date as an all-day event. Managers can reset the link. See [Integrations](#integrations). |
 | **Access** | Per-project roles — admin, editor, viewer. A workspace admin picks them while adding a member and changes them per project in Settings. A project you hold no role in is not listed and its data never reaches your browser. Enforced server-side in every action, not just hidden in the UI. |
 | **Phones** | Below 768px the sidebar becomes a drawer and the header goes icon-only. |
+
+## Integrations
+
+All four live under `app/api/integrations/`. They run without a login session
+and check a per-project secret instead. The sender (GitHub, Zapier, a mail
+service) must reach the server over the public internet, so use the public HTTPS
+address of the board, not `localhost`.
+
+### GitHub
+
+1. Settings → Projects → the project → **GitHub**: enter `owner/name` and,
+   for a private repo, a [fine-grained token](https://github.com/settings/personal-access-tokens/new)
+   limited to that repo with read-only Contents, Issues, Pull requests and
+   Metadata. Public repos work without a token (GitHub allows 60 requests an hour).
+2. The project gets a **GitHub** view. Any branch, PR title or commit message
+   that names a card key (`WEB-42`) shows on that card. Use **Copy branch name**
+   in the task dialog to get `feat/WEB-42-title`.
+3. To have cards move by themselves, click **Generate secret**. Then in the repo
+   go to Settings → Webhooks → Add webhook, paste the payload URL and secret,
+   set the content type to `application/json`, and pick the events
+   *Pull requests*, *Pushes* and *Check suites*.
+
+Cards only move forward: push to the card's branch → In Progress, PR opened →
+In Review, PR merged → QA (or Done). Failing checks are added to the card's
+history.
+
+### Inbound webhook
+
+Creates a card from any tool that can send an HTTP POST: Zapier, Make, n8n, a
+form tool, or a script.
+
+1. Settings → Projects → the project → **Inbound webhook** → **Generate token**.
+   The token is shown once. Only its hash is stored, and generating a new one
+   revokes the old one.
+2. POST JSON or form fields to the URL:
+
+```bash
+curl -X POST 'https://board.example.com/api/integrations/inbound?project=<id>' \
+  -H 'Authorization: Bearer <token>' \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"Call back Rina","priority":"high","due_date":"2026-11-01","column":"Todo"}'
+# → 201 {"ok":true,"id":"…","key":"WEB-43","column":"Todo"}
+```
+
+| Field | |
+|---|---|
+| `title` | **Required.** Up to 200 characters. |
+| `description` | Card details. |
+| `label` | One free-text label. |
+| `priority` | `low`, `medium` (default) or `high`. |
+| `due_date` | `YYYY-MM-DD` (`dueDate` also accepted). |
+| `column` | Column title, case-insensitive. Default: the first column. |
+
+If a tool can't set headers, add `&token=<token>` to the URL instead. Errors come
+back as `400 {"error":"…"}`, and an unknown column lists the valid ones.
+
+### Email-to-ticket
+
+Uses the same URL and token as the inbound webhook. Point an inbound-mail service
+at `https://board.example.com/api/integrations/inbound?project=<id>&token=<token>`:
+
+- **Postmark**: Inbound stream → Webhook URL. Basic auth in the URL
+  (`https://x:<token>@board.example.com/…`) also works.
+- **SendGrid**: Settings → Inbound Parse → Add host & URL.
+- **Mailgun**: Receiving → Create route → Forward to the URL.
+- Anything else that posts `from`, `subject` and `text` works too.
+
+Each email becomes a card. The subject, without `Re:` or `Fwd:`, is the title.
+The description starts with `From: <sender>` followed by the body, with the
+quoted thread ("On … wrote:", `>` lines) removed.
+
+A reply is appended to an existing card instead of creating a new one when two
+things hold:
+
+1. its subject names the card (`WEB-42`) or matches the card's title, and
+2. it comes from the card's original sender.
+
+A different sender always gets a new card. Nothing is emailed back.
+
+### Calendar feed (iCal)
+
+1. Open the **Calendar** view → **Subscribe** → **Copy**, or click **Open in
+   calendar app**.
+2. Add the link to your calendar app. In Google Calendar: Other calendars → From URL.
+   Apple Calendar and Outlook also take a subscription URL.
+
+Every task with a due date shows as an all-day event, named by its key and
+title, with the column and description. Any project member can copy the link.
+Anyone who has it can read those tasks, so a project admin can **Reset link** to
+revoke old copies. Calendar apps refresh on their own schedule (Google: every
+few hours).
 
 ## Configuration
 
