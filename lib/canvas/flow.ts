@@ -36,9 +36,17 @@ export function parseFlow(raw: unknown): Flow | null {
   return { nodes: clean, edges: links };
 }
 
+/** Minimum sizes; a longer label grows its shape (see `sizeOf`). */
 const SIZE: Record<FlowShape, [number, number]> = {
   start: [180, 70], end: [180, 70], process: [200, 80], decision: [220, 120], data: [200, 80],
 };
+// Excalidraw label text: 20px, line height 1.25, 5px padding inside the shape's text box.
+const LINE_H = 25;
+const PAD = 10;
+// ponytail: estimated, not measured — wider than the real hand-drawn font, so labels fit with room to spare.
+const CHAR_W = 11;
+const WRAP_W = 150;
+const LANE_GAP = 40;
 const FILL: Record<FlowShape, string> = {
   start: "#b2f2bb", end: "#ffc9c9", process: "#a5d8ff", decision: "#ffec99", data: "#d0bfff",
 };
@@ -48,6 +56,25 @@ const CAPTION_H = 44;
 // Excalidraw's Helvetica (system font). Its hand-drawn fonts load lazily, and text
 // measured before they arrive gets a box too narrow for it, clipping the caption.
 const CAPTION_FONT = 2;
+
+/**
+ * Big enough that Excalidraw never wraps a word mid-way or grows the shape after
+ * the arrows were placed (a grown diamond left its arrows starting inside it).
+ * Excalidraw's text box is the full rectangle, ~0.7 of an ellipse and half a diamond.
+ */
+function sizeOf(node: FlowNode): [number, number] {
+  const lines: string[] = [];
+  for (const word of node.label.split(/\s+/)) {
+    const last = lines.at(-1);
+    if (last !== undefined && (last.length + 1 + word.length) * CHAR_W <= WRAP_W) lines[lines.length - 1] = `${last} ${word}`;
+    else lines.push(word);
+  }
+  const tw = Math.max(...lines.map((l) => l.length)) * CHAR_W + PAD;
+  const th = lines.length * LINE_H + PAD;
+  const k = node.shape === "decision" ? 2 : node.shape === "start" || node.shape === "end" ? Math.SQRT2 : 1;
+  const [w, h] = SIZE[node.shape];
+  return [Math.ceil(Math.max(w, tw * k + 20)), Math.ceil(Math.max(h, th * k + 20))];
+}
 
 /** BFS depth from the roots; nodes nothing reaches go one row below the rest. */
 export function levels(flow: Flow): Map<string, number> {
@@ -83,7 +110,8 @@ export function layoutFlow(flow: Flow, origin: { x: number; y: number }, prefix 
   const rows: FlowNode[][] = [];
   for (const n of flow.nodes) (rows[level.get(n.id)!] ??= []).push(n);
 
-  const rowWidth = (row: FlowNode[]) => row.reduce((w, n) => w + SIZE[n.shape][0], 0) + GAP_X * (row.length - 1);
+  const size = new Map(flow.nodes.map((n) => [n.id, sizeOf(n)]));
+  const rowWidth = (row: FlowNode[]) => row.reduce((w, n) => w + size.get(n.id)![0], 0) + GAP_X * (row.length - 1);
   const width = Math.max(...rows.filter(Boolean).map(rowWidth));
 
   const box = new Map<string, { x: number; y: number; w: number; h: number }>();
@@ -91,9 +119,9 @@ export function layoutFlow(flow: Flow, origin: { x: number; y: number }, prefix 
   for (const row of rows) {
     if (!row) continue;
     let x = origin.x + (width - rowWidth(row)) / 2;
-    const tallest = Math.max(...row.map((n) => SIZE[n.shape][1]));
+    const tallest = Math.max(...row.map((n) => size.get(n.id)![1]));
     for (const n of row) {
-      const [w, h] = SIZE[n.shape];
+      const [w, h] = size.get(n.id)!;
       box.set(n.id, { x, y: y + (tallest - h) / 2, w, h });
       x += w + GAP_X;
     }
@@ -114,18 +142,52 @@ export function layoutFlow(flow: Flow, origin: { x: number; y: number }, prefix 
     };
   });
 
+  // Edges between neighbouring rows go straight down, or as a ┐└ elbow when the target is
+  // off to the side. Loops back up and edges that skip rows run in their own lane beside
+  // the whole flow, so they never cut through the steps in between: left of it when the
+  // target is first in its row, else right. They leave and enter through that side when
+  // nothing stands beyond it in the row, else through the bottom / top, a short stub away.
+  const right = Math.max(...[...box.values()].map((b) => b.x + b.w));
+  const left = Math.min(...[...box.values()].map((b) => b.x));
+  const lastInRow = new Set(rows.filter(Boolean).map((row) => row.at(-1)!.id));
+  const firstInRow = new Set(rows.filter(Boolean).map((row) => row[0].id));
+  const STUB = GAP_Y / 3;
+  const side = (nodeId: string, b: { x: number; w: number }) =>
+    flow.nodes.find((n) => n.id === nodeId)!.shape === "decision" ? b.x + b.w / 2 : b.x + b.w * 0.8;
+  let lanesR = 0, lanesL = 0;
   const arrows = flow.edges.map((e) => {
     const a = box.get(e.from)!;
     const b = box.get(e.to)!;
-    // Downward edges run bottom → top; loops back up run right side → right side,
-    // so they don't cut through the steps in between.
-    const back = b.y <= a.y;
-    const sx = back ? a.x + a.w : a.x + a.w / 2, sy = back ? a.y + a.h / 2 : a.y + a.h;
-    const ex = back ? b.x + b.w : b.x + b.w / 2, ey = back ? b.y + b.h / 2 : b.y;
+    let sx: number, sy: number, path: [number, number][];
+    if (level.get(e.to)! - level.get(e.from)! === 1 && b.y > a.y) {
+      sx = a.x + a.w / 2; sy = a.y + a.h;
+      const dx = b.x + b.w / 2 - sx, dy = b.y - sy;
+      path = Math.abs(dx) < 1 ? [[0, 0], [0, dy]] : [[0, 0], [0, dy / 2], [dx, dy / 2], [dx, dy]];
+    } else {
+      const goLeft = firstInRow.has(e.to) && !lastInRow.has(e.to);
+      const edge = (n: { x: number; w: number }) => (goLeft ? n.x : n.x + n.w);
+      const outSide = goLeft ? firstInRow.has(e.from) : lastInRow.has(e.from);
+      const inSide = goLeft || lastInRow.has(e.to);
+      sx = outSide ? edge(a) : side(e.from, a);
+      sy = outSide ? a.y + a.h / 2 : a.y + a.h;
+      const lane = (goLeft ? left - LANE_GAP * ++lanesL : right + LANE_GAP * ++lanesR) - sx;
+      path = outSide ? [[0, 0]] : [[0, 0], [0, STUB]];
+      path.push([lane, path.at(-1)![1]]);
+      if (inSide) {
+        const dy = b.y + b.h / 2 - sy;
+        path.push([lane, dy], [edge(b) - sx, dy]);
+      } else {
+        const tx = side(e.to, b) - sx, top = b.y - sy;
+        path.push([lane, top - STUB], [tx, top - STUB], [tx, top]);
+      }
+    }
+    const xs = path.map((p) => p[0]), ys = path.map((p) => p[1]);
     return {
       type: "arrow",
+      x: sx, y: sy,
       // Excalidraw swaps a 0 width/height for its 100px default, bending straight arrows.
-      x: sx, y: sy, width: ex - sx || 1, height: ey - sy || 1,
+      width: Math.max(...xs) - Math.min(...xs) || 1, height: Math.max(...ys) - Math.min(...ys) || 1,
+      points: path,
       start: { id: id(e.from) },
       end: { id: id(e.to) },
       ...(e.label ? { label: { text: e.label } } : {}),
