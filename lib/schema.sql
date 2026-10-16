@@ -213,3 +213,7 @@ CREATE TABLE IF NOT EXISTS task_links (
   at         TEXT,
   PRIMARY KEY (task_id, kind, ext_id)
 );
+
+-- Generic inbound webhook (Zapier, Make, forms): sha256 hex of the project's bearer
+-- token. Only the hash is stored, so the token is shown once when it is made.
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS inbound_token TEXT;

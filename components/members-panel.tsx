@@ -3,7 +3,7 @@
 import { startTransition, useActionState, useEffect, useEffectEvent, useRef, useState, useSyncExternalStore, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, FolderKanban, FolderPlus, KeyRound, Plus, Settings2, Sparkles, Trash2, UserRound, Users, X } from "lucide-react";
-import { changeMyPassword, fetchAiModels, rotateGithubWebhook, saveGithub, setProjectKey, saveAiConfig, deleteProject, inviteMember, renameProject, renameWorkspace, setMemberPassword, setProjectMember } from "@/lib/actions";
+import { changeMyPassword, fetchAiModels, rotateGithubWebhook, rotateInboundToken, saveGithub, setProjectKey, saveAiConfig, deleteProject, inviteMember, renameProject, renameWorkspace, setMemberPassword, setProjectMember } from "@/lib/actions";
 import { initials } from "@/lib/board";
 import type { MemberPresence, Project, ProjectMember } from "@/lib/queries";
 import { Avatar } from "./avatar";
@@ -410,6 +410,7 @@ function ProjectDetail({ project, memberId, presence, isAdmin, assignments, onBa
       {error && <p className="mt-2 text-xs text-[var(--chart-7)]">{error}</p>}
 
       {canRename && <GithubSettings project={project} />}
+      {canRename && <InboundWebhook project={project} />}
 
       {isAdmin && (
         <div className="mt-8 flex items-center gap-3 rounded-lg border border-[rgba(239,68,68,0.3)] px-3 py-2.5">
@@ -489,6 +490,19 @@ function GithubSettings({ project }: { project: Project }) {
 
 const noSubscribe = () => () => {};
 
+/** A read-only value with a Copy button, for webhook URLs and secrets. */
+const row = (label: string, value: string) => (
+  <div className="flex flex-col gap-1">
+    <span className="text-xs font-medium">{label}</span>
+    <div className="flex gap-1.5">
+      <input readOnly value={value} onFocus={(e) => e.target.select()} className="min-w-0 flex-1 rounded-md border bg-background px-2.5 py-1.5 font-mono text-[11px]" />
+      <button type="button" onClick={() => void navigator.clipboard.writeText(value)} className="rounded-md border px-2 text-[11px] text-muted-foreground hover:bg-secondary">
+        Copy
+      </button>
+    </div>
+  </div>
+);
+
 /**
  * Webhook setup: the URL and a secret to paste into the repo's Settings → Webhooks.
  * The secret is shown once, right after it is generated.
@@ -511,18 +525,6 @@ function GithubWebhook({ project }: { project: Project }) {
       setSecret(res.secret);
       router.refresh();
     });
-
-  const row = (label: string, value: string) => (
-    <div className="flex flex-col gap-1">
-      <span className="text-xs font-medium">{label}</span>
-      <div className="flex gap-1.5">
-        <input readOnly value={value} onFocus={(e) => e.target.select()} className="min-w-0 flex-1 rounded-md border bg-background px-2.5 py-1.5 font-mono text-[11px]" />
-        <button type="button" onClick={() => void navigator.clipboard.writeText(value)} className="rounded-md border px-2 text-[11px] text-muted-foreground hover:bg-secondary">
-          Copy
-        </button>
-      </div>
-    </div>
-  );
 
   return (
     <div className="mt-3 flex flex-col gap-3 rounded-lg border bg-card p-3">
@@ -553,6 +555,60 @@ function GithubWebhook({ project }: { project: Project }) {
         </button>
       </div>
     </div>
+  );
+}
+
+/**
+ * Generic inbound webhook: a URL + bearer token that Zapier, Make, a form tool or
+ * curl can POST to, creating a card. The token is shown once, right after it is made.
+ */
+function InboundWebhook({ project }: { project: Project }) {
+  const router = useRouter();
+  const [token, setToken] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, startBusy] = useTransition();
+  const origin = useSyncExternalStore(noSubscribe, () => window.location.origin, () => "");
+  const url = origin && `${origin}/api/integrations/inbound?project=${project.id}`;
+
+  const generate = () =>
+    startBusy(async () => {
+      if (project.inbound && !confirm("Make a new token? Anything using the old one stops working.")) return;
+      const res = await rotateInboundToken(project.id);
+      if ("error" in res) return setError(res.error ?? null);
+      setError(null);
+      setToken(res.token);
+      router.refresh();
+    });
+
+  return (
+    <section className="mt-8">
+      <h3 className="mb-1 text-sm font-medium">Inbound webhook</h3>
+      <div className="flex flex-col gap-3 rounded-lg border bg-card p-3">
+        <p className="text-[11px] text-muted-foreground">
+          Create cards from Zapier, Make, a form tool or any script. POST JSON or form fields to the URL with the header{" "}
+          <span className="font-mono">Authorization: Bearer &lt;token&gt;</span> (or add <span className="font-mono">&amp;token=&lt;token&gt;</span> to
+          the URL). Fields: <span className="font-mono">title</span> (required), <span className="font-mono">description</span>,{" "}
+          <span className="font-mono">label</span>, <span className="font-mono">priority</span> (low, medium, high),{" "}
+          <span className="font-mono">due_date</span> (YYYY-MM-DD), <span className="font-mono">column</span> (its title; default the first column).
+        </p>
+        {url && row("URL", url)}
+        {token ? (
+          <>
+            {row("Token", token)}
+            <p className="-mt-1 text-[11px] text-[var(--chart-3)]">Copy it now — it won&rsquo;t be shown again.</p>
+            {url && row("Try it", `curl -X POST '${url}' -H 'Authorization: Bearer ${token}' -H 'Content-Type: application/json' -d '{"title":"Hello from a webhook"}'`)}
+          </>
+        ) : (
+          <p className="text-[11px] text-muted-foreground">{project.inbound ? "Token set." : "No token yet."}</p>
+        )}
+        {error && <FormError error={error} />}
+        <div>
+          <button type="button" disabled={busy} onClick={generate} className="rounded-md border px-3 py-1.5 text-xs hover:bg-secondary disabled:opacity-50">
+            {busy ? "Generating…" : project.inbound ? "Generate new token" : "Generate token"}
+          </button>
+        </div>
+      </div>
+    </section>
   );
 }
 

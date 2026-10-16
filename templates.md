@@ -466,7 +466,7 @@ The goal: developers don't drag cards by hand. Git and CI events move the cards 
 2. **Custom fields per project** 🔴: deal value, requester, SLA, candidate email, interview date. The biggest gap for Sales, Support and HR. Shape: `project_fields(id, project_id, name, type)` + `task_field_values(task_id, field_id, value)`; types `text | number | date | email | url | select`.
 3. **Attachments on tasks** 🟡: storage already exists for chat (`attachments` table, `/api/files/[id]`); point it at tasks as well.
 4. **Multiple labels per task** 🟡: `label` is a single TEXT today. Templates work with one label, so add this only if users ask.
-5. **Integrations** 🔴: Git/CI (Tech), email intake (Support), iCal export (Marketing).
+5. **Integrations**: ✅ Git/CI (Tech). ✅ Generic inbound webhook (`app/api/integrations/inbound`, bearer token per project) creates a card from any JSON/form POST, so Zapier/Make/form tools cover intake for every template. 🔴 email intake (Support), iCal export (Marketing).
 
 Later, when asked for: checklists/subtasks, dependencies, a per-template default view (Calendar for Marketing), per-template analytics (pipeline value, SLA, conversion).
 

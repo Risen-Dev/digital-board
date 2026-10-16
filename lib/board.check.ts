@@ -4,6 +4,7 @@ import { applyFilters, branchNameOf, ciOf, columnOf, initials, placeTask, projec
 import { parseFlow } from "./canvas/flow.ts";
 import { columnFor, keysIn, planEvent } from "./github-events.ts";
 import { resolveActions } from "./board-agent.ts";
+import { parseInbound } from "./inbound.ts";
 import examples from "./template-examples.json" with { type: "json" };
 
 const mk = (id: string, title: string, n: number): Column["tasks"][number] => ({
@@ -163,5 +164,15 @@ assert.equal(columnFor("review", [{ id: "x", title: "Todo", position: 0 }], 0), 
   assert.deepEqual(more.ops.map((o) => o.op === "message" ? o.to : o.op), ["sheet", null, "u2", "column"]);
   assert.equal(more.errors.length, 2, "unknown recipient and empty text");
 }
+
+
+// inbound webhook body: defaults, normalising, and rejects
+assert.deepEqual(parseInbound({ title: "  Hi ", priority: "HIGH", dueDate: "2026-01-31", column: "Todo", extra: 1 }),
+  { title: "Hi", description: null, label: null, priority: "high", dueDate: "2026-01-31", column: "Todo" });
+assert.equal((parseInbound({ title: "x" }) as { priority: string }).priority, "medium", "priority defaults to medium");
+assert.ok("error" in parseInbound({}), "title required");
+assert.ok("error" in parseInbound({ title: "x", priority: "urgent" }), "unknown priority");
+assert.ok("error" in parseInbound({ title: "x", due_date: "31/01/2026" }), "bad date");
+assert.equal((parseInbound({ title: "t".repeat(300) }) as { title: string }).title.length, 200, "title capped");
 
 console.log("board.check ok");
