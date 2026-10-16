@@ -1,5 +1,5 @@
 import "server-only";
-import { all, run, transaction } from "./db";
+import { all, get, run, transaction } from "./db";
 
 /**
  * Puts a task at `toIndex` in `toColumnId` and renumbers both columns so
@@ -22,4 +22,17 @@ export async function relocateTask(taskId: string, fromColumnId: string, toColum
       for (const [i, r] of rest.entries()) await run("UPDATE tasks SET position = ? WHERE id = ?", i, r.id);
     }
   });
+}
+
+/**
+ * The next task number in a project (the 42 in WEB-42). Must run inside a
+ * transaction: the project row lock keeps two concurrent creates from taking
+ * the same number.
+ */
+export async function nextTaskNumber(projectId: string) {
+  await get("SELECT id FROM projects WHERE id = ? FOR UPDATE", projectId);
+  return (await get<{ n: number }>(
+    `SELECT COALESCE(MAX(t.number), 0) + 1 n FROM tasks t JOIN columns c ON c.id = t.column_id WHERE c.project_id = ?`,
+    projectId,
+  ))!.n;
 }

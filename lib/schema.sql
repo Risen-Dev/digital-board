@@ -214,6 +214,10 @@ CREATE TABLE IF NOT EXISTS task_links (
   PRIMARY KEY (task_id, kind, ext_id)
 );
 
+-- Generic inbound webhook (Zapier, Make, forms): sha256 hex of the project's bearer
+-- token. Only the hash is stored, so the token is shown once when it is made.
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS inbound_token TEXT;
+
 -- iCal feed (GET /api/integrations/ical): a read-only link calendar apps subscribe to.
 -- Stored as-is because members copy the link again later; resetting it revokes old links.
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS ical_token TEXT;

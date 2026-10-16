@@ -4,6 +4,8 @@ import { applyFilters, branchNameOf, ciOf, columnOf, initials, placeTask, projec
 import { parseFlow } from "./canvas/flow.ts";
 import { columnFor, keysIn, planEvent } from "./github-events.ts";
 import { resolveActions } from "./board-agent.ts";
+import { addressOf, emailOf, parseInbound } from "./inbound.ts";
+
 import { toIcal } from "./ical.ts";
 import examples from "./template-examples.json" with { type: "json" };
 
@@ -164,6 +166,26 @@ assert.equal(columnFor("review", [{ id: "x", title: "Todo", position: 0 }], 0), 
   assert.deepEqual(more.ops.map((o) => o.op === "message" ? o.to : o.op), ["sheet", null, "u2", "column"]);
   assert.equal(more.errors.length, 2, "unknown recipient and empty text");
 }
+
+
+// inbound webhook body: defaults, normalising, and rejects
+assert.deepEqual(parseInbound({ title: "  Hi ", priority: "HIGH", dueDate: "2026-01-31", column: "Todo", extra: 1 }),
+  { title: "Hi", description: null, label: null, priority: "high", dueDate: "2026-01-31", column: "Todo" });
+assert.equal((parseInbound({ title: "x" }) as { priority: string }).priority, "medium", "priority defaults to medium");
+assert.ok("error" in parseInbound({}), "title required");
+assert.ok("error" in parseInbound({ title: "x", priority: "urgent" }), "unknown priority");
+assert.ok("error" in parseInbound({ title: "x", due_date: "31/01/2026" }), "bad date");
+assert.equal((parseInbound({ title: "t".repeat(300) }) as { title: string }).title.length, 200, "title capped");
+
+// inbound email: Postmark JSON, Mailgun form fields, HTML-only, quoted thread, not-an-email
+assert.deepEqual(emailOf({ FromFull: { Email: "ada@x.io", Name: "Ada" }, Subject: "Re: FW: Login broken", TextBody: "Still broken.\n\nOn Mon, Ben wrote:\n> old" }),
+  { from: "Ada <ada@x.io>", subject: "Login broken", text: "Still broken." });
+assert.deepEqual(emailOf({ sender: "ben@y.io", subject: "", "body-plain": "full", "stripped-text": "short" }),
+  { from: "ben@y.io", subject: "(no subject)", text: "short" });
+assert.equal(emailOf({ from: "a@b.c", subject: "s", html: "<p>Hi<br>there</p><style>p{}</style>" })!.text, "Hi\nthere");
+assert.equal(emailOf({ title: "card", from: "a@b.c" }), null, "a card body is not an email");
+assert.equal(emailOf({ subject: "no sender" }), null);
+assert.equal(addressOf("Ada L <ADA@x.io>"), "ada@x.io");
 
 // iCal feed: all-day event ending the next day, escaping, CRLF, 75-octet folding
 const ics = toIcal("Web; App", [

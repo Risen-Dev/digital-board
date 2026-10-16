@@ -290,7 +290,7 @@ An agent reads this file to (a) build the template picker and seed data, or
 - ✅ Priority as severity, due date as the response deadline, assignee as owner, history.
 - 🟡 When a ticket is created, set its due date from priority (high +0d, medium +1d, low +3d).
 - 🔴 Requester field (email) + SLA timer that pauses while in "Waiting on Customer".
-- 🔴 Intake: email-to-ticket or a public form that creates a card in New.
+- ✅ Email-to-ticket through the inbound webhook (Postmark / SendGrid / Mailgun); replies from the same sender append to the card. 🔴 Still missing: replying to the requester by email.
 - 🔴 "Send to project" action: copy a ticket to the Tech board and link the two cards.
 - 🔴 Analytics: first-response time, resolution time, tickets per label.
 
@@ -467,7 +467,7 @@ The goal: developers don't drag cards by hand. Git and CI events move the cards 
 2. **Custom fields per project** 🔴: deal value, requester, SLA, candidate email, interview date. The biggest gap for Sales, Support and HR. Shape: `project_fields(id, project_id, name, type)` + `task_field_values(task_id, field_id, value)`; types `text | number | date | email | url | select`.
 3. **Attachments on tasks** 🟡: storage already exists for chat (`attachments` table, `/api/files/[id]`); point it at tasks as well.
 4. **Multiple labels per task** 🟡: `label` is a single TEXT today. Templates work with one label, so add this only if users ask.
-5. **Integrations** 🔴: Git/CI (Tech), email intake (Support).
+5. **Integrations**: ✅ Git/CI (Tech). ✅ Generic inbound webhook (`app/api/integrations/inbound`, bearer token per project) creates a card from any JSON/form POST, so Zapier/Make/form tools cover intake for every template. ✅ Email intake (Support) on top of it. ✅ iCal feed (Marketing): Calendar view → Subscribe.
 
 Later, when asked for: checklists/subtasks, dependencies, a per-template default view (Calendar for Marketing), per-template analytics (pipeline value, SLA, conversion).
 
