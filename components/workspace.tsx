@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   BarChart3, Bell, Calendar, Check, CheckSquare, Filter, Home, Inbox,
-  GitPullRequest, LayoutGrid, List, LogOut, Menu, MessageSquare, PenLine, Plus, Search, Settings, X,
+  GitPullRequest, LayoutGrid, List, LogOut, Menu, MessageSquare, PenLine, Plus, Search, Settings, Sparkles, X,
 } from "lucide-react";
 import { applyFilters, initials, type Column, type Filters, type Member, type Task } from "@/lib/board";
 import { logoutAction, renameProject, renameWorkspace } from "@/lib/actions";
@@ -24,6 +24,7 @@ import { CanvasView } from "./views/canvas-view";
 import { AnalyticsView, type Stats } from "./views/analytics-view";
 import { MyTasksView, type MyTask } from "./views/my-tasks-view";
 import { MembersPanel } from "./members-panel";
+import { ProjectAgent } from "./project-agent";
 import { GithubView } from "./views/github-view";
 import { useGithubLinks } from "@/hooks/use-github-links";
 import type { AiSettings } from "@/lib/ai";
@@ -91,12 +92,14 @@ export function Workspace({
   const [showNotifications, setShowNotifications] = useState(false);
   const [chatChannel, setChatChannel] = useState("all");
   const [alert, setAlert] = useState<Alert | null>(null);
+  const [agentOpen, setAgentOpen] = useState(false);
   const seenCards = useRef(new Set(initialNotifications.map((item) => item.id)));
   const seenChats = useRef(new Map(initialUnread.map((item) => [item.channel, item.n])));
   const audio = useRef<AudioContext | null>(null);
   const alertTimer = useRef<number | undefined>(undefined);
 
   const filtered = useMemo(() => applyFilters(columns, filters), [columns, filters]);
+  const readOnly = !!project && user.is_admin !== 1 && assignments.find((item) => item.user_id === user.id && item.project_id === project.id)?.role === "viewer";
   const activeFilters = [filters.assignee, filters.priority, filters.label].filter(Boolean).length;
   const shown = filtered.reduce((s, c) => s + c.tasks.length, 0);
   const total = columns.reduce((s, c) => s + c.tasks.length, 0);
@@ -420,6 +423,17 @@ export function Workspace({
                 />
               )}
             </div>
+            {project && !readOnly && section !== "canvas" && (
+              <button
+                onClick={() => setAgentOpen((o) => !o)}
+                title="Project agent"
+                aria-pressed={agentOpen}
+                className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs transition-colors hover:bg-secondary ${agentOpen ? "border-primary font-medium" : "text-muted-foreground"}`}
+              >
+                <Sparkles className="size-3.5" />
+                <span className="hidden sm:inline">Agent</span>
+              </button>
+            )}
             {project && section !== "canvas" && (
               <button
                 onClick={() => setCreating(columns[0]?.id ?? "")}
@@ -506,7 +520,7 @@ export function Workspace({
             dark={dark}
             aiEnabled={aiEnabled}
             // Viewers can watch live but every save would be refused, so don't let them draw.
-            readOnly={user.is_admin !== 1 && assignments.find((item) => item.user_id === user.id && item.project_id === project.id)?.role === "viewer"}
+            readOnly={readOnly}
             onChanged={() => router.refresh()}
           />
         ) : section === "inbox" ? (
@@ -527,6 +541,9 @@ export function Workspace({
         </div>
       </div>
 
+      {project && !readOnly && (
+        <ProjectAgent key={project.id} projectId={project.id} enabled={aiEnabled} open={agentOpen && section !== "canvas"} onClose={() => setAgentOpen(false)} />
+      )}
       {(editing || creating !== null) && (
         <TaskDialog
           task={editing}
