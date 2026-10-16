@@ -1,6 +1,6 @@
 "use server";
 
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { all, get, run, transaction } from "./db";
@@ -8,7 +8,7 @@ import { createUser, createWorkspace, currentUser, endSession, login, passwordOf
 import { projectKeyOf, PROJECT_KEY_RE, templateOf, PALETTE, PRIORITIES, reorder, type Priority } from "./board";
 import { broadcast } from "./canvas/hub";
 import { projectRole } from "./canvas/guard";
-import { relocateTask } from "./tasks";
+import { nextTaskNumber, relocateTask } from "./tasks";
 import type { Flow } from "./canvas/flow";
 import examplesData from "./template-examples.json";
 
@@ -89,19 +89,6 @@ export async function registerAction(_prev: unknown, form: FormData) {
 
   await startSession(userId);
   redirect("/board");
-}
-
-/**
- * The next task number in a project (the 42 in WEB-42). Must run inside a
- * transaction: the project row lock keeps two concurrent creates from taking
- * the same number.
- */
-async function nextTaskNumber(projectId: string) {
-  await get("SELECT id FROM projects WHERE id = ? FOR UPDATE", projectId);
-  return (await get<{ n: number }>(
-    `SELECT COALESCE(MAX(t.number), 0) + 1 n FROM tasks t JOIN columns c ON c.id = t.column_id WHERE c.project_id = ?`,
-    projectId,
-  ))!.n;
 }
 
 /**
@@ -408,6 +395,19 @@ export async function rotateGithubWebhook(projectId: string) {
   await run("UPDATE projects SET github = ? WHERE id = ?", JSON.stringify({ ...saved, webhookSecret }), projectId);
   revalidatePath("/board");
   return { secret: webhookSecret };
+}
+
+/**
+ * Makes a new token for the project's inbound webhook and returns it once; only
+ * its hash is stored. The old token stops working.
+ */
+export async function rotateInboundToken(projectId: string) {
+  const user = await requireUser();
+  if (!await canManage(user, projectId)) return { error: "You cannot manage this project." };
+  const token = randomBytes(24).toString("hex");
+  await run("UPDATE projects SET inbound_token = ? WHERE id = ?", createHash("sha256").update(token).digest("hex"), projectId);
+  revalidatePath("/board");
+  return { token };
 }
 
 /** Changes the project's task key prefix; existing tasks keep their numbers, so WEB-42 becomes APP-42. */
