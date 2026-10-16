@@ -591,6 +591,11 @@ function InboundWebhook({ project }: { project: Project }) {
           <span className="font-mono">label</span>, <span className="font-mono">priority</span> (low, medium, high),{" "}
           <span className="font-mono">due_date</span> (YYYY-MM-DD), <span className="font-mono">column</span> (its title; default the first column).
         </p>
+        <p className="text-[11px] text-muted-foreground">
+          <span className="font-medium text-foreground">Email-to-ticket:</span> point an inbound-mail service (Postmark, SendGrid Inbound Parse,
+          Mailgun) at the URL with <span className="font-mono">&amp;token=&lt;token&gt;</span> added. Each email becomes a card (subject as title,
+          sender and body in the description). A reply from the same sender is added to that card instead.
+        </p>
         {url && row("URL", url)}
         {token ? (
           <>
