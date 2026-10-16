@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { applyFilters, branchNameOf, ciOf, columnOf, initials, placeTask, projectKeyOf, reorder, TEMPLATES, templateOf, type Column } from "./board.ts";
 import { parseFlow } from "./canvas/flow.ts";
 import { columnFor, keysIn, planEvent } from "./github-events.ts";
+import { resolveActions } from "./board-agent.ts";
 import examples from "./template-examples.json" with { type: "json" };
 
 const mk = (id: string, title: string, n: number): Column["tasks"][number] => ({
@@ -121,5 +122,46 @@ assert.equal(columnFor("review", cols, 0)?.id, "r");
 assert.equal(columnFor("merged", cols, 2)?.id, "d", "no QA column: merged goes to Done");
 assert.equal(columnFor("progress", cols, 3), null, "never moves a card backwards");
 assert.equal(columnFor("review", [{ id: "x", title: "Todo", position: 0 }], 0), null, "no matching column: stay");
+
+// project agent: names → ids, partial updates keep the rest, anything unclear is an error, not a guess
+{
+  const cols: Column[] = [
+    { id: "bl", title: "Backlog", color: "", tasks: [{ ...mk("t1", "bl", 1), columnId: "bl", key: "WEB-1" }] },
+    { id: "ip", title: "In Progress", color: "", tasks: [] },
+  ];
+  const people = [{ id: "u1", name: "Ada Lovelace", color: "" }, { id: "u2", name: "Ben Ito", color: "" }];
+  const { ops, errors } = resolveActions([
+    { op: "create", title: "Setup CI", column: "backlog", priority: "high", assignee: "ada", due: "2026-10-20" },
+    { op: "create", title: "No column given" },
+    { op: "update", task: "web-1", column: "In Progress", assignee: null },
+    { op: "create", title: "Bad", column: "Nope" },
+    { op: "create", title: "Bad", priority: "urgent" },
+    { op: "update", task: "WEB-99" },
+    { op: "delete", task: "WEB-1" },
+  ], cols, people);
+  assert.deepEqual(ops[0], { op: "create", columnId: "bl", summary: 'Created "Setup CI" in Backlog',
+    fields: { title: "Setup CI", description: null, label: null, priority: "high", assigneeId: "u1", dueDate: "2026-10-20" } });
+  assert.equal(ops[1].op === "create" && ops[1].columnId, "bl", "no column → first column");
+  assert.equal(ops[1].fields.priority, "medium");
+  const up = ops[2];
+  assert.ok(up.op === "update" && up.taskId === "t1" && up.moveTo === "ip");
+  assert.equal(up.fields.assigneeId, null, "null unassigns");
+  assert.equal(up.fields.priority, "high", "untouched fields keep their value");
+  assert.equal(up.fields.description, "Detail");
+  assert.equal(ops.length, 3, "delete is not an op");
+  assert.equal(errors.length, 3);
+  assert.equal(resolveActions([{ op: "create", title: "x", assignee: "e" }], cols, people).errors.length, 1, "ambiguous member");
+  assert.equal(resolveActions(null, cols, people).ops.length, 0);
+  const more = resolveActions([
+    { op: "sheet", name: "Negosiasi", flow: { nodes: [] } },
+    { op: "message", to: "all", text: "Hi" },
+    { op: "message", to: "ben", text: "Ping" },
+    { op: "message", to: "nobody", text: "x" },
+    { op: "message", to: "all", text: "  " },
+    { op: "column", title: "QA" },
+  ], cols, people);
+  assert.deepEqual(more.ops.map((o) => o.op === "message" ? o.to : o.op), ["sheet", null, "u2", "column"]);
+  assert.equal(more.errors.length, 2, "unknown recipient and empty text");
+}
 
 console.log("board.check ok");

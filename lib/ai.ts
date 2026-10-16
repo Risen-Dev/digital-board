@@ -55,25 +55,24 @@ const RETRYABLE = new Set([429, 500, 502, 503, 504]);
 const RETRY_DELAYS_MS = [1_000, 3_000];
 
 /**
- * Asks the configured model; returns its reply and, if it designed one, a validated flow.
+ * Asks the configured model with `system` and returns its raw text.
  * Retries overloads itself (the Anthropic SDK's own retries are off) so `onStatus` can say so.
  */
-export async function askAgent(
+export async function askText(
   config: AiConfig,
+  system: string,
   turns: ChatTurn[],
   onStatus: (text: string) => void = () => {},
-): Promise<{ reply: string; flow: Flow | null }> {
+): Promise<string> {
   // Gateways (e.g. 9router) can override or drop the system prompt, so the language rule also rides on the
   // latest user turn, which always reaches the model. Only the request sees it; stored history stays clean.
   const last = turns.at(-1);
   const sent: ChatTurn[] = last?.role === "user"
-    ? [...turns.slice(0, -1), { role: "user", content: `${last.content}\n\n(Write the reply and every flow label in the same language as my message above.)` }]
+    ? [...turns.slice(0, -1), { role: "user", content: `${last.content}\n\n(Write the reply and every label or title you create in the same language as my message above.)` }]
     : turns;
-  let text = "";
   for (let attempt = 0; ; attempt++) {
     try {
-      text = config.provider === "anthropic" ? await askAnthropic(config, sent) : await askOpenAi(config, sent);
-      break;
+      return config.provider === "anthropic" ? await askAnthropic(config, system, sent) : await askOpenAi(config, system, sent);
     } catch (error) {
       const status = error instanceof ProviderError || error instanceof Anthropic.APIError ? error.status : undefined;
       if (!status || !RETRYABLE.has(status) || attempt >= RETRY_DELAYS_MS.length) throw error;
@@ -83,25 +82,37 @@ export async function askAgent(
       onStatus(`Retrying ${config.model}…`);
     }
   }
+}
 
-  // Models sometimes wrap JSON in prose or ``` fences — take the outermost object.
-  const json = text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1);
+/** Models sometimes wrap JSON in prose or ``` fences — take the outermost object; null if there is none. */
+export function jsonOf(text: string): Record<string, unknown> | null {
   try {
-    const parsed = JSON.parse(json);
-    return { reply: String(parsed.reply ?? ""), flow: parseFlow(parsed.flow) };
+    const parsed = JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1));
+    return parsed && typeof parsed === "object" ? parsed : null;
   } catch {
-    return { reply: text.trim(), flow: null };
+    return null;
   }
 }
 
-async function askAnthropic(config: AiConfig, turns: ChatTurn[]) {
+/** The canvas agent: its reply and, if it designed one, a validated flow. */
+export async function askAgent(
+  config: AiConfig,
+  turns: ChatTurn[],
+  onStatus: (text: string) => void = () => {},
+): Promise<{ reply: string; flow: Flow | null }> {
+  const text = await askText(config, SYSTEM, turns, onStatus);
+  const parsed = jsonOf(text);
+  return parsed ? { reply: String(parsed.reply ?? ""), flow: parseFlow(parsed.flow) } : { reply: text.trim(), flow: null };
+}
+
+async function askAnthropic(config: AiConfig, system: string, turns: ChatTurn[]) {
   const client = new Anthropic({ apiKey: config.apiKey, maxRetries: 0 });
   const effort = reasoningOf(config);
   const response = await client.messages.create({
     model: config.model,
     ...(effort ? { output_config: { effort } } : {}),
     max_tokens: 16000,
-    system: SYSTEM,
+    system,
     messages: turns,
   });
   if (response.stop_reason === "refusal") throw new Error("The model declined this request.");
@@ -154,13 +165,13 @@ export async function workspaceModels(workspaceId: string, config: AiConfig) {
   return models;
 }
 
-async function askOpenAi(config: AiConfig, turns: ChatTurn[]) {
+async function askOpenAi(config: AiConfig, system: string, turns: ChatTurn[]) {
   const res = await fetch(`${openAiBase(config)}/chat/completions`, {
     method: "POST",
     headers: { "content-type": "application/json", ...openAiAuth(config) },
     body: JSON.stringify({
       model: config.model,
-      messages: [{ role: "system", content: SYSTEM }, ...turns],
+      messages: [{ role: "system", content: system }, ...turns],
       // Thinking is most of the wait on Gemini 3 and OpenAI's reasoning models; non-reasoning models reject the field.
       ...(reasoningOf(config) ? { reasoning_effort: reasoningOf(config) } : {}),
     }),
