@@ -225,3 +225,29 @@ ALTER TABLE projects ADD COLUMN IF NOT EXISTS ical_token TEXT;
 -- Outgoing webhook: JSON {url, secret, events[], last{status, event, at}}; see lib/outgoing.ts.
 -- The secret signs each delivery and never leaves the server after it is first shown.
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS outgoing JSONB;
+
+-- Card comments are task_events with kind 'comment', so they share the history,
+-- Inbox and bell feeds. Every other event keeps the default.
+ALTER TABLE task_events ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'event';
+
+-- Checklist: JSON array of {text, done}, saved whole on every change.
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS checklist JSONB NOT NULL DEFAULT '[]';
+
+-- Archived cards stay in their column but leave the board, feeds and counts.
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS archived_at TEXT;
+
+-- Repeat rule: NULL, 'daily', 'weekly' or 'monthly'. Moving the card into the
+-- project's last column creates the next one (see moveTask).
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS repeat TEXT;
+
+-- Several assignees per card. Labels stay one text column, comma-separated.
+-- tasks.assignee_id is retired: the backfill copies it here once and clears it.
+CREATE TABLE IF NOT EXISTS task_assignees (
+  task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  PRIMARY KEY (task_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS task_assignees_user ON task_assignees(user_id);
+INSERT INTO task_assignees (task_id, user_id)
+SELECT id, assignee_id FROM tasks WHERE assignee_id IS NOT NULL ON CONFLICT DO NOTHING;
+UPDATE tasks SET assignee_id = NULL WHERE assignee_id IS NOT NULL;

@@ -1,6 +1,6 @@
 // Run: node --experimental-strip-types lib/board.check.ts
 import assert from "node:assert/strict";
-import { applyFilters, branchNameOf, ciOf, columnOf, initials, placeTask, projectKeyOf, reorder, TEMPLATES, templateOf, type Column } from "./board.ts";
+import { applyFilters, branchNameOf, ciOf, columnOf, initials, joinLabels, labelsOf, nextDue, placeTask, projectKeyOf, reorder, TEMPLATES, templateOf, type Column } from "./board.ts";
 import { parseFlow } from "./canvas/flow.ts";
 import { columnFor, keysIn, planEvent } from "./github-events.ts";
 import { resolveActions } from "./board-agent.ts";
@@ -11,8 +11,9 @@ import { outgoingPayload } from "./outgoing-events.ts";
 import examples from "./template-examples.json" with { type: "json" };
 
 const mk = (id: string, title: string, n: number): Column["tasks"][number] => ({
-  id, columnId: title, title: `task ${n}`, description: n % 2 ? "Detail" : null, label: n % 2 ? "Design" : "QA",
-  priority: n % 2 ? "high" : "low", assignee: n === 1 ? { id: "u1", name: "Ada L", color: "#000" } : null, dueDate: null, key: null,
+  id, columnId: title, title: `task ${n}`, description: n % 2 ? "Detail" : null, label: n % 2 ? "Design, Web" : "QA",
+  priority: n % 2 ? "high" : "low", assignees: n === 1 ? [{ id: "u1", name: "Ada L", color: "#000" }] : [], dueDate: null, key: null,
+  checklist: [], repeat: null, comments: 0,
 });
 
 const board: Column[] = [
@@ -144,12 +145,12 @@ assert.equal(columnFor("review", [{ id: "x", title: "Todo", position: 0 }], 0), 
     { op: "delete", task: "WEB-1" },
   ], cols, people);
   assert.deepEqual(ops[0], { op: "create", columnId: "bl", summary: 'Created "Setup CI" in Backlog',
-    fields: { title: "Setup CI", description: null, label: null, priority: "high", assigneeId: "u1", dueDate: "2026-10-20" } });
+    fields: { title: "Setup CI", description: null, label: null, priority: "high", assigneeIds: ["u1"], dueDate: "2026-10-20", repeat: null } });
   assert.equal(ops[1].op === "create" && ops[1].columnId, "bl", "no column → first column");
   assert.equal(ops[1].fields.priority, "medium");
   const up = ops[2];
   assert.ok(up.op === "update" && up.taskId === "t1" && up.moveTo === "ip");
-  assert.equal(up.fields.assigneeId, null, "null unassigns");
+  assert.deepEqual(up.fields.assigneeIds, [], "null unassigns");
   assert.equal(up.fields.priority, "high", "untouched fields keep their value");
   assert.equal(up.fields.description, "Detail");
   assert.equal(ops.length, 3, "delete is not an op");
@@ -212,3 +213,17 @@ assert.equal(outgoingPayload("task.created", proj, card, "Created by inbound web
 assert.equal(outgoingPayload("ping", proj, null, "Test delivery", "Ada").text, "Test delivery from Web App");
 
 console.log("board.check ok");
+
+// labels: comma-separated in one column; filters match any one of them
+assert.deepEqual(labelsOf(" Design ,, Web,"), ["Design", "Web"]);
+assert.equal(joinLabels("QA, Design, qa , "), "QA, Design");
+assert.equal(joinLabels(" , "), null);
+assert.deepEqual(applyFilters(board, { label: "Web" }).flatMap((c) => c.tasks.map((t) => t.id)), ["t1", "t3"]);
+
+// repeating tasks: next due date per period, months clamp to their last day
+assert.equal(nextDue("2026-10-17", "daily"), "2026-10-18");
+assert.equal(nextDue("2026-12-31", "daily"), "2027-01-01");
+assert.equal(nextDue("2026-10-28", "weekly"), "2026-11-04");
+assert.equal(nextDue("2026-01-31", "monthly"), "2026-02-28");
+assert.equal(nextDue("2028-01-31", "monthly"), "2028-02-29");
+assert.equal(nextDue("2026-12-15", "monthly"), "2027-01-15");

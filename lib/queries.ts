@@ -1,6 +1,6 @@
 import "server-only";
 import { all, get, run } from "./db";
-import type { Column, Entry, Member, Priority, Task } from "./board";
+import type { CheckItem, Column, Entry, Member, Priority, Repeat, Task } from "./board";
 import { day, stamp } from "./format";
 
 type TaskRow = {
@@ -12,9 +12,10 @@ type TaskRow = {
   priority: Priority;
   due_date: string | null;
   task_key: string | null;
-  assignee_id: string | null;
-  assignee_name: string | null;
-  assignee_color: string | null;
+  assignees: Member[];
+  checklist: CheckItem[];
+  repeat: Repeat | null;
+  comments: number;
 };
 
 const toTask = (r: TaskRow): Task => ({
@@ -26,11 +27,18 @@ const toTask = (r: TaskRow): Task => ({
   priority: r.priority,
   dueDate: r.due_date,
   key: r.task_key,
-  assignee:
-    r.assignee_id && r.assignee_name && r.assignee_color
-      ? { id: r.assignee_id, name: r.assignee_name, color: r.assignee_color }
-      : null,
+  assignees: r.assignees,
+  checklist: r.checklist,
+  repeat: r.repeat,
+  comments: r.comments,
 });
+
+/** Card columns shared by the board and My Tasks; `t`, `p` are tasks and projects. */
+const TASK_COLS = `t.id, t.column_id, t.title, t.description, t.label, t.priority, t.due_date, t.checklist, t.repeat,
+            p.key || '-' || t.number AS task_key,
+            COALESCE((SELECT json_agg(json_build_object('id', u.id, 'name', u.name, 'color', u.color) ORDER BY u.name)
+                        FROM task_assignees ta JOIN users u ON u.id = ta.user_id WHERE ta.task_id = t.id), '[]') AS assignees,
+            (SELECT COUNT(*) FROM task_events e WHERE e.task_id = t.id AND e.kind = 'comment') AS comments`;
 
 /** `repo` / `tokenHint` describe the GitHub link; the token itself never leaves the server. */
 export type Project = { id: string; name: string; key: string; repo: string | null; tokenHint: string | null; webhookHint: string | null; inbound: boolean;
@@ -68,23 +76,30 @@ export async function getBoard(projectId: string): Promise<Column[]> {
     projectId,
   );
   const rows = await all<TaskRow>(
-    `SELECT t.id, t.column_id, t.title, t.description, t.label, t.priority, t.due_date,
-            p.key || '-' || t.number AS task_key,
-            u.id AS assignee_id, u.name AS assignee_name, u.color AS assignee_color
+    `SELECT ${TASK_COLS}
        FROM tasks t
        JOIN columns c ON c.id = t.column_id
        JOIN projects p ON p.id = c.project_id
-       LEFT JOIN users u ON u.id = t.assignee_id
-      WHERE c.project_id = ?
+      WHERE c.project_id = ? AND t.archived_at IS NULL
       ORDER BY t.position`,
     projectId,
   );
   return columns.map((c) => ({ ...c, tasks: rows.filter((r) => r.column_id === c.id).map(toTask) }));
 }
 
+/** Archived cards of a project, newest first, for the restore list. */
+export const archivedTasks = async (projectId: string) =>
+  (await all<TaskRow>(
+    `SELECT ${TASK_COLS}
+       FROM tasks t JOIN columns c ON c.id = t.column_id JOIN projects p ON p.id = c.project_id
+      WHERE c.project_id = ? AND t.archived_at IS NOT NULL
+      ORDER BY t.archived_at DESC`,
+    projectId,
+  )).map(toTask);
+
 export const taskHistory = async (taskId: string): Promise<Entry[]> =>
   (await all<Omit<Entry, "atLabel">>(
-    `SELECT e.at, e.text, u.name AS actor
+    `SELECT e.at, e.text, e.kind, u.name AS actor
        FROM task_events e LEFT JOIN users u ON u.id = e.actor_id
       WHERE e.task_id = ? ORDER BY e.id DESC`,
     taskId,
@@ -94,7 +109,7 @@ export type FeedItem = Entry & { id: number; taskId: string; taskTitle: string; 
 type FeedRow = Omit<FeedItem, "atLabel" | "dayLabel">;
 
 /** Workspace admins see every project; members only the projects they are assigned to. */
-const FEED_FROM = `SELECT e.id, e.at, e.text, u.name AS actor, t.id AS "taskId", t.title AS "taskTitle",
+const FEED_FROM = `SELECT e.id, e.at, e.kind, CASE e.kind WHEN 'comment' THEN 'Commented: ' || e.text ELSE e.text END AS text, u.name AS actor, t.id AS "taskId", t.title AS "taskTitle",
             c.title AS "columnTitle", c.color AS "columnColor"
        FROM task_events e
        JOIN tasks t ON t.id = e.task_id
@@ -141,15 +156,12 @@ export async function markActivityItemsRead(userId: string, eventIds: number[]) 
 
 export const myTasks = async (userId: string) =>
   (await all<TaskRow & { column_title: string; column_color: string; project_name: string }>(
-    `SELECT t.id, t.column_id, t.title, t.description, t.label, t.priority, t.due_date,
-            p.key || '-' || t.number AS task_key,
-            u.id AS assignee_id, u.name AS assignee_name, u.color AS assignee_color,
+    `SELECT ${TASK_COLS},
             c.title AS column_title, c.color AS column_color, p.name AS project_name
        FROM tasks t
        JOIN columns c ON c.id = t.column_id
        JOIN projects p ON p.id = c.project_id
-       LEFT JOIN users u ON u.id = t.assignee_id
-      WHERE t.assignee_id = ?
+      WHERE t.archived_at IS NULL AND EXISTS (SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id AND ta.user_id = ?)
       ORDER BY t.due_date IS NULL, t.due_date, t.position`,
     userId,
   )).map((r) => ({ ...toTask(r), columnTitle: r.column_title, columnColor: r.column_color, projectName: r.project_name }));
@@ -157,19 +169,21 @@ export const myTasks = async (userId: string) =>
 export async function analytics(projectId: string) {
   const byColumn = await all<{ title: string; color: string; n: number }>(
     `SELECT c.title, c.color, COUNT(t.id) n
-       FROM columns c LEFT JOIN tasks t ON t.column_id = c.id
+       FROM columns c LEFT JOIN tasks t ON t.column_id = c.id AND t.archived_at IS NULL
       WHERE c.project_id = ? GROUP BY c.id ORDER BY c.position`,
     projectId,
   );
   const byPriority = await all<{ priority: Priority; n: number }>(
     `SELECT t.priority, COUNT(*) n FROM tasks t JOIN columns c ON c.id = t.column_id
-      WHERE c.project_id = ? GROUP BY t.priority`,
+      WHERE c.project_id = ? AND t.archived_at IS NULL GROUP BY t.priority`,
     projectId,
   );
   const byAssignee = await all<{ name: string | null; color: string | null; n: number }>(
+    // A card with two assignees counts once for each.
     `SELECT u.name, u.color, COUNT(*) n FROM tasks t
-       JOIN columns c ON c.id = t.column_id LEFT JOIN users u ON u.id = t.assignee_id
-      WHERE c.project_id = ? GROUP BY t.assignee_id, u.name, u.color ORDER BY n DESC`,
+       JOIN columns c ON c.id = t.column_id
+       LEFT JOIN task_assignees ta ON ta.task_id = t.id LEFT JOIN users u ON u.id = ta.user_id
+      WHERE c.project_id = ? AND t.archived_at IS NULL GROUP BY u.id, u.name, u.color ORDER BY n DESC`,
     projectId,
   );
   const activity14d = await all<{ day: string; n: number }>(

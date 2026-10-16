@@ -4,11 +4,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  BarChart3, Bell, Calendar, Check, CheckSquare, Filter, Home, Inbox,
+  Archive, BarChart3, Bell, Calendar, Check, CheckSquare, Filter, Home, Inbox,
   GitPullRequest, LayoutGrid, List, LogOut, Menu, MessageSquare, PenLine, Plus, Search, Settings, Sparkles, X,
 } from "lucide-react";
-import { applyFilters, initials, type Column, type Filters, type Member, type Task } from "@/lib/board";
-import { logoutAction, renameProject, renameWorkspace } from "@/lib/actions";
+import { applyFilters, initials, labelsOf, type Column, type Filters, type Member, type Task } from "@/lib/board";
+import { archiveTask, fetchArchived, logoutAction, renameProject, renameWorkspace } from "@/lib/actions";
+import { Modal } from "./modal";
 import type { CanvasMeta, FeedItem, MemberPresence, Project, ProjectMember, Unread } from "@/lib/queries";
 import type { User } from "@/lib/auth";
 import { Avatar } from "./avatar";
@@ -88,6 +89,7 @@ export function Workspace({
   const [showFilters, setShowFilters] = useState(false);
   const [editing, setEditing] = useState<Task | null>(null);
   const [creating, setCreating] = useState<string | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
   const [notifications, setNotifications] = useState(initialNotifications);
   const [showNotifications, setShowNotifications] = useState(false);
   const [chatChannel, setChatChannel] = useState("all");
@@ -103,7 +105,7 @@ export function Workspace({
   const activeFilters = [filters.assignee, filters.priority, filters.label].filter(Boolean).length;
   const shown = filtered.reduce((s, c) => s + c.tasks.length, 0);
   const total = columns.reduce((s, c) => s + c.tasks.length, 0);
-  const labels = [...new Set(columns.flatMap((c) => c.tasks.map((t) => t.label).filter(Boolean)))] as string[];
+  const labels = [...new Set(columns.flatMap((c) => c.tasks.flatMap((t) => labelsOf(t.label))))];
   const onBoard = section === "board";
 
   const announce = useCallback((title: string, body: string) => {
@@ -488,6 +490,13 @@ export function Workspace({
               <X className="size-3" />
               Reset
             </button>
+            <button
+              onClick={() => setShowArchived(true)}
+              className="flex items-center gap-1 rounded-md border px-2 py-1 text-muted-foreground transition-colors hover:bg-secondary"
+            >
+              <Archive className="size-3" />
+              Archived
+            </button>
             <span className="ml-auto text-muted-foreground">
               {shown} of {total} tasks
             </span>
@@ -554,6 +563,9 @@ export function Workspace({
           onClose={close}
         />
       )}
+      {showArchived && project && (
+        <ArchivedDialog projectId={project.id} readOnly={readOnly} onClose={() => setShowArchived(false)} />
+      )}
       {alert && (
         <button onClick={() => setAlert(null)} className="fixed bottom-5 right-5 z-50 w-80 rounded-lg border bg-card p-3 text-left shadow-lg animate-in fade-in slide-in-from-bottom-4 duration-300">
           <p className="text-sm font-medium">{alert.title}</p>
@@ -561,6 +573,43 @@ export function Workspace({
         </button>
       )}
     </div>
+  );
+}
+
+/** Archived cards of the open project; Restore puts one back at the end of its column. */
+function ArchivedDialog({ projectId, readOnly, onClose }: { projectId: string; readOnly: boolean; onClose: () => void }) {
+  const [tasks, setTasks] = useState<Task[] | null>(null);
+  useEffect(() => {
+    fetchArchived(projectId).then(setTasks);
+  }, [projectId]);
+  return (
+    <Modal title="Archived tasks" onClose={onClose}>
+      {tasks === null ? (
+        <p className="text-xs text-muted-foreground">Loading…</p>
+      ) : tasks.length === 0 ? (
+        <p className="text-xs text-muted-foreground">Nothing archived. Archive a card from its dialog.</p>
+      ) : (
+        <ul className="flex flex-col divide-y">
+          {tasks.map((t) => (
+            <li key={t.id} className="flex items-center gap-3 py-2">
+              <span className="font-mono text-[11px] text-muted-foreground">{t.key}</span>
+              <span className="min-w-0 flex-1 truncate text-sm">{t.title}</span>
+              {!readOnly && (
+                <button
+                  onClick={async () => {
+                    await archiveTask(t.id, false);
+                    setTasks((list) => list?.filter((x) => x.id !== t.id) ?? null);
+                  }}
+                  className="rounded-md border px-2 py-1 text-xs transition-colors hover:bg-secondary"
+                >
+                  Restore
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </Modal>
   );
 }
 

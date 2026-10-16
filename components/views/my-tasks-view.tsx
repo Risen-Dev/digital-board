@@ -1,7 +1,7 @@
 "use client";
 
-import { initials, PRIORITY_CFG, type Task } from "@/lib/board";
-import { Avatar } from "../avatar";
+import { PRIORITY_CFG, type Task } from "@/lib/board";
+import { Assignees } from "../task-card";
 
 export type MyTask = Task & { columnTitle: string; columnColor: string; projectName: string };
 
@@ -43,7 +43,7 @@ export function MyTasksView({ tasks, onOpen }: { tasks: MyTask[]; onOpen: (id: s
                 <span style={{ color: p.color, background: p.bg }} className="rounded px-1.5 py-0.5 text-[10px] font-medium uppercase">
                   {p.label}
                 </span>
-                {t.assignee && <Avatar initials={initials(t.assignee.name)} color={t.assignee.color} size={22} />}
+                <Assignees task={t} />
               </button>
             </li>
           );

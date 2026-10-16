@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { all, get, run, transaction } from "./db";
 import { createUser, createWorkspace, currentUser, endSession, login, passwordOf, setPassword, startSession, verifyPassword, type User } from "./auth";
-import { projectKeyOf, PROJECT_KEY_RE, templateOf, PALETTE, PRIORITIES, reorder, type Priority } from "./board";
+import { joinLabels, nextDue, projectKeyOf, PROJECT_KEY_RE, REPEATS, templateOf, PALETTE, PRIORITIES, reorder, type CheckItem, type Priority, type Repeat } from "./board";
 import { broadcast } from "./canvas/hub";
 import { projectRole } from "./canvas/guard";
 import { notify } from "./outgoing";
@@ -27,8 +27,8 @@ async function requireUser() {
 
 const now = () => new Date().toISOString();
 
-async function logEvent(taskId: string, actorId: string | null, text: string) {
-  await run("INSERT INTO task_events (task_id, actor_id, text, at) VALUES (?,?,?,?)", taskId, actorId, text, now());
+async function logEvent(taskId: string, actorId: string | null, text: string, kind: "event" | "comment" = "event") {
+  await run("INSERT INTO task_events (task_id, actor_id, text, at, kind) VALUES (?,?,?,?,?)", taskId, actorId, text, now(), kind);
 }
 
 /** May change tasks and canvas sheets. */
@@ -216,13 +216,36 @@ export async function setMemberPassword(userId: string, password: string) {
 
 // ── Tasks ───────────────────────────────────────────────────────────────────
 
-/** Priority drives a style lookup on every card, and an assignee must be a colleague. */
-async function invalidTaskFields(user: Awaited<ReturnType<typeof requireUser>>, priority: string, assignee: string | null) {
+/** Priority drives a style lookup on every card, and every assignee must be a colleague. */
+async function invalidTaskFields(user: Awaited<ReturnType<typeof requireUser>>, priority: string, assignees: string[], repeat: string | null) {
   if (!PRIORITIES.includes(priority as Priority)) return "Invalid priority.";
-  if (assignee && !await get("SELECT 1 FROM users WHERE id = ? AND workspace_id = ?", assignee, user.workspace_id)) {
-    return "That assignee is not in this workspace.";
+  if (repeat && !REPEATS.includes(repeat as Repeat)) return "Invalid repeat.";
+  if (assignees.length && (await get<{ n: number }>(
+    "SELECT COUNT(*) n FROM users WHERE id = ANY(?::text[]) AND workspace_id = ?", assignees, user.workspace_id,
+  ))!.n !== assignees.length) {
+    return "An assignee is not in this workspace.";
   }
   return null;
+}
+
+/** The task form's fields; assignees come as repeated `assigneeIds`. */
+const taskFieldsOf = (form: FormData) => ({
+  description: String(form.get("description") ?? "").trim() || null,
+  label: joinLabels(String(form.get("label") ?? "")),
+  dueDate: String(form.get("dueDate") ?? "").trim() || null,
+  assignees: [...new Set(form.getAll("assigneeIds").map(String).filter(Boolean))],
+  repeat: String(form.get("repeat") ?? "").trim() || null,
+});
+
+async function setAssignees(taskId: string, userIds: string[]) {
+  await run("DELETE FROM task_assignees WHERE task_id = ?", taskId);
+  for (const userId of userIds) await run("INSERT INTO task_assignees (task_id, user_id) VALUES (?,?)", taskId, userId);
+}
+
+/** The task's column when this user may edit it, else null. */
+async function writableTask(user: User, taskId: string) {
+  const task = await get<{ column_id: string }>("SELECT column_id FROM tasks WHERE id = ?", taskId);
+  return task && await writableColumn(user, task.column_id) ? task.column_id : null;
 }
 
 /** Column colours land in inline styles, so only the editor's own swatches are accepted. */
@@ -236,11 +259,8 @@ export async function createTask(_prev: unknown, form: FormData) {
   if (!await writableColumn(user, columnId)) return { error: "You cannot edit this project." };
 
   const priority = String(form.get("priority") ?? "medium") as Priority;
-  const description = String(form.get("description") ?? "").trim() || null;
-  const label = String(form.get("label") ?? "").trim() || null;
-  const dueDate = String(form.get("dueDate") ?? "").trim() || null;
-  const assignee = String(form.get("assigneeId") ?? "").trim() || null;
-  const invalid = await invalidTaskFields(user, priority, assignee);
+  const { description, label, dueDate, assignees, repeat } = taskFieldsOf(form);
+  const invalid = await invalidTaskFields(user, priority, assignees, repeat);
   if (invalid) return { error: invalid };
 
   const id = randomUUID();
@@ -248,10 +268,11 @@ export async function createTask(_prev: unknown, form: FormData) {
     const { project_id } = (await get<{ project_id: string }>("SELECT project_id FROM columns WHERE id = ?", columnId))!;
     const next = ((await get<{ n: number }>("SELECT COALESCE(MAX(position) + 1, 0) n FROM tasks WHERE column_id = ?", columnId)))!.n;
     await run(
-      `INSERT INTO tasks (id, column_id, title, description, label, priority, assignee_id, due_date, position, number, created_at)
+      `INSERT INTO tasks (id, column_id, title, description, label, priority, due_date, repeat, position, number, created_at)
        VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-      id, columnId, title, description, label, priority, assignee, dueDate, next, await nextTaskNumber(project_id), now(),
+      id, columnId, title, description, label, priority, dueDate, repeat, next, await nextTaskNumber(project_id), now(),
     );
+    await setAssignees(id, assignees);
     await logEvent(id, user.id, "Task created");
   });
   await notify("task.created", id, "Task created", user.name);
@@ -278,15 +299,53 @@ export async function moveTask(taskId: string, toColumnId: string, toIndex: numb
     );
   });
   if (fromColumnId !== toColumnId) await notify("task.moved", taskId, `Moved from ${fromTitle} to ${dest.title}`, user.name);
+  if (fromColumnId !== toColumnId) await repeatTask(taskId, toColumnId, user);
 
   revalidatePath("/board");
+}
+
+/**
+ * A repeating card that reaches the project's last column gets its next copy in the
+ * first column, due one period later, with the checklist unticked. The rule moves to
+ * the copy, so dragging the old card back and forth never spawns a second one.
+ */
+// ponytail: "last column = done"; add a per-project done column if templates disagree (Sales ends in Lost).
+async function repeatTask(taskId: string, toColumnId: string, user: User) {
+  const task = await get<{ title: string; description: string | null; label: string | null; priority: string; due_date: string | null;
+    repeat: Repeat | null; checklist: CheckItem[]; project_id: string; key: string }>(
+    `SELECT t.title, t.description, t.label, t.priority, t.due_date, t.repeat, t.checklist, c.project_id, p.key || '-' || t.number AS key
+       FROM tasks t JOIN columns c ON c.id = t.column_id JOIN projects p ON p.id = c.project_id WHERE t.id = ?`,
+    taskId,
+  );
+  if (!task?.repeat) return;
+  const ends = (await all<{ id: string }>("SELECT id FROM columns WHERE project_id = ? ORDER BY position", task.project_id)).map((c) => c.id);
+  if (toColumnId !== ends.at(-1) || ends[0] === toColumnId) return;
+
+  const id = randomUUID();
+  const due = nextDue(task.due_date ?? new Date().toISOString().slice(0, 10), task.repeat);
+  await transaction(async () => {
+    await run("UPDATE tasks SET repeat = NULL WHERE id = ?", taskId);
+    const next = (await get<{ n: number }>("SELECT COALESCE(MAX(position) + 1, 0) n FROM tasks WHERE column_id = ?", ends[0]))!.n;
+    await run(
+      `INSERT INTO tasks (id, column_id, title, description, label, priority, due_date, repeat, checklist, position, number, created_at)
+       VALUES (?,?,?,?,?,?,?,?,?::jsonb,?,?,?)`,
+      id, ends[0], task.title, task.description, task.label, task.priority, due, task.repeat,
+      JSON.stringify(task.checklist.map((i) => ({ ...i, done: false }))), next, await nextTaskNumber(task.project_id), now(),
+    );
+    await run("INSERT INTO task_assignees (task_id, user_id) SELECT ?, user_id FROM task_assignees WHERE task_id = ?", id, taskId);
+    await logEvent(id, user.id, `Repeats ${task.repeat}: created after ${task.key} was done`);
+  });
+  await notify("task.created", id, `Repeats ${task.repeat}`, user.name);
 }
 
 export async function updateTask(_prev: unknown, form: FormData) {
   const user = await requireUser();
   const id = String(form.get("id") ?? "");
-  const before = await get<{ column_id: string; title: string; description: string | null; priority: string; assignee_id: string | null; due_date: string | null }>(
-    "SELECT column_id, title, description, priority, assignee_id, due_date FROM tasks WHERE id = ?",
+  const before = await get<{ column_id: string; title: string; description: string | null; label: string | null; priority: string;
+    due_date: string | null; repeat: string | null; assignees: string[] }>(
+    `SELECT column_id, title, description, label, priority, due_date, repeat,
+            ARRAY(SELECT user_id FROM task_assignees WHERE task_id = t.id) AS assignees
+       FROM tasks t WHERE id = ?`,
     id,
   );
   if (!before || !await writableColumn(user, before.column_id)) return { error: "You cannot edit this project." };
@@ -294,26 +353,29 @@ export async function updateTask(_prev: unknown, form: FormData) {
   const title = String(form.get("title") ?? "").trim();
   if (!title) return { error: "Title is required." };
   const priority = String(form.get("priority") ?? before.priority);
-  const description = String(form.get("description") ?? "").trim() || null;
-  const label = String(form.get("label") ?? "").trim() || null;
-  const dueDate = String(form.get("dueDate") ?? "").trim() || null;
-  const assignee = String(form.get("assigneeId") ?? "").trim() || null;
-  const invalid = await invalidTaskFields(user, priority, assignee);
+  const { description, label, dueDate, assignees, repeat } = taskFieldsOf(form);
+  const invalid = await invalidTaskFields(user, priority, assignees, repeat);
   if (invalid) return { error: invalid };
 
-  await run(
-    "UPDATE tasks SET title = ?, description = ?, label = ?, priority = ?, assignee_id = ?, due_date = ? WHERE id = ?",
-    title, description, label, priority, assignee, dueDate, id,
-  );
+  const assigneesChanged = [...assignees].sort().join() !== [...before.assignees].sort().join();
+  await transaction(async () => {
+    await run(
+      "UPDATE tasks SET title = ?, description = ?, label = ?, priority = ?, due_date = ?, repeat = ? WHERE id = ?",
+      title, description, label, priority, dueDate, repeat, id,
+    );
+    if (assigneesChanged) await setAssignees(id, assignees);
+  });
   const changes: string[] = [];
   if (before.title !== title) changes.push(`Title changed to "${title}"`);
   if (before.description !== description) changes.push("Details updated");
+  if (before.label !== label) changes.push(label ? `Labels set to ${label}` : "Labels cleared");
   if (before.priority !== priority) changes.push(`Priority changed to ${priority}`);
-  if (before.assignee_id !== assignee) {
-    const who = assignee ? ((await get<{ name: string }>("SELECT name FROM users WHERE id = ?", assignee)))?.name : null;
-    changes.push(who ? `Assigned to ${who}` : "Assignee cleared");
+  if (assigneesChanged) {
+    const names = (await all<{ name: string }>("SELECT name FROM users WHERE id = ANY(?::text[]) ORDER BY name", assignees)).map((u) => u.name);
+    changes.push(names.length ? `Assigned to ${names.join(", ")}` : "Assignees cleared");
   }
   if (before.due_date !== dueDate) changes.push(dueDate ? `Due date set to ${dueDate}` : "Due date cleared");
+  if (before.repeat !== repeat) changes.push(repeat ? `Repeats ${repeat}` : "Repeat turned off");
   for (const c of changes) await logEvent(id, user.id, c);
   if (changes.length) await notify("task.updated", id, changes.join("; "), user.name);
 
@@ -329,6 +391,57 @@ export async function deleteTask(id: string) {
   await run("DELETE FROM tasks WHERE id = ?", id);
   revalidatePath("/board");
 }
+
+export async function archiveTask(id: string, archived: boolean) {
+  const user = await requireUser();
+  const columnId = await writableTask(user, id);
+  if (!columnId) return;
+  await transaction(async () => {
+    // A restored card goes to the end of its column; archived ones are skipped by relocateTask.
+    const end = (await get<{ n: number }>("SELECT COALESCE(MAX(position) + 1, 0) n FROM tasks WHERE column_id = ?", columnId))!.n;
+    await run(
+      `UPDATE tasks SET archived_at = ?, position = CASE WHEN ? THEN position ELSE ? END WHERE id = ?`,
+      archived ? now() : null, archived, end, id,
+    );
+    await logEvent(id, user.id, archived ? "Archived" : "Restored from the archive");
+  });
+  await notify("task.updated", id, archived ? "Archived" : "Restored from the archive", user.name);
+  revalidatePath("/board");
+}
+
+export async function fetchArchived(projectId: string) {
+  const user = await requireUser();
+  if (await projectRole(user, projectId) === null) return [];
+  const { archivedTasks } = await import("./queries");
+  return archivedTasks(projectId);
+}
+
+/** Comments are task_events with kind 'comment'. Viewers may comment too: it changes no card field. */
+export async function addComment(taskId: string, body: string) {
+  const user = await requireUser();
+  const text = body.trim().slice(0, 5000);
+  const task = await get<{ project_id: string }>(
+    "SELECT c.project_id FROM tasks t JOIN columns c ON c.id = t.column_id WHERE t.id = ?", taskId,
+  );
+  if (!text || !task || await projectRole(user, task.project_id) === null) return { error: "You cannot comment on this task." };
+  await logEvent(taskId, user.id, text, "comment");
+  await notify("task.updated", taskId, `Comment: ${text}`, user.name);
+  revalidatePath("/board");
+  return { ok: true };
+}
+
+/** Saves the whole checklist; the dialog sends it after every tick, add or delete. */
+// ponytail: last write wins; two people ticking the same card at once can undo each other.
+export async function setChecklist(taskId: string, items: CheckItem[]) {
+  const user = await requireUser();
+  if (!await writableTask(user, taskId)) return;
+  const clean = (Array.isArray(items) ? items : []).slice(0, 100)
+    .map((i) => ({ text: String(i?.text ?? "").trim().slice(0, 300), done: i?.done === true }))
+    .filter((i) => i.text);
+  await run("UPDATE tasks SET checklist = ?::jsonb WHERE id = ?", JSON.stringify(clean), taskId);
+  revalidatePath("/board");
+}
+
 export async function setProjectMember(projectId: string, userId: string, role: "admin" | "editor" | "viewer" | "") {
   const user = await requireUser();
   if (!user.is_admin) return { error: "Only workspace admins can assign projects." };
