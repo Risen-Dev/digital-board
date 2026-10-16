@@ -305,6 +305,7 @@ WantedBy=multi-user.target`}</Code>
               [<strong className="text-foreground">Notifications</strong>, <>The bell dropdown combines unread card activity and chat. Card items open Inbox; chat items open the right conversation. Mark card activity read to clear it. Enable alerts there for browser notifications, an in-app popup, and sound.</>],
               [<strong className="text-foreground">Task history</strong>, <>Creation, column moves, reorders, and title/details/priority/assignee/due-date edits are all recorded. Open a task to see its timeline.</>],
               [<strong className="text-foreground">Canvas</strong>, <>Excalidraw with sheet tabs. Each sheet keeps its own drawing, saved on an 800ms debounce as you draw and flushed when you switch sheets or close the tab; switching sheets never disturbs another one. Pasted images are embedded in the sheet&rsquo;s snapshot rather than stored as attachments, so an image-heavy sheet becomes a large row.</>],
+              [<strong className="text-foreground">AI agent</strong>, <>Two agents share the provider a workspace admin sets in Settings → AI agent: Anthropic, Gemini, or any OpenAI-compatible endpoint (OpenAI, OpenRouter, Groq, Ollama…) by base URL. The key stays on the server. <em>Project agent</em> — the <strong className="text-foreground">Agent</strong> button in the header, for editors and admins. Ask about the board or act on it in your own words: &ldquo;create task Set up CI for Ada in Backlog, priority high&rdquo;, &ldquo;move WEB-12 to In Review and make it urgent&rdquo;, &ldquo;draw the negotiation flow&rdquo;, &ldquo;tell Ben the release moved to Friday&rdquo;. It can create and update tasks (column, priority, assignee, due date, label, details), add a column (project admins), draw a flowchart on a new canvas sheet, and post to the workspace channel or a direct message as you. Names are matched to the board&rsquo;s columns, members and task keys; anything it can&rsquo;t pin down is reported back instead of guessed. Every change goes through the same checks and task history as the UI. It cannot delete anything, change settings or roles, or read chat. <em>Canvas agent</em> — the Agent button in a sheet&rsquo;s tab bar draws a described process as a flowchart on that sheet, and keeps its conversations per sheet.</>],
               [<strong className="text-foreground">Chat</strong>, <>A workspace channel everyone reads, plus a direct message thread per member. Unread badges, file attachments with inline image previews, and 15 minutes to edit your own message.</>],
               [<strong className="text-foreground">Access</strong>, <>A workspace admin picks a member&rsquo;s project roles while adding them, and changes them later under Settings → Projects → the project — <C>viewer</C> reads, <C>editor</C> changes tasks and canvases, <C>admin</C> also renames the project and manages its columns. Workspace admins reach every project. No role means the project is not listed and its rows are never sent to that browser. Every action re-checks the role server-side.</>],
               [<strong className="text-foreground">Presence</strong>, <>Online / away / offline per member, derived from activity rather than stored.</>],
@@ -360,10 +361,11 @@ WantedBy=multi-user.target`}</Code>
               revalidate the board. There is no REST layer to keep in sync.
             </li>
             <li>
-              <strong className="text-foreground">Except four route handlers.</strong> Canvas snapshots and chat go
+              <strong className="text-foreground">Except a few route handlers.</strong> Canvas snapshots and chat go
               through <C>/api/*</C> on purpose: Server Actions cap a request body at 1 MB, which a real drawing or a
               file attachment passes immediately, and chat polling through an action would revalidate the whole board
-              on every message.
+              on every message. The AI agents use routes too, to stream progress while the model works; the project
+              agent then applies its changes by calling the same Server Actions.
             </li>
             <li>
               <strong className="text-foreground">Reads are in <C>lib/queries.ts</C></strong>, writes in{" "}
@@ -441,6 +443,7 @@ pm2 restart digital-board        # or: systemctl restart digital-board`}</Code>
             <li>No self-service password reset. An admin creates a replacement account.</li>
             <li>Chat has no deletion, reactions, threads or typing indicators, and polling means near-real-time, not instant.</li>
             <li>Columns move one step at a time from the editor; there is no drag-to-reorder for columns themselves.</li>
+            <li>The project agent&rsquo;s conversation lives in the browser tab and is gone after a reload. It sees up to 100 tasks per column. Each flow it draws goes on a new sheet, drawn when an editor first opens it.</li>
             <li>Project roles gate tasks, canvases and project structure. Chat is workspace-wide — it has no per-project scoping.</li>
             <li>Without the webhook, GitHub links only cover recent activity: the last 30 pull requests and commits and 100 branches. Webhook moves reach open tabs on the next presence poll, within 45 seconds.</li>
             <li>The GitHub cache is per server process; with several instances each one fetches on its own.</li>

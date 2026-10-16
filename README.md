@@ -66,6 +66,7 @@ Requires **Node 22+** and **PostgreSQL 14+** (verified on 16). For development,
 | **List, Calendar, Analytics** | The same tasks as a table, on a month grid by due date, and as charts — column distribution, priority split, workload per member, 14-day activity. |
 | **History** | Every move, reorder and field change is logged with its actor. Per task, and board-wide in the Inbox. |
 | **Canvas** | Excalidraw with sheet tabs. Each sheet keeps its own drawing. Live collaboration: other members' cursors (with their names) and edits appear as they happen. |
+| **AI agent** | Prompt the project from the **Agent** button in the header: *"create task Set up CI for Ada in Backlog, priority high"*, *"move WEB-12 to In Review"*, *"draw the negotiation flow"*, *"tell Ben the release moved"*. It creates and updates tasks, adds columns, draws flowcharts on a new canvas sheet and sends chat messages as you — through the same permission checks as the UI, and it cannot delete anything. Each canvas sheet also has its own agent that draws flows. Works with Anthropic, Gemini or any OpenAI-compatible endpoint (OpenAI, OpenRouter, Ollama…); a workspace admin sets the provider and key in Settings → AI agent. |
 | **Chat** | Workspace channel plus direct messages, with unread badges, attachments and a 15-minute edit window. |
 | **Notifications** | Bell dropdown combines unread card activity and chat. Card items open Inbox; chat items open their conversation; card items can be marked read. Enable alerts there for browser notifications, an in-app popup, and sound. |
 | **Accounts** | Multi-user with `scrypt` password hashing and cookie sessions. Presence shows who is online. |
@@ -150,7 +151,8 @@ transaction and rolls back.
 ## Known limits
 
 No self-service password reset. Chat polls every 3 seconds rather than using a
-socket, and has no deletion, reactions or threads.
+socket, and has no deletion, reactions or threads. The project agent's chat is
+not saved — it is gone after a reload.
 
 Full list in the [docs](/docs).
 
