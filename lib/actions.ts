@@ -1,12 +1,13 @@
 "use server";
 
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { all, get, run, transaction } from "./db";
-import { createUser, createWorkspace, currentUser, endSession, login, passwordOf, setPassword, startSession, verifyPassword } from "./auth";
+import { createUser, createWorkspace, currentUser, endSession, login, passwordOf, setPassword, startSession, verifyPassword, type User } from "./auth";
 import { projectKeyOf, PROJECT_KEY_RE, templateOf, PALETTE, PRIORITIES, reorder, type Priority } from "./board";
 import { broadcast } from "./canvas/hub";
+import { projectRole } from "./canvas/guard";
 import { relocateTask } from "./tasks";
 import type { Flow } from "./canvas/flow";
 import examplesData from "./template-examples.json";
@@ -29,27 +30,22 @@ async function logEvent(taskId: string, actorId: string | null, text: string) {
   await run("INSERT INTO task_events (task_id, actor_id, text, at) VALUES (?,?,?,?)", taskId, actorId, text, now());
 }
 
-/**
- * Every permission check routes through here. The workspace check comes first:
- * anyone can register and become admin of their own workspace, and that must
- * not reach into someone else's.
- */
-async function projectRole(user: Awaited<ReturnType<typeof requireUser>>, projectId: string) {
-  const project = await get<{ workspace_id: string }>("SELECT workspace_id FROM projects WHERE id = ?", projectId);
-  if (!project || project.workspace_id !== user.workspace_id) return null;
-  if (user.is_admin) return "workspace-admin";
-  return (await get<{ role: "admin" | "editor" | "viewer" }>(
-    "SELECT role FROM project_members WHERE project_id = ? AND user_id = ?",
-    projectId, user.id,
-  ))?.role ?? null;
+/** May change tasks and canvas sheets. */
+async function canEdit(user: User, projectId: string | undefined) {
+  const role = projectId && await projectRole(user, projectId);
+  return !!role && role !== "viewer";
 }
 
-async function writableColumn(user: Awaited<ReturnType<typeof requireUser>>, columnId: string) {
-  const column = await get<{ project_id: string }>("SELECT project_id FROM columns WHERE id = ?", columnId);
-  if (!column) return false;
-  const role = await projectRole(user, column.project_id);
-  return role !== null && role !== "viewer";
+/** May rename the project and manage its columns and GitHub link. */
+async function canManage(user: User, projectId: string | undefined) {
+  const role = projectId && await projectRole(user, projectId);
+  return role === "workspace-admin" || role === "admin";
 }
+
+const projectOfColumn = async (columnId: string) =>
+  (await get<{ project_id: string }>("SELECT project_id FROM columns WHERE id = ?", columnId))?.project_id;
+
+const writableColumn = async (user: User, columnId: string) => canEdit(user, await projectOfColumn(columnId));
 
 // ── Registration ────────────────────────────────────────────────────────────
 
@@ -299,13 +295,11 @@ export async function moveTask(taskId: string, toColumnId: string, toIndex: numb
 export async function updateTask(_prev: unknown, form: FormData) {
   const user = await requireUser();
   const id = String(form.get("id") ?? "");
-  const before = await get<{ title: string; description: string | null; priority: string; assignee_id: string | null; due_date: string | null }>(
-    "SELECT title, description, priority, assignee_id, due_date FROM tasks WHERE id = ?",
+  const before = await get<{ column_id: string; title: string; description: string | null; priority: string; assignee_id: string | null; due_date: string | null }>(
+    "SELECT column_id, title, description, priority, assignee_id, due_date FROM tasks WHERE id = ?",
     id,
   );
-  const taskColumn = await get<{ column_id: string }>("SELECT column_id FROM tasks WHERE id = ?", id);
-  if (!taskColumn || !await writableColumn(user, taskColumn.column_id)) return { error: "You cannot edit this project." };
-  if (!before) return { error: "Task not found." };
+  if (!before || !await writableColumn(user, before.column_id)) return { error: "You cannot edit this project." };
 
   const title = String(form.get("title") ?? "").trim();
   if (!title) return { error: "Title is required." };
@@ -406,12 +400,10 @@ export async function renameWorkspace(name: string) {
  */
 export async function rotateGithubWebhook(projectId: string) {
   const user = await requireUser();
-  const role = await projectRole(user, projectId);
-  if (role !== "workspace-admin" && role !== "admin") return { error: "You cannot manage this project." };
+  if (!await canManage(user, projectId)) return { error: "You cannot manage this project." };
   const { githubConfig } = await import("./github");
   const saved = await githubConfig(projectId);
   if (!saved) return { error: "Connect a repository first." };
-  const { randomBytes } = await import("node:crypto");
   const webhookSecret = randomBytes(24).toString("hex");
   await run("UPDATE projects SET github = ? WHERE id = ?", JSON.stringify({ ...saved, webhookSecret }), projectId);
   revalidatePath("/board");
@@ -421,8 +413,7 @@ export async function rotateGithubWebhook(projectId: string) {
 /** Changes the project's task key prefix; existing tasks keep their numbers, so WEB-42 becomes APP-42. */
 export async function setProjectKey(projectId: string, key: string) {
   const user = await requireUser();
-  const role = await projectRole(user, projectId);
-  if (role !== "workspace-admin" && role !== "admin") return { error: "You cannot manage this project." };
+  if (!await canManage(user, projectId)) return { error: "You cannot manage this project." };
   const clean = key.trim().toUpperCase();
   if (!PROJECT_KEY_RE.test(clean)) return { error: "2–10 letters or digits, starting with a letter." };
   await run("UPDATE projects SET key = ? WHERE id = ?", clean, projectId);
@@ -436,8 +427,7 @@ export async function setProjectKey(projectId: string, key: string) {
  */
 export async function saveGithub(projectId: string, repo: string, token: string) {
   const user = await requireUser();
-  const role = await projectRole(user, projectId);
-  if (role !== "workspace-admin" && role !== "admin") return { error: "You cannot manage this project." };
+  if (!await canManage(user, projectId)) return { error: "You cannot manage this project." };
 
   const { REPO_RE, GithubError, githubConfig, verifyGithub } = await import("./github");
   const clean = repo.trim().replace(/^https:\/\/github\.com\//, "").replace(/\.git$|\/$/g, "");
@@ -465,8 +455,7 @@ export async function saveGithub(projectId: string, repo: string, token: string)
 
 export async function renameProject(id: string, name: string) {
   const user = await requireUser();
-  const role = await projectRole(user, id);
-  if (role !== "workspace-admin" && role !== "admin") return { error: "You cannot manage this project." };
+  if (!await canManage(user, id)) return { error: "You cannot manage this project." };
   const clean = name.trim();
   if (!clean) return { error: "Project name is required." };
   await run("UPDATE projects SET name = ? WHERE id = ?", clean, id);
@@ -476,8 +465,7 @@ export async function renameProject(id: string, name: string) {
 
 export async function addColumn(projectId: string, title: string, color: string) {
   const user = await requireUser();
-  const role = await projectRole(user, projectId);
-  if (role !== "workspace-admin" && role !== "admin") return { error: "You cannot manage this project." };
+  if (!await canManage(user, projectId)) return { error: "You cannot manage this project." };
   const clean = title.trim();
   if (!clean) return { error: "Column name is required." };
   if (!COLUMN_COLORS.includes(color)) return { error: "Invalid colour." };
@@ -495,9 +483,7 @@ export async function addColumn(projectId: string, title: string, color: string)
 
 export async function updateColumn(id: string, title: string, color: string) {
   const user = await requireUser();
-  const column = await get<{ project_id: string }>("SELECT project_id FROM columns WHERE id = ?", id);
-  const role = column && await projectRole(user, column.project_id);
-  if (role !== "workspace-admin" && role !== "admin") return { error: "You cannot manage this project." };
+  if (!await canManage(user, await projectOfColumn(id))) return { error: "You cannot manage this project." };
   const clean = title.trim();
   if (!clean) return { error: "Column name is required." };
   if (!COLUMN_COLORS.includes(color)) return { error: "Invalid colour." };
@@ -509,11 +495,10 @@ export async function updateColumn(id: string, title: string, color: string) {
 /** Deleting a column takes its tasks with it (FK cascade) — the UI confirms the count first. */
 export async function deleteColumn(id: string) {
   const user = await requireUser();
-  const column = await get<{ project_id: string }>("SELECT project_id FROM columns WHERE id = ?", id);
-  if (!column) return { error: "Column not found." };
-  const role = await projectRole(user, column.project_id);
-  if (role !== "workspace-admin" && role !== "admin") return { error: "You cannot manage this project." };
-  const last = (await get<{ n: number }>("SELECT COUNT(*) n FROM columns WHERE project_id = ?", column.project_id))!.n;
+  const projectId = await projectOfColumn(id);
+  if (!projectId) return { error: "Column not found." };
+  if (!await canManage(user, projectId)) return { error: "You cannot manage this project." };
+  const last = (await get<{ n: number }>("SELECT COUNT(*) n FROM columns WHERE project_id = ?", projectId))!.n;
   if (last <= 1) return { error: "A board needs at least one column." };
   await run("DELETE FROM columns WHERE id = ?", id);
   revalidatePath("/board");
@@ -527,8 +512,7 @@ export async function moveColumn(id: string, direction: -1 | 1) {
     "SELECT project_id, position FROM columns WHERE id = ?",
     id,
   );
-  const role = col && await projectRole(user, col.project_id);
-  if (!col || (role !== "workspace-admin" && role !== "admin")) return;
+  if (!col || !await canManage(user, col.project_id)) return;
   const ordered = (
     await all<{ id: string }>("SELECT id FROM columns WHERE project_id = ? ORDER BY position", col.project_id)
   ).map((r) => r.id);
@@ -554,9 +538,12 @@ export async function fetchHistory(taskId: string) {
 
 // ── Canvas sheets ───────────────────────────────────────────────────────────
 
+const projectOfCanvas = async (id: string) =>
+  (await get<{ project_id: string }>("SELECT project_id FROM canvases WHERE id = ?", id))?.project_id;
+
 export async function createCanvas(projectId: string, name: string) {
   const user = await requireUser();
-  if ((await projectRole(user, projectId)) === null || (await projectRole(user, projectId)) === "viewer") return;
+  if (!await canEdit(user, projectId)) return;
   const clean = name.trim() || "Untitled sheet";
   const next = (await get<{ n: number }>("SELECT COALESCE(MAX(position) + 1, 0) n FROM canvases WHERE project_id = ?", projectId))!.n;
   const id = randomUUID();
@@ -570,8 +557,7 @@ export async function createCanvas(projectId: string, name: string) {
 
 export async function renameCanvas(id: string, name: string) {
   const user = await requireUser();
-  const canvas = await get<{ project_id: string }>("SELECT project_id FROM canvases WHERE id = ?", id);
-  if (!canvas || (await projectRole(user, canvas.project_id)) === "viewer" || (await projectRole(user, canvas.project_id)) === null) return;
+  if (!await canEdit(user, await projectOfCanvas(id))) return;
   const clean = name.trim();
   if (!clean) return;
   await run("UPDATE canvases SET name = ? WHERE id = ?", clean, id);
@@ -580,8 +566,7 @@ export async function renameCanvas(id: string, name: string) {
 
 export async function deleteCanvas(id: string) {
   const user = await requireUser();
-  const canvas = await get<{ project_id: string }>("SELECT project_id FROM canvases WHERE id = ?", id);
-  if (!canvas || (await projectRole(user, canvas.project_id)) === "viewer" || (await projectRole(user, canvas.project_id)) === null) return;
+  if (!await canEdit(user, await projectOfCanvas(id))) return;
   await run("DELETE FROM canvases WHERE id = ?", id);
   // Anyone else on this sheet would keep drawing into a row that no longer exists.
   broadcast(id, "", { type: "deleted" });

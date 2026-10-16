@@ -49,9 +49,6 @@ export const listProjects = (workspaceId: string, userId: string, isAdmin: boole
         workspaceId, userId,
       );
 
-export const firstProject = (workspaceId: string) =>
-  get<Project>(`SELECT ${PROJECT_COLS} FROM projects p WHERE p.workspace_id = ? ORDER BY p.position, p.created_at LIMIT 1`, workspaceId);
-
 export const listMembers = (workspaceId: string) =>
   all<Member>("SELECT id, name, color FROM users WHERE workspace_id = ? ORDER BY created_at", workspaceId);
 
@@ -94,42 +91,32 @@ export const taskHistory = async (taskId: string): Promise<Entry[]> =>
 export type FeedItem = Entry & { id: number; taskId: string; taskTitle: string; columnTitle: string; columnColor: string; dayLabel: string };
 type FeedRow = Omit<FeedItem, "atLabel" | "dayLabel">;
 
-
 /** Workspace admins see every project; members only the projects they are assigned to. */
-const VISIBLE_PROJECT = "(? = 1 OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = ?))";
-
-export const activityFeed = async (workspaceId: string, userId: string, isAdmin: number, limit = 100): Promise<FeedItem[]> =>
-  (await all<FeedRow>(
-    `SELECT e.id, e.at, e.text, u.name AS actor, t.id AS "taskId", t.title AS "taskTitle",
+const FEED_FROM = `SELECT e.id, e.at, e.text, u.name AS actor, t.id AS "taskId", t.title AS "taskTitle",
             c.title AS "columnTitle", c.color AS "columnColor"
        FROM task_events e
        JOIN tasks t ON t.id = e.task_id
        JOIN columns c ON c.id = t.column_id
        JOIN projects p ON p.id = c.project_id
        LEFT JOIN users u ON u.id = e.actor_id
-      WHERE p.workspace_id = ? AND ${VISIBLE_PROJECT}
-      ORDER BY e.id DESC LIMIT ?`,
-    workspaceId, isAdmin, userId, limit,
-  )).map((e) => ({ ...e, atLabel: stamp(e.at), dayLabel: day(e.at) }));
+      WHERE p.workspace_id = ? AND (? = 1 OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = ?))`;
 
-export const activityNotifications = async (workspaceId: string, userId: string, isAdmin: number, limit = 5): Promise<FeedItem[]> => {
+const toFeed = (rows: FeedRow[]): FeedItem[] => rows.map((e) => ({ ...e, atLabel: stamp(e.at), dayLabel: day(e.at) }));
+
+export const activityFeed = async (workspaceId: string, userId: string, isAdmin: number, limit = 100) =>
+  toFeed(await all<FeedRow>(`${FEED_FROM} ORDER BY e.id DESC LIMIT ?`, workspaceId, isAdmin, userId, limit));
+
+export const activityNotifications = async (workspaceId: string, userId: string, isAdmin: number, limit = 5) => {
   const read = (await get<{ last_activity_read_id: number }>(
     "SELECT last_activity_read_id FROM users WHERE id = ?",
     userId,
   ))?.last_activity_read_id ?? 0;
-  return (await all<FeedRow>(
-    `SELECT e.id, e.at, e.text, u.name AS actor, t.id AS "taskId", t.title AS "taskTitle",
-            c.title AS "columnTitle", c.color AS "columnColor"
-       FROM task_events e
-       JOIN tasks t ON t.id = e.task_id
-       JOIN columns c ON c.id = t.column_id
-       JOIN projects p ON p.id = c.project_id
-       LEFT JOIN users u ON u.id = e.actor_id
-      WHERE p.workspace_id = ? AND e.id > ? AND ${VISIBLE_PROJECT}
+  return toFeed(await all<FeedRow>(
+    `${FEED_FROM} AND e.id > ?
         AND NOT EXISTS (SELECT 1 FROM activity_reads ar WHERE ar.user_id = ? AND ar.event_id = e.id)
       ORDER BY e.id DESC LIMIT ?`,
-    workspaceId, read, isAdmin, userId, userId, limit,
-  )).map((e) => ({ ...e, atLabel: stamp(e.at), dayLabel: day(e.at) }));
+    workspaceId, isAdmin, userId, read, userId, limit,
+  ));
 };
 
 export async function markActivityRead(workspaceId: string, userId: string) {
@@ -235,7 +222,7 @@ export type ChatMessage = {
 };
 
 /** Canonical channel key for the read cursor: the workspace channel or a peer id. */
-export const channelKey = (withUser: string | null) => withUser ?? "all";
+const channelKey = (withUser: string | null) => withUser ?? "all";
 
 /** `withUser` null means the workspace channel; otherwise the DM thread with that person. */
 export async function conversation(workspaceId: string, meId: string, withUser: string | null, afterId = 0): Promise<ChatMessage[]> {
@@ -263,7 +250,7 @@ export async function conversation(workspaceId: string, meId: string, withUser: 
 }
 
 /** Highest message id in a conversation — the value the read cursor moves to. */
-export async function latestId(workspaceId: string, meId: string, withUser: string | null) {
+async function latestId(workspaceId: string, meId: string, withUser: string | null) {
   const row =
     withUser === null
       ? await get<{ id: number }>("SELECT MAX(id) id FROM messages WHERE workspace_id = ? AND recipient_id IS NULL", workspaceId)

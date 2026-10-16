@@ -148,7 +148,7 @@ const CI_STYLE: Record<NonNullable<CiState>, { label: string; color: string }> =
   pending: { label: "Checks running", color: "var(--chart-3)" },
 };
 
-export function CiDot({ ci }: { ci: CiState | undefined }) {
+function CiDot({ ci }: { ci: CiState | undefined }) {
   if (!ci) return null;
   const s = CI_STYLE[ci];
   return <span title={s.label} aria-label={s.label} className="size-1.5 shrink-0 rounded-full" style={{ background: s.color }} />;

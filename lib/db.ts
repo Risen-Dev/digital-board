@@ -112,5 +112,3 @@ export async function transaction<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
-/** True once the first account exists — the setup-wizard gate. */
-export const isInstalled = async () => (await get("SELECT 1 FROM users LIMIT 1")) !== undefined;

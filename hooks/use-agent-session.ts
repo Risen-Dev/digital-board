@@ -67,7 +67,7 @@ export function registerDrawer(canvasId: string, drawer: Drawer) {
  * Draws now if the sheet is open, otherwise when it next opens (in this tab).
  * `drawn` is called with the number of shapes added, whenever that happens.
  */
-export function deliverFlow(canvasId: string, flow: Flow, by: string, drawn: (count: number) => void) {
+function deliverFlow(canvasId: string, flow: Flow, by: string, drawn: (count: number) => void) {
   const drawer = drawers.get(canvasId);
   if (drawer) return void drawer(flow, by).then(drawn);
   // ponytail: kept in memory only — a reload before reopening the sheet drops it; the chat still holds the flow.

@@ -30,7 +30,6 @@ export const PRIORITY_CFG: Record<Priority, { label: string; color: string; bg: 
   low: { label: "Low", color: "#6b7280", bg: "rgba(107,114,128,0.08)" },
 };
 
-/** Suggested colours for columns created in the setup wizard. */
 /**
  * Entity colours are CSS custom properties, not hex, so light and dark each get
  * their own validated step. Both orderings pass the colourblind-separation

@@ -97,7 +97,7 @@ export async function currentUser(): Promise<User | null> {
 const HEARTBEAT_MS = 45_000;
 
 /** Stamp last_seen_at, at most once per HEARTBEAT_MS per user. */
-export async function touch(userId: string, lastSeen: string | null) {
+async function touch(userId: string, lastSeen: string | null) {
   if (lastSeen && Date.now() - new Date(lastSeen).getTime() < HEARTBEAT_MS) return;
   await run("UPDATE users SET last_seen_at = ? WHERE id = ?", new Date().toISOString(), userId);
 }
