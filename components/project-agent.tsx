@@ -19,6 +19,36 @@ export function ProjectAgent({ projectId, enabled, open, onClose }: { projectId:
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const end = useRef<HTMLDivElement>(null);
+  const panel = useRef<HTMLElement>(null);
+  // null = docked bottom-right by CSS; set to left/top once the user grabs it.
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+
+  // Before the first drag or resize, pin the panel by left/top where it sits, so the
+  // native resize corner grows it toward the cursor instead of from the right/bottom edge.
+  function anchor() {
+    if (pos || !panel.current) return pos;
+    const r = panel.current.getBoundingClientRect();
+    const p = { x: r.left, y: r.top };
+    setPos(p);
+    return p;
+  }
+
+  function startDrag(e: React.PointerEvent) {
+    if ((e.target as HTMLElement).closest("button")) return;
+    const start = anchor();
+    if (!start || !panel.current) return;
+    const { width, height } = panel.current.getBoundingClientRect();
+    const dx = e.clientX - start.x, dy = e.clientY - start.y;
+    const header = e.currentTarget as HTMLElement;
+    header.setPointerCapture(e.pointerId);
+    const move = (ev: PointerEvent) => setPos({
+      x: Math.min(Math.max(0, ev.clientX - dx), window.innerWidth - width),
+      y: Math.min(Math.max(0, ev.clientY - dy), window.innerHeight - height),
+    });
+    const up = () => { header.removeEventListener("pointermove", move); header.removeEventListener("pointerup", up); };
+    header.addEventListener("pointermove", move);
+    header.addEventListener("pointerup", up);
+  }
 
   useEffect(() => {
     requestAnimationFrame(() => end.current?.scrollIntoView({ behavior: "smooth" }));
@@ -76,8 +106,14 @@ export function ProjectAgent({ projectId, enabled, open, onClose }: { projectId:
   }
 
   return (
-    <aside className={`fixed inset-y-0 right-0 z-40 w-full max-w-sm flex-col border-l bg-background shadow-lg ${open ? "flex" : "hidden"}`}>
-      <header className="flex items-center gap-2 border-b px-3 py-2">
+    <aside
+      ref={panel}
+      onPointerDownCapture={anchor}
+      // `resize` is the browser's own corner handle; React never sets width/height again, so it keeps the user's size.
+      style={{ width: 380, height: 520, ...(pos ? { left: pos.x, top: pos.y } : { right: 16, bottom: 16 }) }}
+      className={`fixed z-40 min-h-64 min-w-72 max-h-[calc(100dvh-16px)] max-w-[calc(100vw-16px)] resize flex-col overflow-hidden rounded-lg border bg-background shadow-xl ${open ? "flex" : "hidden"}`}
+    >
+      <header onPointerDown={startDrag} className="flex cursor-move touch-none select-none items-center gap-2 border-b px-3 py-2">
         <Sparkles className="size-4 shrink-0 text-[var(--chart-1)]" />
         <p className="flex-1 text-sm font-medium">Project agent</p>
         <button type="button" onClick={() => { setTurns([]); setError(null); }} disabled={busy} title="New chat" className="rounded p-1 text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-40">
