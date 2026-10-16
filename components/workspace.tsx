@@ -158,7 +158,7 @@ export function Workspace({
         if (card) router.refresh();
         seenChats.current = new Map(data.unread.map((item) => [item.channel, item.n]));
         if (card) announce(mentionsMe(card) ? `${card.actor ?? "Someone"} mentioned you` : "Card updated", `${card.taskTitle} · ${card.text}`);
-        else if (chat) announce("New chat message", chat.channel === "all" ? "Workspace" : data.members.find((member) => member.id === chat.channel)?.name ?? "Direct message");
+        else if (chat) announce("New chat message", chatName(chat.channel, user.id, data.members));
         setLive(data.members);
         setUnread(data.unread);
         setNotifications(data.notifications);
@@ -172,7 +172,7 @@ export function Workspace({
       alive = false;
       clearInterval(t);
     };
-  }, [announce, router, mentionsMe]);
+  }, [announce, router, mentionsMe, user.id]);
 
   const online = live.filter((m) => m.presence === "online").length;
   const unreadTotal = section === "chat" ? 0 : unread.reduce((n, u) => n + u.n, 0);
@@ -418,6 +418,7 @@ export function Workspace({
                     setSection("mine");
                   }}
                   unread={unread}
+                  meId={user.id}
                   members={live}
                   onOpenInbox={() => {
                     markCardNotificationsRead();
@@ -694,8 +695,12 @@ function FeedView({ feed: all, mentionsMe, onMarkRead, onMarkAll }: {
   );
 }
 
+/** A chat channel's name: the workspace, your private agent thread (a DM to yourself), or the other person. */
+const chatName = (channel: string, meId: string, members: { id: string; name: string }[]) =>
+  channel === "all" ? "Workspace" : channel === meId ? "Agent" : members.find((m) => m.id === channel)?.name ?? "Direct message";
+
 function NotificationMenu({
-  cards, due, today, mentionsMe, onOpenMine, unread, members, onOpenInbox, onOpenChat, onMarkRead, onOpenInboxPage, onEnableAlerts,
+  cards, due, today, mentionsMe, onOpenMine, unread, meId, members, onOpenInbox, onOpenChat, onMarkRead, onOpenInboxPage, onEnableAlerts,
 }: {
   cards: FeedItem[];
   due: MyTask[];
@@ -703,6 +708,7 @@ function NotificationMenu({
   mentionsMe: (e: FeedItem) => boolean;
   onOpenMine: () => void;
   unread: Unread[];
+  meId: string;
   members: MemberPresence[];
   onOpenInbox: () => void;
   onOpenChat: (channel: string) => void;
@@ -745,7 +751,7 @@ function NotificationMenu({
             <p className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Chat notifications</p>
             {unread.map((item) => (
               <button key={item.channel} role="menuitem" onClick={() => onOpenChat(item.channel)} className="w-full rounded-md px-2 py-2 text-left hover:bg-secondary">
-                <p className="text-xs font-medium">{item.channel === "all" ? "Workspace" : members.find((member) => member.id === item.channel)?.name ?? "Direct message"}</p>
+                <p className="text-xs font-medium">{chatName(item.channel, meId, members)}</p>
                 <p className="text-[11px] text-muted-foreground">{item.n} new message{item.n === 1 ? "" : "s"}</p>
               </button>
             ))}

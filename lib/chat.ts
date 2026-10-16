@@ -1,3 +1,4 @@
+import type { ChatTurn } from "./ai";
 import type { ChatMessage } from "./queries";
 
 /**
@@ -22,3 +23,20 @@ export function mergeMessages(prev: ChatMessage[], incoming: ChatMessage[], rese
 /** Highest id seen so far — the cursor the next poll asks after. */
 export const cursorOf = (messages: ChatMessage[], from: number) =>
   messages.reduce((max, m) => Math.max(max, m.id), from);
+
+/** "@agent" anywhere in a message, as its own word, calls the AI agent into the conversation. */
+export const AGENT_MENTION = /(^|\s)@agent\b/i;
+
+/** Chat rows as model turns: the agent's own lines are assistant turns, same-role runs merged, leading agent lines dropped. */
+export function turnsOf(rows: { agent: boolean; body: string; name: string }[]): ChatTurn[] {
+  const turns: ChatTurn[] = [];
+  for (const r of rows) {
+    if (!r.body.trim()) continue;
+    const role = r.agent ? "assistant" : "user";
+    const content = r.agent ? r.body : `${r.name}: ${r.body}`;
+    const last = turns.at(-1);
+    if (last?.role === role) last.content += `\n${content}`;
+    else if (turns.length || role === "user") turns.push({ role, content });
+  }
+  return turns;
+}

@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { currentUser } from "@/lib/auth";
 import { get, run, transaction } from "@/lib/db";
 import { conversation, listMembersWithPresence, markRead, unreadCounts } from "@/lib/queries";
+import { AGENT_MENTION } from "@/lib/chat";
+import { answerInChat } from "@/lib/chat-agent";
 
 /**
  * Chat runs on a poll, not a socket. A self-hosted single instance does not
@@ -76,11 +78,12 @@ export async function POST(req: Request) {
     })),
   );
 
+  const recipient = to && to !== "all" ? to : null;
   const now = new Date().toISOString();
   await transaction(async () => {
     const inserted = await get<{ id: number }>(
       "INSERT INTO messages (workspace_id, author_id, recipient_id, body, created_at) VALUES (?,?,?,?,?) RETURNING id",
-      me.workspace_id, me.id, to && to !== "all" ? to : null, text, now,
+      me.workspace_id, me.id, recipient, text, now,
     );
     for (const f of saved) {
       await run(
@@ -89,6 +92,9 @@ export async function POST(req: Request) {
       );
     }
   });
+  // The private agent thread (a DM to yourself) always answers; elsewhere only on "@agent".
+  // After the response, so sending never waits on the model; the poll brings the reply in.
+  if (recipient === me.id || AGENT_MENTION.test(text)) after(() => answerInChat(me, recipient));
 
   return new NextResponse(null, { status: 204 });
 }
@@ -102,13 +108,13 @@ export async function PATCH(req: Request) {
   if (!id || !text) return new NextResponse("Bad request", { status: 400 });
   if (text.length > MAX_BODY) return new NextResponse("Message too long", { status: 413 });
 
-  const row = await get<{ author_id: string; created_at: string }>(
-    "SELECT author_id, created_at FROM messages WHERE id = ?",
+  const row = await get<{ author_id: string; created_at: string; agent: boolean }>(
+    "SELECT author_id, created_at, agent FROM messages WHERE id = ?",
     id,
   );
 
   if (!row) return new NextResponse("Not found", { status: 404 });
-  if (row.author_id !== me.id) return new NextResponse("Not your message", { status: 403 });
+  if (row.author_id !== me.id || row.agent) return new NextResponse("Not your message", { status: 403 });
   if (Date.now() - new Date(row.created_at).getTime() > EDIT_WINDOW_MS) {
     return new NextResponse("Edit window closed", { status: 403 });
   }
