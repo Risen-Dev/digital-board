@@ -77,13 +77,14 @@ Requires **Node 22+** and **PostgreSQL 14+** (verified on 16). For development,
 | **Inbound webhook** | One URL + token per project (Settings → Projects → the project). Zapier, Make, a form tool or `curl` POSTs JSON or form fields (`title`, `description`, `label`, `priority`, `due_date`, `column`) and a card is created. See [Integrations](#integrations). |
 | **Email-to-ticket** | Point Postmark, SendGrid Inbound Parse or Mailgun at the inbound webhook URL (`&token=`). Each email becomes a card; a reply from the same sender (subject with the card key, or the same subject after `Re:`) is appended to that card. See [Integrations](#integrations). |
 | **Calendar feed** | Calendar view → Subscribe gives a per-project iCal link. Google Calendar, Apple Calendar or Outlook subscribe to it and show every task with a due date as an all-day event. Managers can reset the link. See [Integrations](#integrations). |
+| **Outgoing webhook** | The project POSTs a signed JSON message to one URL when a card is created, moved, edited or deleted. Slack, Discord and Google Chat incoming webhooks work without glue code. See [Integrations](#integrations). |
 | **Access** | Per-project roles — admin, editor, viewer. A workspace admin picks them while adding a member and changes them per project in Settings. A project you hold no role in is not listed and its data never reaches your browser. Enforced server-side in every action, not just hidden in the UI. |
 | **Phones** | Below 768px the sidebar becomes a drawer and the header goes icon-only. |
 
 ## Integrations
 
-All four live under `app/api/integrations/`. They run without a login session
-and check a per-project secret instead. The sender (GitHub, Zapier, a mail
+The incoming ones live under `app/api/integrations/`. They run without a login
+session and check a per-project secret instead. The sender (GitHub, Zapier, a mail
 service) must reach the server over the public internet, so use the public HTTPS
 address of the board, not `localhost`.
 
@@ -171,6 +172,48 @@ Anyone who has it can read those tasks, so a project admin can **Reset link** to
 revoke old copies. Calendar apps refresh on their own schedule (Google: every
 few hours).
 
+### Outgoing webhook
+
+The other direction: the board tells another app when a card changes.
+
+1. Settings → Projects → the project → **Outgoing webhook**: paste a URL, pick
+   the events, and click **Save**. The signing secret is shown once.
+2. Click **Send test** to send a `ping`. The section shows the last delivery's
+   HTTP status.
+
+| Event | Sent when |
+|---|---|
+| `task.created` | A card is created: in the UI, by the agent, the inbound webhook or an email. |
+| `task.moved` | A card moves to another column: by drag, the agent or the GitHub webhook. Reordering within a column is not sent. |
+| `task.updated` | Title, details, priority, assignee or due date change, or an email reply is appended. |
+| `task.deleted` | A card is deleted. |
+
+Each delivery is a `POST` with `Content-Type: application/json`:
+
+```json
+{
+  "event": "task.moved",
+  "at": "2026-10-16T08:00:00.000Z",
+  "text": "WEB-42 \"Login page\": Moved from Todo to In Review by Ada · Web App",
+  "content": "…same as text…",
+  "project": { "id": "…", "name": "Web App", "key": "WEB" },
+  "task": { "id": "…", "key": "WEB-42", "title": "Login page", "description": null, "label": "Feature",
+            "priority": "high", "dueDate": "2026-11-01", "column": "In Review", "assignee": "Ada" },
+  "change": "Moved from Todo to In Review",
+  "actor": "Ada"
+}
+```
+
+- `text` (Slack, Google Chat, Mattermost) and `content` (Discord) hold one
+  readable line, so a chat app's incoming-webhook URL works as is.
+- `actor` is `null` for changes made by a webhook or an email.
+- Headers: `X-Board-Event: <event>` and `X-Board-Signature: sha256=<hex>`. The
+  signature is the HMAC-SHA256 of the raw body with the signing secret, the same
+  scheme GitHub uses, so check it before trusting the body.
+- Each delivery is tried once, with a 5-second timeout, after the change is
+  saved. Failures are not retried; Settings shows the last status (`200`,
+  `timeout`, `unreachable`…).
+
 ## Configuration
 
 | Variable | Default | Purpose |
@@ -251,7 +294,8 @@ transaction and rolls back.
 No self-service password reset. Chat polls every 3 seconds rather than using a
 socket, and has no deletion, reactions or threads. The project agent's chat is
 not saved — it is gone after a reload. The inbound webhook only creates cards,
-email-to-ticket sends no replies, and calendar apps refresh the iCal feed on
+the outgoing webhook does not retry failed deliveries, email-to-ticket sends
+no replies, and calendar apps refresh the iCal feed on
 their own schedule (Google: every few hours).
 
 Full list in the [docs](/docs).

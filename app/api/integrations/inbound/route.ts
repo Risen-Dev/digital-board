@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { all, get, run, transaction } from "@/lib/db";
 import { keysIn } from "@/lib/github-events";
 import { addressOf, emailOf, parseInbound } from "@/lib/inbound";
+import { notify } from "@/lib/outgoing";
 import { nextTaskNumber } from "@/lib/tasks";
 
 const sha256 = (s: string) => createHash("sha256").update(s).digest();
@@ -59,6 +60,7 @@ export async function POST(req: Request) {
         await run("UPDATE tasks SET description = ? WHERE id = ?", [card.description, reply].join("\n\n"), card.id);
         await run("INSERT INTO task_events (task_id, actor_id, text, at) VALUES (?, NULL, ?, ?)", card.id, `Email reply from ${email.from}`, at);
       });
+      await notify("task.updated", card.id, `Email reply from ${email.from}`, null);
       revalidatePath("/board");
       return NextResponse.json({ ok: true, id: card.id, key: card.key, replied: true });
     }
@@ -86,6 +88,7 @@ export async function POST(req: Request) {
     await run("INSERT INTO task_events (task_id, actor_id, text, at) VALUES (?, NULL, ?, ?)", id, email ? `Created from email by ${email.from}` : "Created by inbound webhook", at);
     return n;
   });
+  await notify("task.created", id, email ? `Created from email by ${email.from}` : "Created by inbound webhook", null);
   revalidatePath("/board");
   return NextResponse.json({ ok: true, id, key: `${row.key}-${number}`, column: column.title }, { status: 201 });
 }

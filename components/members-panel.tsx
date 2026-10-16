@@ -3,7 +3,8 @@
 import { startTransition, useActionState, useEffect, useEffectEvent, useRef, useState, useSyncExternalStore, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, FolderKanban, FolderPlus, KeyRound, Plus, Settings2, Sparkles, Trash2, UserRound, Users, X } from "lucide-react";
-import { changeMyPassword, fetchAiModels, rotateGithubWebhook, rotateInboundToken, saveGithub, setProjectKey, saveAiConfig, deleteProject, inviteMember, renameProject, renameWorkspace, setMemberPassword, setProjectMember } from "@/lib/actions";
+import { OUTGOING_EVENTS } from "@/lib/outgoing-events";
+import { changeMyPassword, fetchAiModels, rotateGithubWebhook, rotateInboundToken, saveGithub, saveOutgoing, testOutgoing, setProjectKey, saveAiConfig, deleteProject, inviteMember, renameProject, renameWorkspace, setMemberPassword, setProjectMember } from "@/lib/actions";
 import { initials } from "@/lib/board";
 import type { MemberPresence, Project, ProjectMember } from "@/lib/queries";
 import { Avatar } from "./avatar";
@@ -411,6 +412,7 @@ function ProjectDetail({ project, memberId, presence, isAdmin, assignments, onBa
 
       {canRename && <GithubSettings project={project} />}
       {canRename && <InboundWebhook project={project} />}
+      {canRename && <OutgoingWebhook key={project.id} project={project} />}
 
       {isAdmin && (
         <div className="mt-8 flex items-center gap-3 rounded-lg border border-[rgba(239,68,68,0.3)] px-3 py-2.5">
@@ -613,6 +615,105 @@ function InboundWebhook({ project }: { project: Project }) {
           </button>
         </div>
       </div>
+    </section>
+  );
+}
+
+const EVENT_LABEL: Record<(typeof OUTGOING_EVENTS)[number], string> = {
+  "task.created": "Card created", "task.moved": "Moved to another column", "task.updated": "Edited", "task.deleted": "Deleted",
+};
+
+/**
+ * Outgoing webhook: POSTs a signed JSON body to one URL when a card changes. The body
+ * also has `text`/`content`, so Slack, Discord and Google Chat incoming webhooks work as is.
+ */
+function OutgoingWebhook({ project }: { project: Project }) {
+  const router = useRouter();
+  const saved = project.outgoing;
+  const [url, setUrl] = useState(saved?.url ?? "");
+  const [events, setEvents] = useState<string[]>(saved?.events ?? [...OUTGOING_EVENTS]);
+  const [secret, setSecret] = useState<string | null>(null);
+  const [msg, setMsg] = useState<{ ok?: string; error?: string } | null>(null);
+  const [busy, startBusy] = useTransition();
+
+  const save = (nextUrl: string, rotate = false) =>
+    startBusy(async () => {
+      const res = await saveOutgoing(project.id, nextUrl, events, rotate);
+      setMsg(res);
+      if ("secret" in res && res.secret) setSecret(res.secret);
+      if (!nextUrl) { setUrl(""); setSecret(null); }
+      router.refresh();
+    });
+  const test = () =>
+    startBusy(async () => {
+      const res = await testOutgoing(project.id);
+      setMsg("error" in res ? res : typeof res.status === "number" && res.status < 300 ? { ok: `Test sent: ${res.status}.` } : { error: `Test failed: ${res.status}.` });
+      router.refresh();
+    });
+  const last = saved?.last;
+
+  return (
+    <section className="mt-8">
+      <h3 className="mb-1 text-sm font-medium">Outgoing webhook</h3>
+      <form onSubmit={(e) => { e.preventDefault(); save(url); }} className="flex flex-col gap-3 rounded-lg border bg-card p-3">
+        <p className="text-[11px] text-muted-foreground">
+          When a card changes, this project POSTs JSON to the URL (event, project, task, change, actor). Paste a Slack, Discord or Google Chat
+          incoming-webhook URL to get a message per change, or your own endpoint. Each request is signed:{" "}
+          <span className="font-mono">X-Board-Signature: sha256=&lt;hmac of the body&gt;</span>.
+        </p>
+        <Field label="URL" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://hooks.slack.com/services/…" autoComplete="off" />
+        <fieldset className="flex flex-col gap-1.5">
+          <legend className="mb-1 text-xs font-medium">Send when a card is</legend>
+          {OUTGOING_EVENTS.map((e) => (
+            <label key={e} className="flex items-center gap-2 text-xs">
+              <input
+                type="checkbox"
+                checked={events.includes(e)}
+                onChange={(x) => setEvents(x.target.checked ? [...events, e] : events.filter((v) => v !== e))}
+              />
+              {EVENT_LABEL[e]} <span className="font-mono text-[10px] text-muted-foreground">{e}</span>
+            </label>
+          ))}
+        </fieldset>
+        {secret && (
+          <>
+            {row("Signing secret", secret)}
+            <p className="-mt-1 text-[11px] text-[var(--chart-3)]">Copy it now — it won&rsquo;t be shown again.</p>
+          </>
+        )}
+        {last && (
+          <p className="text-[11px] text-muted-foreground">
+            Last delivery: <span className="font-mono">{last.event}</span> →{" "}
+            <span className={typeof last.status === "number" && last.status < 300 ? "text-[var(--chart-2)]" : "text-[var(--chart-7)]"}>{last.status}</span>{" "}
+            at {last.at.slice(0, 16).replace("T", " ")} UTC
+          </p>
+        )}
+        {msg?.error && <FormError error={msg.error} />}
+        {msg?.ok && <p className="text-xs text-[var(--chart-2)]">{msg.ok}</p>}
+        <div className="flex flex-wrap items-center gap-2">
+          <button disabled={busy || !url.trim()} className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">
+            {busy ? "Saving…" : "Save"}
+          </button>
+          {saved && (
+            <>
+              <button type="button" disabled={busy} onClick={test} className="rounded-md border px-3 py-2 text-xs hover:bg-secondary disabled:opacity-50">
+                Send test
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => confirm("Make a new signing secret? Receivers checking the old one will reject deliveries.") && save(url, true)}
+                className="rounded-md border px-3 py-2 text-xs text-muted-foreground hover:bg-secondary disabled:opacity-50"
+              >
+                New secret
+              </button>
+              <button type="button" disabled={busy} onClick={() => save("")} className="rounded-md border px-3 py-2 text-xs text-muted-foreground hover:bg-secondary disabled:opacity-50">
+                Turn off
+              </button>
+            </>
+          )}
+        </div>
+      </form>
     </section>
   );
 }
