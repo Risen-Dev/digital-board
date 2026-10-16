@@ -534,7 +534,7 @@ export function Workspace({
         ) : view === 1 ? (
           <ListView columns={filtered} onOpen={setEditing} />
         ) : view === 2 ? (
-          <CalendarView columns={filtered} onOpen={setEditing} />
+          <CalendarView columns={filtered} projectId={project.id} onOpen={setEditing} />
         ) : (
           stats && <AnalyticsView stats={stats} />
         )}

@@ -410,6 +410,21 @@ export async function rotateInboundToken(projectId: string) {
   return { token };
 }
 
+/**
+ * The project's iCal feed token, made on first use. Anyone who can open the project
+ * may read it; `reset` (managers only) makes a new one so old links stop working.
+ */
+export async function calendarFeedToken(projectId: string, reset = false) {
+  const user = await requireUser();
+  if (reset ? !await canManage(user, projectId) : !await projectRole(user, projectId)) return { error: "You cannot do that in this project." };
+  // COALESCE keeps two first opens from handing out different tokens.
+  const row = await get<{ ical_token: string }>(
+    `UPDATE projects SET ical_token = ${reset ? "?" : "COALESCE(ical_token, ?)"} WHERE id = ? RETURNING ical_token`,
+    randomBytes(24).toString("hex"), projectId,
+  );
+  return { token: row!.ical_token };
+}
+
 /** Changes the project's task key prefix; existing tasks keep their numbers, so WEB-42 becomes APP-42. */
 export async function setProjectKey(projectId: string, key: string) {
   const user = await requireUser();

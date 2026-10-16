@@ -226,7 +226,8 @@ An agent reads this file to (a) build the template picker and seed data, or
 - 🟡 Attachments on tasks (they exist for chat messages, not cards).
 - 🔴 Campaign grouping (a parent/epic or a second "campaign" field).
 - 🔴 Approver field and an "Approve / Request changes" action in Review.
-- 🔴 Later: iCal export, performance numbers per published card.
+- ✅ iCal feed: Calendar view → Subscribe (`app/api/integrations/ical`, token link per project, dated tasks as all-day events).
+- 🔴 Later: performance numbers per published card.
 
 **Agent prompt**
 > Seed a content marketing project named "{name}": columns Ideas, Planned, Writing / Design, Review, Scheduled, Published. Plan {n} posts for the next {weeks} weeks across the channels {channels}; set the label to the channel and the due date to the publish date, and spread them evenly across the calendar. On the canvas, draw the content workflow: idea → brief → draft → approval (changes loop back to draft) → schedule → publish → measure. Answer in the same language as my message.
@@ -466,7 +467,7 @@ The goal: developers don't drag cards by hand. Git and CI events move the cards 
 2. **Custom fields per project** 🔴: deal value, requester, SLA, candidate email, interview date. The biggest gap for Sales, Support and HR. Shape: `project_fields(id, project_id, name, type)` + `task_field_values(task_id, field_id, value)`; types `text | number | date | email | url | select`.
 3. **Attachments on tasks** 🟡: storage already exists for chat (`attachments` table, `/api/files/[id]`); point it at tasks as well.
 4. **Multiple labels per task** 🟡: `label` is a single TEXT today. Templates work with one label, so add this only if users ask.
-5. **Integrations**: ✅ Git/CI (Tech). ✅ Generic inbound webhook (`app/api/integrations/inbound`, bearer token per project) creates a card from any JSON/form POST, so Zapier/Make/form tools cover intake for every template. ✅ Email intake (Support) on top of it. 🔴 iCal export (Marketing).
+5. **Integrations**: ✅ Git/CI (Tech). ✅ Generic inbound webhook (`app/api/integrations/inbound`, bearer token per project) creates a card from any JSON/form POST, so Zapier/Make/form tools cover intake for every template. ✅ Email intake (Support) on top of it. ✅ iCal feed (Marketing): Calendar view → Subscribe.
 
 Later, when asked for: checklists/subtasks, dependencies, a per-template default view (Calendar for Marketing), per-template analytics (pipeline value, SLA, conversion).
 

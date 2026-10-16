@@ -5,6 +5,8 @@ import { parseFlow } from "./canvas/flow.ts";
 import { columnFor, keysIn, planEvent } from "./github-events.ts";
 import { resolveActions } from "./board-agent.ts";
 import { addressOf, emailOf, parseInbound } from "./inbound.ts";
+
+import { toIcal } from "./ical.ts";
 import examples from "./template-examples.json" with { type: "json" };
 
 const mk = (id: string, title: string, n: number): Column["tasks"][number] => ({
@@ -184,5 +186,18 @@ assert.equal(emailOf({ from: "a@b.c", subject: "s", html: "<p>Hi<br>there</p><st
 assert.equal(emailOf({ title: "card", from: "a@b.c" }), null, "a card body is not an email");
 assert.equal(emailOf({ subject: "no sender" }), null);
 assert.equal(addressOf("Ada L <ADA@x.io>"), "ada@x.io");
+
+// iCal feed: all-day event ending the next day, escaping, CRLF, 75-octet folding
+const ics = toIcal("Web; App", [
+  { id: "t1", key: "WEB-1", title: "Ship, now", description: "a\nb", dueDate: "2026-12-31", column: "Done" },
+  { id: "t2", key: "WEB-2", title: "é".repeat(60), description: null, dueDate: "2026-01-05", column: "Todo" },
+], new Date("2026-10-16T08:00:00.123Z"));
+assert.ok(ics.includes("X-WR-CALNAME:Web\\; App\r\n"));
+assert.ok(ics.includes("DTSTART;VALUE=DATE:20261231\r\nDTEND;VALUE=DATE:20270101\r\n"), "ends next day, across a year");
+assert.ok(ics.includes("SUMMARY:WEB-1 Ship\\, now"));
+assert.ok(ics.includes("DESCRIPTION:Column: Done\\n\\na\\nb"));
+assert.ok(ics.includes("DTSTAMP:20261016T080000Z"));
+assert.ok(ics.split("\r\n").every((l) => new TextEncoder().encode(l).length <= 75), "folded to 75 octets");
+assert.ok(!ics.replace(/\r\n/g, "").includes("\n"), "only CRLF line ends");
 
 console.log("board.check ok");
