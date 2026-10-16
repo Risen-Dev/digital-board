@@ -33,6 +33,9 @@ const toTask = (r: TaskRow): Task => ({
   comments: r.comments,
 });
 
+/** The project's done column for `p` (projects): the chosen one, else its last column. */
+export const DONE_COLUMN = `COALESCE(p.done_column_id, (SELECT dc.id FROM columns dc WHERE dc.project_id = p.id ORDER BY dc.position DESC LIMIT 1))`;
+
 /** Card columns shared by the board and My Tasks; `t`, `p` are tasks and projects. */
 const TASK_COLS = `t.id, t.column_id, t.title, t.description, t.label, t.priority, t.due_date, t.checklist, t.repeat,
             p.key || '-' || t.number AS task_key,
@@ -41,9 +44,9 @@ const TASK_COLS = `t.id, t.column_id, t.title, t.description, t.label, t.priorit
             (SELECT COUNT(*) FROM task_events e WHERE e.task_id = t.id AND e.kind = 'comment') AS comments`;
 
 /** `repo` / `tokenHint` describe the GitHub link; the token itself never leaves the server. */
-export type Project = { id: string; name: string; key: string; repo: string | null; tokenHint: string | null; webhookHint: string | null; inbound: boolean;
+export type Project = { id: string; name: string; key: string; doneColumnId: string | null; repo: string | null; tokenHint: string | null; webhookHint: string | null; inbound: boolean;
   outgoing: { url: string; events: string[]; last?: { status: number | string; event: string; at: string } } | null };
-const PROJECT_COLS = `p.id, p.name, p.key, p.github::jsonb ->> 'repo' AS repo, right(p.github::jsonb ->> 'token', 4) AS "tokenHint",
+const PROJECT_COLS = `p.id, p.name, p.key, p.done_column_id AS "doneColumnId", p.github::jsonb ->> 'repo' AS repo, right(p.github::jsonb ->> 'token', 4) AS "tokenHint",
   right(p.github::jsonb ->> 'webhookSecret', 4) AS "webhookHint", p.inbound_token IS NOT NULL AS inbound,
   p.outgoing - 'secret' AS outgoing`;
 
@@ -155,16 +158,16 @@ export async function markActivityItemsRead(userId: string, eventIds: number[]) 
 }
 
 export const myTasks = async (userId: string) =>
-  (await all<TaskRow & { column_title: string; column_color: string; project_name: string }>(
+  (await all<TaskRow & { column_title: string; column_color: string; project_name: string; done: boolean }>(
     `SELECT ${TASK_COLS},
-            c.title AS column_title, c.color AS column_color, p.name AS project_name
+            c.title AS column_title, c.color AS column_color, p.name AS project_name, c.id = ${DONE_COLUMN} AS done
        FROM tasks t
        JOIN columns c ON c.id = t.column_id
        JOIN projects p ON p.id = c.project_id
       WHERE t.archived_at IS NULL AND EXISTS (SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id AND ta.user_id = ?)
       ORDER BY t.due_date IS NULL, t.due_date, t.position`,
     userId,
-  )).map((r) => ({ ...toTask(r), columnTitle: r.column_title, columnColor: r.column_color, projectName: r.project_name }));
+  )).map((r) => ({ ...toTask(r), columnTitle: r.column_title, columnColor: r.column_color, projectName: r.project_name, done: r.done }));
 
 export async function analytics(projectId: string) {
   const byColumn = await all<{ title: string; color: string; n: number }>(
@@ -194,7 +197,11 @@ export async function analytics(projectId: string) {
     projectId,
   );
   const total = byColumn.reduce((s, c) => s + c.n, 0);
-  return { byColumn, byPriority, byAssignee, activity14d, total };
+  const done = (await get<{ n: number }>(
+    `SELECT COUNT(t.id) n FROM projects p JOIN tasks t ON t.column_id = ${DONE_COLUMN} AND t.archived_at IS NULL WHERE p.id = ?`,
+    projectId,
+  ))!.n;
+  return { byColumn, byPriority, byAssignee, activity14d, total, done };
 }
 
 export type CanvasMeta = { id: string; name: string; updated_at: string };

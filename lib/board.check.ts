@@ -227,3 +227,18 @@ assert.equal(nextDue("2026-10-28", "weekly"), "2026-11-04");
 assert.equal(nextDue("2026-01-31", "monthly"), "2026-02-28");
 assert.equal(nextDue("2028-01-31", "monthly"), "2028-02-29");
 assert.equal(nextDue("2026-12-15", "monthly"), "2027-01-15");
+
+// project agent: checklist appends to what is there, comment and archive find the card by key
+{
+  const cols: Column[] = [{ id: "bl", title: "Backlog", color: "", tasks: [{ ...mk("t1", "bl", 1), key: "WEB-1", checklist: [{ text: "a", done: true }] }] }];
+  const { ops, errors } = resolveActions([
+    { op: "checklist", task: "web-1", items: ["b", " ", 3] },
+    { op: "comment", task: "WEB-1", text: "Looks good @Ada" },
+    { op: "archive", task: "task 1" },
+    { op: "archive", task: "WEB-9" },
+    { op: "comment", task: "WEB-1", text: "" },
+  ], cols, []);
+  assert.deepEqual(ops[0], { op: "checklist", taskId: "t1", items: [{ text: "a", done: true }, { text: "b", done: false }], summary: "Added 1 checklist item to WEB-1" });
+  assert.deepEqual(ops.slice(1).map((o) => o.op), ["comment", "archive"]);
+  assert.equal(errors.length, 2);
+}

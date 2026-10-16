@@ -10,6 +10,7 @@ import { broadcast } from "./canvas/hub";
 import { projectRole } from "./canvas/guard";
 import { notify } from "./outgoing";
 import { nextTaskNumber, relocateTask } from "./tasks";
+import { DONE_COLUMN } from "./queries";
 import type { Flow } from "./canvas/flow";
 import examplesData from "./template-examples.json";
 
@@ -305,11 +306,10 @@ export async function moveTask(taskId: string, toColumnId: string, toIndex: numb
 }
 
 /**
- * A repeating card that reaches the project's last column gets its next copy in the
+ * A repeating card that reaches the project's done column gets its next copy in the
  * first column, due one period later, with the checklist unticked. The rule moves to
  * the copy, so dragging the old card back and forth never spawns a second one.
  */
-// ponytail: "last column = done"; add a per-project done column if templates disagree (Sales ends in Lost).
 async function repeatTask(taskId: string, toColumnId: string, user: User) {
   const task = await get<{ title: string; description: string | null; label: string | null; priority: string; due_date: string | null;
     repeat: Repeat | null; checklist: CheckItem[]; project_id: string; key: string }>(
@@ -318,18 +318,22 @@ async function repeatTask(taskId: string, toColumnId: string, user: User) {
     taskId,
   );
   if (!task?.repeat) return;
-  const ends = (await all<{ id: string }>("SELECT id FROM columns WHERE project_id = ? ORDER BY position", task.project_id)).map((c) => c.id);
-  if (toColumnId !== ends.at(-1) || ends[0] === toColumnId) return;
+  const { first, done } = (await get<{ first: string; done: string }>(
+    `SELECT (SELECT id FROM columns WHERE project_id = p.id ORDER BY position LIMIT 1) AS first, ${DONE_COLUMN} AS done
+       FROM projects p WHERE p.id = ?`,
+    task.project_id,
+  ))!;
+  if (toColumnId !== done || first === toColumnId) return;
 
   const id = randomUUID();
   const due = nextDue(task.due_date ?? new Date().toISOString().slice(0, 10), task.repeat);
   await transaction(async () => {
     await run("UPDATE tasks SET repeat = NULL WHERE id = ?", taskId);
-    const next = (await get<{ n: number }>("SELECT COALESCE(MAX(position) + 1, 0) n FROM tasks WHERE column_id = ?", ends[0]))!.n;
+    const next = (await get<{ n: number }>("SELECT COALESCE(MAX(position) + 1, 0) n FROM tasks WHERE column_id = ?", first))!.n;
     await run(
       `INSERT INTO tasks (id, column_id, title, description, label, priority, due_date, repeat, checklist, position, number, created_at)
        VALUES (?,?,?,?,?,?,?,?,?::jsonb,?,?,?)`,
-      id, ends[0], task.title, task.description, task.label, task.priority, due, task.repeat,
+      id, first, task.title, task.description, task.label, task.priority, due, task.repeat,
       JSON.stringify(task.checklist.map((i) => ({ ...i, done: false }))), next, await nextTaskNumber(task.project_id), now(),
     );
     await run("INSERT INTO task_assignees (task_id, user_id) SELECT ?, user_id FROM task_assignees WHERE task_id = ?", id, taskId);
@@ -407,6 +411,30 @@ export async function archiveTask(id: string, archived: boolean) {
   });
   await notify("task.updated", id, archived ? "Archived" : "Restored from the archive", user.name);
   revalidatePath("/board");
+}
+
+/** Adds one assignee and keeps the others (bulk assign in List view). */
+export async function addAssignee(taskId: string, userId: string) {
+  const user = await requireUser();
+  if (!await writableTask(user, taskId) || await invalidTaskFields(user, "low", [userId], null)) return;
+  const added = await get("INSERT INTO task_assignees (task_id, user_id) VALUES (?,?) ON CONFLICT DO NOTHING RETURNING user_id", taskId, userId);
+  if (!added) return;
+  const name = (await get<{ name: string }>("SELECT name FROM users WHERE id = ?", userId))!.name;
+  await logEvent(taskId, user.id, `Assigned to ${name}`);
+  await notify("task.updated", taskId, `Assigned to ${name}`, user.name);
+  revalidatePath("/board");
+}
+
+/**
+ * List view's bulk bar: one request for every selected card, each going through the
+ * single-card action so permissions, history and webhooks stay the same.
+ */
+export async function bulkTasks(ids: string[], op: { move?: string; assign?: string; archive?: boolean }) {
+  for (const id of ids.slice(0, 500)) {
+    if (op.move) await moveTask(id, op.move, Number.MAX_SAFE_INTEGER);
+    if (op.assign) await addAssignee(id, op.assign);
+    if (op.archive) await archiveTask(id, true);
+  }
 }
 
 export async function fetchArchived(projectId: string) {
@@ -677,6 +705,16 @@ export async function deleteColumn(id: string) {
   const last = (await get<{ n: number }>("SELECT COUNT(*) n FROM columns WHERE project_id = ?", projectId))!.n;
   if (last <= 1) return { error: "A board needs at least one column." };
   await run("DELETE FROM columns WHERE id = ?", id);
+  revalidatePath("/board");
+  return { ok: true };
+}
+
+/** Marks the column that counts as done; null goes back to "the last column". */
+export async function setDoneColumn(projectId: string, columnId: string | null) {
+  const user = await requireUser();
+  if (!await canManage(user, projectId)) return { error: "You cannot manage this project." };
+  if (columnId && await projectOfColumn(columnId) !== projectId) return { error: "Column not found." };
+  await run("UPDATE projects SET done_column_id = ? WHERE id = ?", columnId, projectId);
   revalidatePath("/board");
   return { ok: true };
 }

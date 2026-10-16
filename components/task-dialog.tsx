@@ -120,7 +120,7 @@ export function TaskDialog({ task, columns, members, defaultColumnId, links, onC
                 </label>
               ))}
             </div>
-            <p className="text-[11px] text-muted-foreground">Repeating cards get their next copy when moved to the last column.</p>
+            <p className="text-[11px] text-muted-foreground">Repeating cards get their next copy when moved to the done column.</p>
           </fieldset>
 
           <FormError error={state?.error} />
