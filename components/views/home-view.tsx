@@ -33,10 +33,10 @@ export function HomeView({
   onGo: (section: "board" | "canvas" | "mine" | "inbox") => void;
 }) {
   const router = useRouter();
-  const done = stats?.byColumn.find((c) => /done|complete/i.test(c.title))?.n ?? 0;
+  const done = stats?.done ?? 0;
   const total = stats?.total ?? 0;
-  const overdue = mine.filter((t) => t.dueDate && t.dueDate < today).length;
-  const dueToday = mine.filter((t) => t.dueDate === today).length;
+  const overdue = mine.filter((t) => !t.done && t.dueDate && t.dueDate < today).length;
+  const dueToday = mine.filter((t) => !t.done && t.dueDate === today).length;
   const maxCol = Math.max(1, ...(stats?.byColumn.map((c) => c.n) ?? [1]));
 
   return (

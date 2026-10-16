@@ -8,9 +8,9 @@ import {
   type CollisionDetection, type DragEndEvent, type DragOverEvent, type DragStartEvent,
 } from "@dnd-kit/core";
 import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { Pencil, Plus } from "lucide-react";
+import { CircleCheck, Pencil, Plus } from "lucide-react";
 import { columnOf, PALETTE, placeTask, type Column, type Task } from "@/lib/board";
-import { addColumn, deleteColumn, moveColumn, moveTask, updateColumn } from "@/lib/actions";
+import { addColumn, deleteColumn, moveColumn, moveTask, setDoneColumn, updateColumn } from "@/lib/actions";
 import type { TaskLinks } from "@/lib/github";
 import { SortableTaskCard, TaskCard } from "../task-card";
 import { ColumnEditor } from "../column-editor";
@@ -49,16 +49,19 @@ function DropZone({ id, children }: { id: string; children: React.ReactNode }) {
 }
 
 export function BoardView({
-  columns, projectId, links = {}, onOpen, onAdd,
+  columns, projectId, doneColumnId, links = {}, onOpen, onAdd,
 }: {
   columns: Column[];
   projectId: string;
+  /** The chosen done column; null means the last one. */
+  doneColumnId: string | null;
   /** Task key → linked GitHub items, when the project has a repo. */
   links?: Record<string, TaskLinks>;
   onOpen: (t: Task) => void;
   onAdd: (columnId: string) => void;
 }) {
   const router = useRouter();
+  const doneId = doneColumnId ?? columns.at(-1)?.id;
   const [editingColumn, setEditingColumn] = useState<string | null>(null);
   const [addingColumn, setAddingColumn] = useState(false);
   // Optimistic copy so the drag feels instant; the server is the source of truth.
@@ -154,6 +157,7 @@ export function BoardView({
                     className="group/col flex min-w-0 items-center gap-1"
                   >
                     <span className="truncate text-sm font-semibold">{col.title}</span>
+                    {col.id === doneId && <CircleCheck className="size-3 shrink-0 text-muted-foreground" aria-label="Done column" />}
                     <Pencil className="size-3 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover/col:opacity-100" />
                   </button>
                   <span className="shrink-0 rounded-full border bg-secondary px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
@@ -183,6 +187,8 @@ export function BoardView({
                       return r;
                     }}
                     onMove={async (d) => { await moveColumn(col.id, d); router.refresh(); }}
+                    done={col.id === doneId}
+                    onToggleDone={() => setDoneColumn(projectId, col.id === doneColumnId ? null : col.id).then(() => router.refresh())}
                     onClose={() => setEditingColumn(null)}
                   />
                 )}

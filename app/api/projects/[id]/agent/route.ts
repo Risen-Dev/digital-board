@@ -3,7 +3,7 @@ import { guard } from "@/lib/canvas/guard";
 import { get, run } from "@/lib/db";
 import { agentLabel, aiConfig, askText, jsonOf, type ChatTurn } from "@/lib/ai";
 import { getBoard, listMembers } from "@/lib/queries";
-import { addColumn, createCanvas, createTask, moveTask, updateTask } from "@/lib/actions";
+import { addColumn, addComment, archiveTask, createCanvas, createTask, moveTask, setChecklist, updateTask } from "@/lib/actions";
 import { PROJECT_SYSTEM, boardBrief, resolveActions, type AgentOp, type TaskFields } from "@/lib/board-agent";
 import { parseFlow } from "@/lib/canvas/flow";
 import { PALETTE } from "@/lib/board";
@@ -75,6 +75,18 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
             if (!id) return "you cannot edit this project";
             // Same `seed` a template sheet carries: the first editor tab to open the sheet draws it.
             await run("UPDATE canvases SET snapshot = ? WHERE id = ?", JSON.stringify({ elements: [], seed: { flow, by } }), id);
+            return null;
+          }
+          if (op.op === "checklist") {
+            await setChecklist(op.taskId, op.items);
+            return null;
+          }
+          if (op.op === "comment") {
+            const result = await addComment(op.taskId, op.text);
+            return "error" in result ? result.error ?? "failed" : null;
+          }
+          if (op.op === "archive") {
+            await archiveTask(op.taskId, true);
             return null;
           }
           if (op.op === "message") {

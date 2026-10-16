@@ -1,6 +1,6 @@
 // The project agent's pure half: what the model is told, and turning its answer into
 // task operations. Type-only imports, so `board.check.ts` can load it under strip-types.
-import type { Column, Member, Task } from "./board";
+import type { CheckItem, Column, Member, Task } from "./board";
 
 /** Fields the task actions take, already resolved to ids. `null` clears a field. */
 export type TaskFields = {
@@ -18,7 +18,11 @@ export type AgentOp =
   /** `flow` is still unvalidated: the route runs it through parseFlow, which this file can't import. */
   | { op: "sheet"; name: string; flow: unknown; summary: string }
   | { op: "message"; to: string | null; text: string; summary: string }
-  | { op: "column"; title: string; summary: string };
+  | { op: "column"; title: string; summary: string }
+  /** `items` is the whole new checklist: the existing items plus the added ones. */
+  | { op: "checklist"; taskId: string; items: CheckItem[]; summary: string }
+  | { op: "comment"; taskId: string; text: string; summary: string }
+  | { op: "archive"; taskId: string; summary: string };
 
 const PRIORITIES = ["low", "medium", "high"];
 const MAX_OPS = 50;
@@ -31,7 +35,10 @@ Always answer with ONE JSON object and nothing else:
   {"op": "update", "task": string, "title"?: string, "column"?: string, "priority"?: "low"|"medium"|"high", "assignee"?: string|null, "due"?: "YYYY-MM-DD"|null, "label"?: string|null, "description"?: string|null},
   {"op": "sheet", "name": string, "flow": {"nodes": [{"id": string, "label": string, "shape": "start"|"end"|"process"|"decision"|"data"}], "edges": [{"from": string, "to": string, "label"?: string}]}},
   {"op": "message", "to": "all" | string, "text": string},
-  {"op": "column", "title": string}
+  {"op": "column", "title": string},
+  {"op": "checklist", "task": string, "items": [string]},
+  {"op": "comment", "task": string, "text": string},
+  {"op": "archive", "task": string}
 ]}
 
 - "reply": a short message to the user, in the language they wrote in, saying what you did or answering the question.
@@ -41,13 +48,14 @@ Always answer with ONE JSON object and nothing else:
 - "sheet" creates a new canvas sheet with a flowchart (business process, workflow, negotiation steps…). One "start" node, at least one "end" node, "decision" for branching with labelled outgoing edges ("Yes"/"No"), short verb-phrase labels, 4–25 nodes. Changing a flow you made earlier means a new sheet with the complete updated flow.
 - "message" posts to the team chat as the user: "to" is "all" for the workspace channel or a member's name for a direct message. Only when the user asks you to send or tell someone something.
 - "column" adds a board column at the end.
+- "checklist" adds items to a card's checklist (existing items stay). "comment" posts a comment on a card as the user; "@Full Name" mentions a member. "archive" takes a card off the board; it can be restored later.
 - On "update", include only the fields that change. Resolve relative dates ("tomorrow", "next Friday") against today's date.
 - You cannot delete anything, change settings, members or roles, or read chat history: if asked, say so in the reply.`;
 
 /** The board as the model sees it, appended to the system prompt. */
 export function boardBrief(project: string, today: string, columns: Column[], members: Member[]) {
   const line = (t: Task) =>
-    `- ${t.key ?? "(no key)"} "${t.title}" · ${t.priority}${t.assignees.length ? ` · ${t.assignees.map((a) => a.name).join(", ")}` : ""}${t.dueDate ? ` · due ${t.dueDate}` : ""}${t.label ? ` · ${t.label}` : ""}`;
+    `- ${t.key ?? "(no key)"} "${t.title}"${t.checklist.length ? ` · checklist ${t.checklist.filter((i) => i.done).length}/${t.checklist.length}` : ""} · ${t.priority}${t.assignees.length ? ` · ${t.assignees.map((a) => a.name).join(", ")}` : ""}${t.dueDate ? ` · due ${t.dueDate}` : ""}${t.label ? ` · ${t.label}` : ""}`;
   // ponytail: whole board in the prompt, capped per column; search/tool calls if boards outgrow it.
   return [
     `Project: ${project}. Today: ${today}.`,
@@ -78,6 +86,7 @@ export function resolveActions(raw: unknown, columns: Column[], members: Member[
   const errors: string[] = [];
   const tasks = columns.flatMap((c) => c.tasks);
   const list = Array.isArray(raw) ? raw.slice(0, MAX_OPS) : [];
+  const findTask = (name: unknown) => tasks.find((t) => t.key && norm(t.key) === norm(name)) ?? pick(tasks, name, (t) => t.title);
 
   for (const a of list as Record<string, unknown>[]) {
     if (!a || typeof a !== "object") continue;
@@ -123,6 +132,25 @@ export function resolveActions(raw: unknown, columns: Column[], members: Member[
       ops.push({ op: "column", title, summary: `Added column "${title}"` });
       continue;
     }
+    if (a.op === "checklist" || a.op === "comment" || a.op === "archive") {
+      const task = findTask(a.task);
+      if (!task) { errors.push(`No task matches "${a.task}".`); continue; }
+      const name = task.key ?? `"${task.title}"`;
+      if (a.op === "archive") { ops.push({ op: "archive", taskId: task.id, summary: `Archived ${name}` }); continue; }
+      if (a.op === "comment") {
+        const body = text(a.text, 5000);
+        if (!body) { errors.push(`${name}: an empty comment was skipped.`); continue; }
+        ops.push({ op: "comment", taskId: task.id, text: body, summary: `Commented on ${name}` });
+        continue;
+      }
+      const added = (Array.isArray(a.items) ? a.items : []).map((i) => text(i, 300)).filter((i): i is string => !!i);
+      if (!added.length) { errors.push(`${name}: no checklist items given.`); continue; }
+      ops.push({
+        op: "checklist", taskId: task.id, items: [...task.checklist, ...added.map((t) => ({ text: t, done: false }))],
+        summary: `Added ${added.length} checklist item${added.length === 1 ? "" : "s"} to ${name}`,
+      });
+      continue;
+    }
 
     if (a.op === "create") {
       const title = text(a.title, 200);
@@ -144,7 +172,7 @@ export function resolveActions(raw: unknown, columns: Column[], members: Member[
         summary: `Created "${title}" in ${col.title}`,
       });
     } else if (a.op === "update") {
-      const task = tasks.find((t) => t.key && norm(t.key) === norm(a.task)) ?? pick(tasks, a.task, (t) => t.title);
+      const task = findTask(a.task);
       if (!task) { errors.push(`No task matches "${a.task}".`); continue; }
       const moveTo = columnId && columnId !== task.columnId ? columnId : null;
       ops.push({

@@ -8,6 +8,8 @@ export type Stats = {
   byAssignee: { name: string | null; color: string | null; n: number }[];
   activity14d: { day: string; n: number }[];
   total: number;
+  /** Cards in the project's done column. */
+  done: number;
 };
 
 /** Magnitude by category → horizontal bars, every bar directly labelled. */
@@ -37,7 +39,7 @@ function Tile({ label, value, hint }: { label: string; value: string | number; h
 }
 
 export function AnalyticsView({ stats }: { stats: Stats }) {
-  const done = stats.byColumn.find((c) => /done|selesai/i.test(c.title))?.n ?? 0;
+  const { done } = stats;
   const maxCol = Math.max(1, ...stats.byColumn.map((c) => c.n));
   const maxPerson = Math.max(1, ...stats.byAssignee.map((a) => a.n));
   const maxDay = Math.max(1, ...stats.activity14d.map((d) => d.n));

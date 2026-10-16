@@ -3,7 +3,7 @@
 import { PRIORITY_CFG, type Task } from "@/lib/board";
 import { Assignees } from "../task-card";
 
-export type MyTask = Task & { columnTitle: string; columnColor: string; projectName: string };
+export type MyTask = Task & { columnTitle: string; columnColor: string; projectName: string; done: boolean };
 
 const overdue = (d: string | null) => !!d && d < new Date().toISOString().slice(0, 10);
 
@@ -36,7 +36,7 @@ export function MyTasksView({ tasks, onOpen }: { tasks: MyTask[]; onOpen: (id: s
                   </p>
                 </div>
                 {t.dueDate && (
-                  <span className={`text-[11px] ${overdue(t.dueDate) ? "font-medium text-[var(--chart-7)]" : "text-muted-foreground"}`}>
+                  <span className={`text-[11px] ${!t.done && overdue(t.dueDate) ? "font-medium text-[var(--chart-7)]" : "text-muted-foreground"}`}>
                     {t.dueDate}
                   </span>
                 )}

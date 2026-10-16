@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowLeft, ArrowRight, Check, Trash2, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, CircleCheck, Trash2, X } from "lucide-react";
 import { PALETTE } from "@/lib/board";
 
 const NEUTRAL = "var(--muted-foreground)";
@@ -19,6 +19,8 @@ export function ColumnEditor({
   onSubmit,
   onDelete,
   onMove,
+  done,
+  onToggleDone,
   onClose,
 }: {
   title?: string;
@@ -28,6 +30,9 @@ export function ColumnEditor({
   onSubmit: (title: string, color: string) => Promise<{ error?: string } | void>;
   onDelete?: () => Promise<{ error?: string } | void>;
   onMove?: (direction: -1 | 1) => Promise<void>;
+  /** Whether this is the project's done column; the toggle marks or unmarks it. */
+  done?: boolean;
+  onToggleDone?: () => Promise<unknown>;
   onClose: () => void;
 }) {
   const [title, setTitle] = useState(initialTitle);
@@ -80,6 +85,18 @@ export function ColumnEditor({
           </button>
         ))}
       </div>
+
+      {onToggleDone && (
+        <button
+          onClick={() => void onToggleDone()}
+          aria-pressed={done}
+          title="Cards here count as completed; repeating cards renew when they arrive"
+          className={`mb-3 flex w-full items-center gap-1.5 rounded-md border px-2 py-1.5 text-xs transition-colors hover:bg-secondary ${done ? "border-primary font-medium" : "text-muted-foreground"}`}
+        >
+          <CircleCheck className="size-3.5" />
+          {done ? "Done column" : "Mark as done column"}
+        </button>
+      )}
 
       {error && <p className="mb-2 text-[11px] text-[var(--chart-7)]">{error}</p>}
 

@@ -251,3 +251,7 @@ CREATE INDEX IF NOT EXISTS task_assignees_user ON task_assignees(user_id);
 INSERT INTO task_assignees (task_id, user_id)
 SELECT id, assignee_id FROM tasks WHERE assignee_id IS NOT NULL ON CONFLICT DO NOTHING;
 UPDATE tasks SET assignee_id = NULL WHERE assignee_id IS NOT NULL;
+
+-- The column that means "done" (Completed counts, repeating cards, due reminders).
+-- NULL falls back to the project's last column.
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS done_column_id TEXT REFERENCES columns(id) ON DELETE SET NULL;

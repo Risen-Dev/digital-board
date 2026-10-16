@@ -107,6 +107,12 @@ export function Workspace({
   const total = columns.reduce((s, c) => s + c.tasks.length, 0);
   const labels = [...new Set(columns.flatMap((c) => c.tasks.flatMap((t) => labelsOf(t.label))))];
   const onBoard = section === "board";
+  // Due reminders are derived from My Tasks on each load: no cron, no stored state.
+  const due = mine.filter((t) => !t.done && t.dueDate && t.dueDate <= today);
+  const mentionsMe = useCallback(
+    (e: FeedItem) => e.kind === "comment" && e.text.toLowerCase().includes(`@${user.name.toLowerCase()}`),
+    [user.name],
+  );
 
   const announce = useCallback((title: string, body: string) => {
     setAlert({ title, body });
@@ -144,13 +150,14 @@ export function Workspace({
         const res = await fetch("/api/presence", { cache: "no-store" });
         if (!res.ok || !alive) return;
         const data = (await res.json()) as { members: MemberPresence[]; unread: Unread[]; notifications: FeedItem[] };
-        const card = data.notifications.find((item) => !seenCards.current.has(item.id));
+        const fresh = data.notifications.filter((item) => !seenCards.current.has(item.id));
+        const card = fresh.find(mentionsMe) ?? fresh[0];
         const chat = data.unread.find((item) => item.n > (seenChats.current.get(item.channel) ?? 0));
         seenCards.current = new Set(data.notifications.map((item) => item.id));
         // New card activity may come from outside this tab (another member, the GitHub webhook): reload the board.
         if (card) router.refresh();
         seenChats.current = new Map(data.unread.map((item) => [item.channel, item.n]));
-        if (card) announce("Card updated", `${card.taskTitle} · ${card.text}`);
+        if (card) announce(mentionsMe(card) ? `${card.actor ?? "Someone"} mentioned you` : "Card updated", `${card.taskTitle} · ${card.text}`);
         else if (chat) announce("New chat message", chat.channel === "all" ? "Workspace" : data.members.find((member) => member.id === chat.channel)?.name ?? "Direct message");
         setLive(data.members);
         setUnread(data.unread);
@@ -165,7 +172,7 @@ export function Workspace({
       alive = false;
       clearInterval(t);
     };
-  }, [announce, router]);
+  }, [announce, router, mentionsMe]);
 
   const online = live.filter((m) => m.presence === "online").length;
   const unreadTotal = section === "chat" ? 0 : unread.reduce((n, u) => n + u.n, 0);
@@ -398,11 +405,18 @@ export function Workspace({
                 className="relative rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
               >
                 <Bell className="size-4" />
-                {(notifications.length > 0 || unread.length > 0) && <span className="absolute right-1 top-1 size-1.5 rounded-full bg-[var(--chart-7)]" />}
+                {(notifications.length > 0 || unread.length > 0 || due.length > 0) && <span className="absolute right-1 top-1 size-1.5 rounded-full bg-[var(--chart-7)]" />}
               </button>
               {showNotifications && (
                 <NotificationMenu
                   cards={notifications}
+                  due={due}
+                  today={today}
+                  mentionsMe={mentionsMe}
+                  onOpenMine={() => {
+                    setShowNotifications(false);
+                    setSection("mine");
+                  }}
                   unread={unread}
                   members={live}
                   onOpenInbox={() => {
@@ -533,15 +547,15 @@ export function Workspace({
             onChanged={() => router.refresh()}
           />
         ) : section === "inbox" ? (
-          <FeedView feed={notifications} onMarkRead={markNotificationItemsRead} onMarkAll={markCardNotificationsRead} />
+          <FeedView feed={notifications} mentionsMe={mentionsMe} onMarkRead={markNotificationItemsRead} onMarkAll={markCardNotificationsRead} />
         ) : section === "mine" ? (
           <MyTasksView tasks={mine} onOpen={(id) => setEditing(columns.flatMap((c) => c.tasks).find((t) => t.id === id) ?? null)} />
         ) : view === VIEWS.length && project.repo ? (
           <GithubView key={project.id} projectId={project.id} repo={project.repo} />
         ) : view === 0 ? (
-          <BoardView columns={filtered} projectId={project.id} links={links} onOpen={setEditing} onAdd={setCreating} />
+          <BoardView columns={filtered} projectId={project.id} doneColumnId={project.doneColumnId} links={links} onOpen={setEditing} onAdd={setCreating} />
         ) : view === 1 ? (
-          <ListView columns={filtered} onOpen={setEditing} />
+          <ListView columns={filtered} members={members} readOnly={readOnly} onOpen={setEditing} />
         ) : view === 2 ? (
           <CalendarView columns={filtered} projectId={project.id} onOpen={setEditing} />
         ) : (
@@ -622,9 +636,13 @@ function EmptyProject() {
   );
 }
 
-function FeedView({ feed, onMarkRead, onMarkAll }: { feed: FeedItem[]; onMarkRead: (ids: number[]) => void; onMarkAll: () => void }) {
+function FeedView({ feed: all, mentionsMe, onMarkRead, onMarkAll }: {
+  feed: FeedItem[]; mentionsMe: (e: FeedItem) => boolean; onMarkRead: (ids: number[]) => void; onMarkAll: () => void;
+}) {
   const [selected, setSelected] = useState(new Set<number>());
-  if (feed.length === 0) {
+  const [onlyMentions, setOnlyMentions] = useState(false);
+  const feed = onlyMentions ? all.filter(mentionsMe) : all;
+  if (all.length === 0) {
     return <div className="flex flex-1 items-center justify-center p-10 text-center text-sm text-muted-foreground">No unread notifications.</div>;
   }
   function readSelected() {
@@ -636,7 +654,15 @@ function FeedView({ feed, onMarkRead, onMarkAll }: { feed: FeedItem[]; onMarkRea
       <div className="mx-auto flex max-w-2xl items-center gap-2 px-5 pt-6">
         <button onClick={readSelected} disabled={selected.size === 0} className="rounded border px-2 py-1 text-xs disabled:opacity-40">Mark selected read</button>
         <button onClick={onMarkAll} className="rounded border px-2 py-1 text-xs">Mark all read</button>
+        <button
+          onClick={() => setOnlyMentions((on) => !on)}
+          aria-pressed={onlyMentions}
+          className={`ml-auto rounded border px-2 py-1 text-xs ${onlyMentions ? "border-primary font-medium" : ""}`}
+        >
+          Mentioned me
+        </button>
       </div>
+      {feed.length === 0 && <p className="mx-auto max-w-2xl px-5 py-6 text-sm text-muted-foreground">No unread mentions.</p>}
       <ul className="mx-auto max-w-2xl divide-y px-5 py-3">
         {feed.map((e) => (
           <li key={e.id} onContextMenu={(event) => { event.preventDefault(); onMarkRead([e.id]); }} className="flex items-start gap-3 py-3">
@@ -651,7 +677,10 @@ function FeedView({ feed, onMarkRead, onMarkAll }: { feed: FeedItem[]; onMarkRea
               <Check className="size-3" strokeWidth={3} />
             </button>
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium leading-snug">{e.taskTitle}</p>
+              <p className="text-sm font-medium leading-snug">
+                {e.taskTitle}
+                {mentionsMe(e) && <span className="ml-1.5 rounded bg-primary px-1 py-px text-[10px] font-semibold text-primary-foreground">@you</span>}
+              </p>
               <p className="text-xs text-muted-foreground">{e.text}{e.actor ? ` · ${e.actor}` : ""}</p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
@@ -666,9 +695,13 @@ function FeedView({ feed, onMarkRead, onMarkAll }: { feed: FeedItem[]; onMarkRea
 }
 
 function NotificationMenu({
-  cards, unread, members, onOpenInbox, onOpenChat, onMarkRead, onOpenInboxPage, onEnableAlerts,
+  cards, due, today, mentionsMe, onOpenMine, unread, members, onOpenInbox, onOpenChat, onMarkRead, onOpenInboxPage, onEnableAlerts,
 }: {
   cards: FeedItem[];
+  due: MyTask[];
+  today: string;
+  mentionsMe: (e: FeedItem) => boolean;
+  onOpenMine: () => void;
   unread: Unread[];
   members: MemberPresence[];
   onOpenInbox: () => void;
@@ -680,12 +713,28 @@ function NotificationMenu({
   return (
     <div role="menu" className="absolute right-0 top-full z-40 mt-2 w-80 overflow-hidden rounded-lg border bg-card shadow-lg animate-in fade-in zoom-in-95 slide-in-from-top-1 duration-150">
       <div className="max-h-80 overflow-y-auto p-1">
+        {due.length > 0 && (
+          <>
+            <p className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Due</p>
+            {due.map((t) => (
+              <button key={t.id} role="menuitem" onClick={onOpenMine} className="w-full rounded-md px-2 py-2 text-left hover:bg-secondary">
+                <p className="truncate text-xs font-medium">{t.title}</p>
+                <p className={`truncate text-[11px] ${t.dueDate! < today ? "font-medium text-[var(--chart-7)]" : "text-muted-foreground"}`}>
+                  {t.dueDate! < today ? `Overdue since ${t.dueDate}` : "Due today"} · {t.projectName}
+                </p>
+              </button>
+            ))}
+          </>
+        )}
         {cards.length > 0 && (
           <>
             <p className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Card notifications</p>
             {cards.map((item) => (
               <button key={item.id} role="menuitem" onClick={onOpenInbox} className="w-full rounded-md px-2 py-2 text-left hover:bg-secondary">
-                <p className="truncate text-xs font-medium">{item.taskTitle}</p>
+                <p className="truncate text-xs font-medium">
+                  {mentionsMe(item) && <span className="mr-1 font-semibold text-primary">@you</span>}
+                  {item.taskTitle}
+                </p>
                 <p className="truncate text-[11px] text-muted-foreground">{item.text}{item.actor ? ` · ${item.actor}` : ""}</p>
               </button>
             ))}
@@ -702,7 +751,7 @@ function NotificationMenu({
             ))}
           </>
         )}
-        {cards.length === 0 && unread.length === 0 && (
+        {cards.length === 0 && unread.length === 0 && due.length === 0 && (
           <p className="px-2 py-4 text-center text-xs text-muted-foreground">No unread notifications.</p>
         )}
       </div>
