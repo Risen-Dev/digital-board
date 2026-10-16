@@ -123,7 +123,8 @@ export default function DocsPage() {
           <p className="text-sm text-muted-foreground">
             Digital Board is a self-hosted work tracker. A kanban board with List, Calendar and Analytics views over
             the same tasks, project templates for engineering, sales, marketing, support and hiring, a GitHub
-            integration that moves cards as branches and pull requests progress, a free-form drawing canvas with
+            integration that moves cards as branches and pull requests progress, an inbound webhook and
+            email-to-ticket for creating cards from other tools, an iCal feed for calendar apps, a free-form drawing canvas with
             multiple sheets, and workspace chat with direct messages. Everything lives in a PostgreSQL database on your
             own machine.
           </p>
@@ -309,7 +310,7 @@ WantedBy=multi-user.target`}</Code>
               [<strong className="text-foreground">Chat</strong>, <>A workspace channel everyone reads, plus a direct message thread per member. Unread badges, file attachments with inline image previews, and 15 minutes to edit your own message.</>],
               [<strong className="text-foreground">Access</strong>, <>A workspace admin picks a member&rsquo;s project roles while adding them, and changes them later under Settings → Projects → the project — <C>viewer</C> reads, <C>editor</C> changes tasks and canvases, <C>admin</C> also renames the project and manages its columns. Workspace admins reach every project. No role means the project is not listed and its rows are never sent to that browser. Every action re-checks the role server-side.</>],
               [<strong className="text-foreground">Presence</strong>, <>Online / away / offline per member, derived from activity rather than stored.</>],
-              [<strong className="text-foreground">Settings</strong>, <>Tabs on the left: General (workspace name), Members (list, and <em>Add member</em> with project access), Projects (each project&rsquo;s key, members and roles, GitHub link, webhooks, deletion), AI agent (admins), Account (your password).</>],
+              [<strong className="text-foreground">Settings</strong>, <>Tabs on the left: General (workspace name), Members (list, and <em>Add member</em> with project access), Projects (each project&rsquo;s key, members and roles, GitHub link and webhook, inbound webhook token, deletion), AI agent (admins), Account (your password).</>],
               [<strong className="text-foreground">Phones</strong>, <>Below 768px the sidebar becomes a drawer behind the ☰ button, the header goes icon-only, and Settings tabs become a scrolling row.</>],
               [<strong className="text-foreground">Projects</strong>, <>Add and delete from Settings, switch from the sidebar, and rename workspace or project names from Settings or their titles. New projects start with the columns of the template you pick (General, Software / Tech, Sales, Marketing, Support, Recruiting).</>],
               [<strong className="text-foreground">GitHub</strong>, <>A project admin links a repo under Settings → Projects → the project, with a fine-grained read-only token (optional for public repos). The board then gets a GitHub view listing the repo&rsquo;s pull requests, issues, commits and branches, cached for a minute. The token stays on the server; Settings only shows its last four characters. Every card has a key such as <C>WEB-42</C> (the prefix is editable per project). A PR title or branch, a commit message or a branch name that mentions the key shows on the card as a PR badge with its CI status, and in the task&rsquo;s GitHub section. &ldquo;Copy branch name&rdquo; gives <C>feat/WEB-42-title</C> (or <C>fix/</C> for bug labels). Without a webhook only recent activity is matched (the last 30 PRs and commits, 100 branches). With the webhook set up (Settings → the project → GitHub → Generate secret, then add it in the repo with the events Pull requests, Pushes and Check suites), cards move on their own and only forward: a push to a card&rsquo;s branch → In Progress, an opened PR → In Review, a merged PR → QA (or Done). Failing checks are added to the card&rsquo;s history, and every link is stored, so older ones stay visible. Deliveries are verified with the HMAC secret and ignored if they come from a different repo.</>],
@@ -338,7 +339,7 @@ WantedBy=multi-user.target`}</Code>
               [<C>users</C>, <>Accounts: email, name, scrypt password hash, avatar colour, admin flag, last-seen stamp, activity-notification read cursor.</>],
               [<C>sessions</C>, <>Login sessions: a random token, its owner, an expiry.</>],
               [<C>settings</C>, <>Key/value. Currently just the workspace name.</>],
-              [<C>projects</C>, <>Boards, each with a task <C>key</C> (the <C>WEB</C> in <C>WEB-42</C>) and an optional <C>github</C> link (repo, token, webhook secret — never sent to the browser).</>],
+              [<C>projects</C>, <>Boards, each with a task <C>key</C> (the <C>WEB</C> in <C>WEB-42</C>) an optional <C>github</C> link (repo, token, webhook secret — never sent to the browser), the inbound webhook&rsquo;s <C>inbound_token</C> (sha256 hash only) and the calendar feed&rsquo;s <C>ical_token</C>.</>],
               [<C>project_members</C>, <>Who may see a project, and as <C>admin</C>, <C>editor</C> or <C>viewer</C>.</>],
               [<C>columns</C>, <>Board columns, ordered by a dense <C>position</C>.</>],
               [<C>tasks</C>, <>Cards: title, details, label, priority, assignee, due date, position within a column, and a per-project <C>number</C>.</>],
@@ -368,7 +369,9 @@ WantedBy=multi-user.target`}</Code>
               through <C>/api/*</C> on purpose: Server Actions cap a request body at 1 MB, which a real drawing or a
               file attachment passes immediately, and chat polling through an action would revalidate the whole board
               on every message. The AI agents use routes too, to stream progress while the model works; the project
-              agent then applies its changes by calling the same Server Actions.
+              agent then applies its changes by calling the same Server Actions. The integrations under{" "}
+              <C>/api/integrations/*</C> (GitHub webhook, inbound webhook, iCal feed) take no session: GitHub signs each
+              delivery with HMAC, and the other two check a per-project token.
             </li>
             <li>
               <strong className="text-foreground">Reads are in <C>lib/queries.ts</C></strong>, writes in{" "}
@@ -437,6 +440,9 @@ pm2 restart digital-board        # or: systemctl restart digital-board`}</Code>
               [<>A pasted image vanishes from the canvas after reload</>, <>Fixed. The save used a <C>keepalive</C> fetch, whose body the Fetch standard caps at 64 KiB; anything larger was rejected outright, so drawings containing media were never stored. Upgrade past this fix and re-add the image.</>],
               [<>Times are hours off</>, <>Timestamps render in the server&rsquo;s timezone. Set <C>TZ</C> on the service.</>],
               [<>Port already in use</>, <>Set <C>PORT</C>, or stop whatever holds 3000. Under pm2, an old copy often survives a failed deploy — check <C>pm2 status</C>.</>],
+              [<>Inbound webhook or email answers <C>401 Bad token.</C></>, <>The token is wrong or was regenerated (each new one revokes the old). Generate one under Settings → Projects → the project → Inbound webhook and paste it again. Mail services usually need it in the URL as <C>&amp;token=</C>.</>],
+              [<>Webhook or email deliveries never arrive</>, <>The sender (GitHub, Zapier, Postmark…) must reach this server over the public internet. A <C>localhost</C> or LAN address will not work; use the public HTTPS address people open the board on.</>],
+              [<>A calendar app doesn&rsquo;t show new or changed tasks</>, <>Calendar apps refresh subscribed feeds on their own schedule: Google every few hours, Apple and Outlook configurable. Only tasks with a due date appear.</>],
               [<>Changes not live after a deploy</>, <>pm2 runs the built output, so <C>npm run build</C> has to come before <C>pm2 restart</C>. Restarting alone re-serves the old build.</>],
             ]}
           />
@@ -450,6 +456,9 @@ pm2 restart digital-board        # or: systemctl restart digital-board`}</Code>
             <li>Project roles gate tasks, canvases and project structure. Chat is workspace-wide — it has no per-project scoping.</li>
             <li>Without the webhook, GitHub links only cover recent activity: the last 30 pull requests and commits and 100 branches. Webhook moves reach open tabs on the next presence poll, within 45 seconds.</li>
             <li>The GitHub cache is per server process; with several instances each one fetches on its own.</li>
+            <li>The inbound webhook only creates cards (and appends email replies); it cannot move, edit or delete them.</li>
+            <li>Email-to-ticket sends nothing back, so requesters never learn the card key. Replies are matched by the key or the subject, and only from the card&rsquo;s original sender.</li>
+            <li>The iCal feed is read-only and anyone holding the link can read the project&rsquo;s dated tasks; <em>Reset link</em> revokes it.</li>
                         <li>Every route renders dynamically, because the root layout reads the theme cookie.</li>
           </ul>
 

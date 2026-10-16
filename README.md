@@ -7,8 +7,10 @@
 Self-hosted work tracker. A kanban board with List, Calendar and Analytics views
 over the same tasks, project templates for engineering, sales, marketing,
 support and hiring, a GitHub integration that moves cards as branches and pull
-requests progress, a free-form drawing canvas with multiple sheets, and
-workspace chat with direct messages. Multi-user, with per-project roles.
+requests progress, an inbound webhook and email-to-ticket for creating cards
+from other tools, an iCal feed for calendar apps, a free-form drawing canvas
+with multiple sheets, and workspace chat with direct messages. Multi-user,
+with per-project roles.
 Runs on your own machine against your own PostgreSQL — no per-seat billing.
 
 ![The board](public/screenshots/board.png)
@@ -107,7 +109,9 @@ columns added later sit at the bottom of that file as
 
 [`lib/db.ts`](lib/db.ts) is the only file that knows about the driver. Every read
 lives in [`lib/queries.ts`](lib/queries.ts) and every write in
-[`lib/actions.ts`](lib/actions.ts).
+[`lib/actions.ts`](lib/actions.ts). The routes under `app/api/integrations/`
+(GitHub webhook, inbound webhook, iCal feed) run without a session and check a
+per-project secret instead.
 
 Back up the database:
 
@@ -155,7 +159,9 @@ transaction and rolls back.
 
 No self-service password reset. Chat polls every 3 seconds rather than using a
 socket, and has no deletion, reactions or threads. The project agent's chat is
-not saved — it is gone after a reload.
+not saved — it is gone after a reload. The inbound webhook only creates cards,
+email-to-ticket sends no replies, and calendar apps refresh the iCal feed on
+their own schedule (Google: every few hours).
 
 Full list in the [docs](/docs).
 
