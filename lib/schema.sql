@@ -213,3 +213,7 @@ CREATE TABLE IF NOT EXISTS task_links (
   at         TEXT,
   PRIMARY KEY (task_id, kind, ext_id)
 );
+
+-- iCal feed (GET /api/integrations/ical): a read-only link calendar apps subscribe to.
+-- Stored as-is because members copy the link again later; resetting it revokes old links.
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS ical_token TEXT;

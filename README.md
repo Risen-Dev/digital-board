@@ -72,6 +72,7 @@ Requires **Node 22+** and **PostgreSQL 14+** (verified on 16). For development,
 | **Accounts** | Multi-user with `scrypt` password hashing and cookie sessions. Presence shows who is online. |
 | **Templates** | Six project templates with their own columns. Each can also seed example tasks and a canvas flow. The spec and agent prompts are in [`templates.md`](templates.md). |
 | **GitHub** | Link a repo per project (fine-grained read-only token, optional for public repos). You get a GitHub view of PRs, issues, commits and branches. Every card has a key (`WEB-42`), and a branch, PR or commit that names it shows on the card with its CI status. With the webhook, cards move by themselves, and only forward: push → In Progress, PR opened → In Review, PR merged → QA or Done. |
+| **Calendar feed** | Calendar view → Subscribe gives a per-project iCal link. Google Calendar, Apple Calendar or Outlook subscribe to it and show every task with a due date as an all-day event. Managers can reset the link. |
 | **Access** | Per-project roles — admin, editor, viewer. A workspace admin picks them while adding a member and changes them per project in Settings. A project you hold no role in is not listed and its data never reaches your browser. Enforced server-side in every action, not just hidden in the UI. |
 | **Phones** | Below 768px the sidebar becomes a drawer and the header goes icon-only. |
 
