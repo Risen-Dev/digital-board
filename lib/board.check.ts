@@ -8,6 +8,7 @@ import { addressOf, emailOf, parseInbound } from "./inbound.ts";
 
 import { toIcal } from "./ical.ts";
 import { cleanImport, parseCsv, parseImport } from "./trello.ts";
+import { meetingState, nextOccurrence, safeLink, type Meeting } from "./meetings.ts";
 import { outgoingPayload } from "./outgoing-events.ts";
 import examples from "./template-examples.json" with { type: "json" };
 
@@ -290,3 +291,33 @@ assert.equal(
   pullRequestUrlOf("acme/web", { key: "WEB-7", title: "T", label: null }, ["#21", "#22"]),
   "https://github.com/acme/web/compare/feat/WEB-7-t?expand=1&title=%5BWEB-7%5D%20T&body=Closes%20%2321%0ACloses%20%2322",
 );
+
+// Meetings: next occurrence and reminder window (local time throughout)
+{
+  const at = (d: string, t = "00:00") => { const [y, m, dd] = d.split("-").map(Number); const [h, mi] = t.split(":").map(Number); return new Date(y, m - 1, dd, h, mi); };
+  const mt = (startDate: string, repeat: Meeting["repeat"], startTime = "09:00", durationMin = 30): Meeting =>
+    ({ id: "m", title: "Standup", notes: null, link: null, startDate, startTime, durationMin, repeat, remindMin: 15, attendeeIds: [], createdBy: null });
+  const next = (m: Meeting, now: Date) => nextOccurrence(m, now)?.start.getTime();
+
+  // One-off: before, during, after.
+  assert.equal(next(mt("2026-10-20", "none"), at("2026-10-19")), at("2026-10-20", "09:00").getTime());
+  assert.equal(next(mt("2026-10-20", "none"), at("2026-10-20", "09:20")), at("2026-10-20", "09:00").getTime());
+  assert.equal(nextOccurrence(mt("2026-10-20", "none"), at("2026-10-20", "09:30")), null);
+  // Daily rolls to tomorrow once today's has ended; weekly keeps the weekday.
+  assert.equal(next(mt("2026-10-01", "daily"), at("2026-10-20", "10:00")), at("2026-10-21", "09:00").getTime());
+  assert.equal(next(mt("2026-10-05", "weekly"), at("2026-10-20")), at("2026-10-26", "09:00").getTime());
+  // Weekdays skip the weekend (2026-10-24 is a Saturday), including a weekend start date.
+  assert.equal(next(mt("2026-10-01", "weekdays"), at("2026-10-23", "10:00")), at("2026-10-26", "09:00").getTime());
+  assert.equal(next(mt("2026-10-24", "weekdays"), at("2026-10-01")), at("2026-10-26", "09:00").getTime());
+  // Monthly clamps to short months and goes back to the 31st after.
+  assert.equal(next(mt("2026-01-31", "monthly"), at("2026-02-01")), at("2026-02-28", "09:00").getTime());
+  assert.equal(next(mt("2026-01-31", "monthly"), at("2026-03-01")), at("2026-03-31", "09:00").getTime());
+
+  assert.equal(meetingState(mt("2026-10-20", "none"), at("2026-10-20", "08:30"))?.state, "later");
+  assert.equal(meetingState(mt("2026-10-20", "none"), at("2026-10-20", "08:45"))?.state, "soon");
+  assert.equal(meetingState(mt("2026-10-20", "none"), at("2026-10-20", "09:05"))?.state, "live");
+
+  assert.equal(safeLink(" https://meet.google.com/abc "), "https://meet.google.com/abc");
+  assert.equal(safeLink("javascript:alert(1)"), null);
+  assert.equal(safeLink("not a url"), null);
+}

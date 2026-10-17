@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  Archive, BarChart3, Bell, Calendar, Check, CheckSquare, Filter, Home, Inbox,
+  Archive, BarChart3, Bell, Calendar, CalendarClock, Check, CheckSquare, Filter, Home, Inbox,
   GitPullRequest, LayoutGrid, List, LogOut, Menu, MessageSquare, PenLine, Plus, Search, Settings, Sparkles, X,
 } from "lucide-react";
 import { applyFilters, initials, labelsOf, type Column, type Filters, type Member, type Task } from "@/lib/board";
@@ -30,6 +30,8 @@ import { GithubView } from "./views/github-view";
 import { useGithubLinks } from "@/hooks/use-github-links";
 import type { AiSettings } from "@/lib/ai";
 import { ChatView, PresenceDot, UnreadBadge } from "./views/chat-view";
+import { MeetingsView, startsIn } from "./views/meetings-view";
+import { meetingState, type Meeting } from "@/lib/meetings";
 
 const VIEWS = [
   { Icon: LayoutGrid, label: "Board" },
@@ -40,7 +42,7 @@ const VIEWS = [
 /** Only offered when the project is linked to a repo (Settings → Projects). */
 const GITHUB_VIEW = { Icon: GitPullRequest, label: "GitHub" };
 
-type SectionKey = "home" | "board" | "canvas" | "chat" | "inbox" | "mine" | "settings";
+type SectionKey = "home" | "board" | "canvas" | "chat" | "inbox" | "mine" | "meetings" | "settings";
 
 const SECTIONS: { key: SectionKey; Icon: typeof Home; label: string }[] = [
   { key: "home", Icon: Home, label: "Home" },
@@ -49,13 +51,14 @@ const SECTIONS: { key: SectionKey; Icon: typeof Home; label: string }[] = [
   { key: "chat", Icon: MessageSquare, label: "Chat" },
   { key: "inbox", Icon: Inbox, label: "Inbox" },
   { key: "mine", Icon: CheckSquare, label: "My Tasks" },
+  { key: "meetings", Icon: CalendarClock, label: "Meetings" },
   { key: "settings", Icon: Settings, label: "Settings" },
 ];
 
 type Alert = { title: string; body: string };
 
 export function Workspace({
-  user, workspace, projects, project, columns, members, assignments, presence, feed, notifications: initialNotifications, unread: initialUnread, mine, stats, sheets, today, dark, aiEnabled, ai,
+  user, workspace, projects, project, columns, members, assignments, presence, feed, notifications: initialNotifications, unread: initialUnread, mine, meetings: initialMeetings, stats, sheets, today, dark, aiEnabled, ai,
 }: {
   user: User;
   workspace: string;
@@ -68,6 +71,7 @@ export function Workspace({
   notifications: FeedItem[];
   unread: Unread[];
   mine: MyTask[];
+  meetings: Meeting[];
   stats: Stats | null;
   sheets: CanvasMeta[];
   presence: MemberPresence[];
@@ -109,6 +113,33 @@ export function Workspace({
   const onBoard = section === "board";
   // Due reminders are derived from My Tasks on each load: no cron, no stored state.
   const due = mine.filter((t) => !t.done && t.dueDate && t.dueDate <= today);
+
+  // Meetings come with the page and every presence ping; a save refreshes the page props.
+  const [meetings, setMeetings] = useState(initialMeetings);
+  const [prevMeetings, setPrevMeetings] = useState(initialMeetings);
+  if (initialMeetings !== prevMeetings) {
+    setPrevMeetings(initialMeetings);
+    setMeetings(initialMeetings);
+  }
+  // The clock for meeting reminders. Null on the server render, which has no viewer time zone.
+  const [now, setNow] = useState<Date | null>(null);
+  useEffect(() => {
+    const tick = () => setNow(new Date());
+    const first = setTimeout(tick, 0);
+    const t = setInterval(tick, 30_000);
+    return () => {
+      clearTimeout(first);
+      clearInterval(t);
+    };
+  }, []);
+  // My meetings inside their reminder window or running now.
+  const upcoming = useMemo(
+    () => (now ? meetings.filter((m) => m.attendeeIds.includes(user.id)).flatMap((m) => {
+      const s = meetingState(m, now);
+      return s && s.state !== "later" ? [{ meeting: m, ...s }] : [];
+    }) : []),
+    [meetings, now, user.id],
+  );
   const mentionsMe = useCallback(
     (e: FeedItem) => e.kind === "comment" && e.text.toLowerCase().includes(`@${user.name.toLowerCase()}`),
     [user.name],
@@ -133,6 +164,17 @@ export function Workspace({
     oscillator.stop(context.currentTime + 0.15);
   }, []);
 
+  // One alert per meeting occurrence, when it enters the reminder window (or on load, if already in it).
+  const announcedMeetings = useRef(new Set<string>());
+  useEffect(() => {
+    for (const u of upcoming) {
+      const key = `${u.meeting.id}@${u.start.getTime()}`;
+      if (announcedMeetings.current.has(key)) continue;
+      announcedMeetings.current.add(key);
+      announce(u.meeting.title, now ? `Meeting ${startsIn(u.start, now)}` : "Meeting");
+    }
+  }, [upcoming, announce, now]);
+
   // Keep presence and unread badges live outside the Chat section. The ping is
   // also what keeps this user's own status "online" while they sit on a board.
   const [live, setLive] = useState<MemberPresence[]>(presence);
@@ -149,7 +191,7 @@ export function Workspace({
       try {
         const res = await fetch("/api/presence", { cache: "no-store" });
         if (!res.ok || !alive) return;
-        const data = (await res.json()) as { members: MemberPresence[]; unread: Unread[]; notifications: FeedItem[] };
+        const data = (await res.json()) as { members: MemberPresence[]; unread: Unread[]; notifications: FeedItem[]; meetings: Meeting[] };
         const fresh = data.notifications.filter((item) => !seenCards.current.has(item.id));
         const card = fresh.find(mentionsMe) ?? fresh[0];
         const chat = data.unread.find((item) => item.n > (seenChats.current.get(item.channel) ?? 0));
@@ -162,6 +204,7 @@ export function Workspace({
         setLive(data.members);
         setUnread(data.unread);
         setNotifications(data.notifications);
+        setMeetings(data.meetings);
       } catch {
         // Offline for a tick; the next one recovers.
       }
@@ -405,12 +448,17 @@ export function Workspace({
                 className="relative rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
               >
                 <Bell className="size-4" />
-                {(notifications.length > 0 || unread.length > 0 || due.length > 0) && <span className="absolute right-1 top-1 size-1.5 rounded-full bg-[var(--chart-7)]" />}
+                {(notifications.length > 0 || unread.length > 0 || due.length > 0 || upcoming.length > 0) && <span className="absolute right-1 top-1 size-1.5 rounded-full bg-[var(--chart-7)]" />}
               </button>
               {showNotifications && (
                 <NotificationMenu
                   cards={notifications}
                   due={due}
+                  meetings={upcoming.map((u) => ({ id: u.meeting.id, title: u.meeting.title, when: u.state === "live" || !now ? "Now" : startsIn(u.start, now) }))}
+                  onOpenMeetings={() => {
+                    setShowNotifications(false);
+                    setSection("meetings");
+                  }}
                   today={today}
                   mentionsMe={mentionsMe}
                   onOpenMine={() => {
@@ -535,6 +583,8 @@ export function Workspace({
           <ChatView key={chatChannel} meId={user.id} initialMembers={live} initialChannel={chatChannel} />
         ) : section === "settings" ? (
           <MembersPanel workspace={workspace} memberId={user.id} presence={live} isAdmin={user.is_admin === 1} projects={projects} assignments={assignments} activeProjectId={project?.id ?? null} ai={ai} />
+        ) : section === "meetings" ? (
+          <MeetingsView meetings={meetings} members={members} meId={user.id} isAdmin={user.is_admin === 1} now={now} />
         ) : !project ? (
           <EmptyProject />
         ) : section === "canvas" ? (
@@ -701,10 +751,12 @@ const chatName = (channel: string, meId: string, members: { id: string; name: st
   channel === "all" ? "Workspace" : channel === meId ? "Agent" : members.find((m) => m.id === channel)?.name ?? "Direct message";
 
 function NotificationMenu({
-  cards, due, today, mentionsMe, onOpenMine, unread, meId, members, onOpenInbox, onOpenChat, onMarkRead, onOpenInboxPage, onEnableAlerts,
+  cards, due, meetings, onOpenMeetings, today, mentionsMe, onOpenMine, unread, meId, members, onOpenInbox, onOpenChat, onMarkRead, onOpenInboxPage, onEnableAlerts,
 }: {
   cards: FeedItem[];
   due: MyTask[];
+  meetings: { id: string; title: string; when: string }[];
+  onOpenMeetings: () => void;
   today: string;
   mentionsMe: (e: FeedItem) => boolean;
   onOpenMine: () => void;
@@ -720,6 +772,17 @@ function NotificationMenu({
   return (
     <div role="menu" className="absolute right-0 top-full z-40 mt-2 w-80 overflow-hidden rounded-lg border bg-card shadow-lg animate-in fade-in zoom-in-95 slide-in-from-top-1 duration-150">
       <div className="max-h-80 overflow-y-auto p-1">
+        {meetings.length > 0 && (
+          <>
+            <p className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Meetings</p>
+            {meetings.map((m) => (
+              <button key={m.id} role="menuitem" onClick={onOpenMeetings} className="w-full rounded-md px-2 py-2 text-left hover:bg-secondary">
+                <p className="truncate text-xs font-medium">{m.title}</p>
+                <p className="truncate text-[11px] font-medium text-[var(--chart-2)]">{m.when}</p>
+              </button>
+            ))}
+          </>
+        )}
         {due.length > 0 && (
           <>
             <p className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Due</p>
@@ -758,7 +821,7 @@ function NotificationMenu({
             ))}
           </>
         )}
-        {cards.length === 0 && unread.length === 0 && due.length === 0 && (
+        {cards.length === 0 && unread.length === 0 && due.length === 0 && meetings.length === 0 && (
           <p className="px-2 py-4 text-center text-xs text-muted-foreground">No unread notifications.</p>
         )}
       </div>

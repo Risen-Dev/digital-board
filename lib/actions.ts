@@ -12,6 +12,7 @@ import { notify } from "./outgoing";
 import { nextTaskNumber, relocateTask } from "./tasks";
 import { DONE_COLUMN } from "./queries";
 import { cleanImport, type Imported } from "./trello";
+import { MEETING_REPEATS, safeLink, type MeetingRepeat } from "./meetings";
 import type { Flow } from "./canvas/flow";
 import examplesData from "./template-examples.json";
 
@@ -693,6 +694,68 @@ export async function setProjectKey(projectId: string, key: string) {
  * Links a project to a GitHub repo. A blank token keeps the saved one; an empty
  * repo disconnects. The pair is checked against GitHub before it is stored.
  */
+// ── Meetings ────────────────────────────────────────────────────────────────
+
+/** Creates (no `id`) or updates a meeting. Any member may create; the creator or a workspace admin may edit. */
+export async function saveMeeting(_prev: unknown, form: FormData) {
+  const user = await requireUser();
+  const id = String(form.get("id") ?? "");
+  const title = String(form.get("title") ?? "").trim().slice(0, 200);
+  const startDate = String(form.get("startDate") ?? "");
+  const startTime = String(form.get("startTime") ?? "");
+  const durationMin = Number(form.get("durationMin"));
+  const remindMin = Number(form.get("remindMin"));
+  const repeat = String(form.get("repeat") ?? "none") as MeetingRepeat;
+  const rawLink = String(form.get("link") ?? "").trim();
+  const link = safeLink(rawLink);
+  const notes = String(form.get("notes") ?? "").trim().slice(0, 5000) || null;
+  const attendees = [...new Set(form.getAll("attendeeIds").map(String).filter(Boolean))];
+
+  if (!title) return { error: "Title is required." };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(startTime)) return { error: "Pick a date and a time." };
+  if (!Number.isInteger(durationMin) || durationMin < 5 || durationMin > 720) return { error: "Duration must be 5 to 720 minutes." };
+  if (!Number.isInteger(remindMin) || remindMin < 0 || remindMin > 1440) return { error: "Reminder must be 0 to 1440 minutes before." };
+  if (!MEETING_REPEATS.includes(repeat)) return { error: "Unknown repeat." };
+  if (rawLink && !link) return { error: "The link must start with http:// or https://." };
+  const known = await all<{ id: string }>("SELECT id FROM users WHERE workspace_id = ? AND id = ANY(?::text[])", user.workspace_id, attendees);
+  if (known.length !== attendees.length) return { error: "Unknown attendee." };
+
+  if (id) {
+    const row = await get<{ created_by: string | null }>("SELECT created_by FROM meetings WHERE id = ? AND workspace_id = ?", id, user.workspace_id);
+    if (!row) return { error: "Meeting not found." };
+    if (row.created_by !== user.id && !user.is_admin) return { error: "Only its creator or a workspace admin can edit this meeting." };
+  }
+  const meetingId = id || randomUUID();
+  await transaction(async () => {
+    if (id) {
+      await run(
+        `UPDATE meetings SET title = ?, notes = ?, link = ?, start_date = ?, start_time = ?, duration_min = ?, repeat = ?, remind_min = ? WHERE id = ?`,
+        title, notes, link, startDate, startTime, durationMin, repeat, remindMin, id,
+      );
+      await run("DELETE FROM meeting_attendees WHERE meeting_id = ?", id);
+    } else {
+      await run(
+        `INSERT INTO meetings (id, workspace_id, title, notes, link, start_date, start_time, duration_min, repeat, remind_min, created_by, created_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+        meetingId, user.workspace_id, title, notes, link, startDate, startTime, durationMin, repeat, remindMin, user.id, now(),
+      );
+    }
+    for (const a of attendees) await run("INSERT INTO meeting_attendees (meeting_id, user_id) VALUES (?,?)", meetingId, a);
+  });
+  revalidatePath("/board");
+  return { ok: true };
+}
+
+export async function deleteMeeting(id: string) {
+  const user = await requireUser();
+  const row = await get<{ created_by: string | null }>("SELECT created_by FROM meetings WHERE id = ? AND workspace_id = ?", id, user.workspace_id);
+  if (!row) return { error: "Meeting not found." };
+  if (row.created_by !== user.id && !user.is_admin) return { error: "Only its creator or a workspace admin can delete this meeting." };
+  await run("DELETE FROM meetings WHERE id = ?", id);
+  revalidatePath("/board");
+  return { ok: true };
+}
+
 /** Opens a GitHub issue from a card: "[KEY] title", the description, and a back-reference. */
 export async function createGithubIssue(taskId: string) {
   const user = await requireUser();
