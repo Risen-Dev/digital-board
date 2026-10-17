@@ -1,0 +1,552 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Live Demo — Digital Board</title>
+<meta name="description" content="Try Digital Board in your browser: drag cards, edit tasks, switch views and draw on the canvas. No sign-up; everything stays in your browser.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%2318181b'/%3E%3Crect x='3' y='3' width='4.5' height='4.5' rx='1' fill='%23fff'/%3E%3Crect x='8.5' y='3' width='4.5' height='4.5' rx='1' fill='%23fff' opacity='.6'/%3E%3Crect x='3' y='8.5' width='4.5' height='4.5' rx='1' fill='%23fff' opacity='.6'/%3E%3Crect x='8.5' y='8.5' width='4.5' height='4.5' rx='1' fill='%23fff' opacity='.3'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="https://unpkg.com/@excalidraw/excalidraw@0.18.1/dist/prod/index.css">
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@19.2.0",
+    "react/": "https://esm.sh/react@19.2.0/",
+    "react-dom": "https://esm.sh/react-dom@19.2.0",
+    "react-dom/": "https://esm.sh/react-dom@19.2.0/"
+  }
+}
+</script>
+<style>
+  /* Tokens and column palette from app/globals.css and lib/board.ts. */
+  :root {
+    --bg: oklch(1 0 0); --fg: oklch(0.141 0.005 285.823); --card: oklch(1 0 0);
+    --primary: oklch(0.21 0.006 285.885); --primary-fg: oklch(0.985 0 0);
+    --secondary: oklch(0.967 0.001 286.375); --muted: oklch(0.552 0.016 285.938);
+    --border: oklch(0.92 0.004 286.32); --lane: oklch(0.985 0 0);
+    --c0: #6366f1; --c1: #10b981; --c2: #f59e0b; --c3: #ec4899; --c4: #06b6d4;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: oklch(0.141 0.005 285.823); --fg: oklch(0.985 0 0); --card: oklch(0.179 0.006 285.885);
+      --primary: oklch(0.985 0 0); --primary-fg: oklch(0.21 0.006 285.885);
+      --secondary: oklch(0.214 0.007 285.885); --muted: oklch(0.652 0.013 285.938);
+      --border: oklch(0.274 0.006 286.033); --lane: oklch(0.16 0.005 285.823);
+      --c1: #10a37f; --c2: #c2860a; --c4: #0e9bb8;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: oklch(0.141 0.005 285.823); --fg: oklch(0.985 0 0); --card: oklch(0.179 0.006 285.885);
+    --primary: oklch(0.985 0 0); --primary-fg: oklch(0.21 0.006 285.885);
+    --secondary: oklch(0.214 0.007 285.885); --muted: oklch(0.652 0.013 285.938);
+    --border: oklch(0.274 0.006 286.033); --lane: oklch(0.16 0.005 285.823);
+    --c1: #10a37f; --c2: #c2860a; --c4: #0e9bb8;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--fg); display: flex; flex-direction: column;
+         font: 14px/1.5 Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  a { color: inherit; }
+  .banner { background: var(--primary); color: var(--primary-fg); font-size: 13px; text-align: center; padding: 6px 16px; }
+  .banner a { font-weight: 600; }
+  header { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .brand { display: flex; align-items: center; gap: 8px; font-weight: 600; text-decoration: none; }
+  .logo { width: 28px; height: 28px; border-radius: 7px; background: var(--primary); display: grid; place-items: center; }
+  .logo rect { fill: var(--primary-fg); }
+  .project { color: var(--muted); }
+  .tabs { display: flex; gap: 2px; background: var(--secondary); border-radius: 8px; padding: 3px; }
+  .tabs button { border: 0; background: none; padding: 4px 10px; border-radius: 6px; color: var(--muted); cursor: pointer; font-size: 13px; }
+  .tabs button[aria-selected="true"] { background: var(--card); color: var(--fg); box-shadow: 0 1px 2px rgb(0 0 0 / .08); }
+  .spacer { flex: 1; }
+  .search { border: 1px solid var(--border); background: transparent; border-radius: 8px; padding: 5px 10px; width: 180px; font-size: 13px; }
+  .btn { border: 1px solid var(--primary); background: var(--primary); color: var(--primary-fg); border-radius: 8px; padding: 5px 12px; font-size: 13px; font-weight: 500; cursor: pointer; }
+  .btn.ghost { background: transparent; color: var(--fg); border-color: var(--border); }
+  .btn.danger { background: transparent; color: #ef4444; border-color: var(--border); }
+  .icon-btn { border: 0; background: none; color: var(--muted); padding: 6px; border-radius: 6px; cursor: pointer; display: grid; place-items: center; }
+  .icon-btn:hover { background: var(--secondary); color: var(--fg); }
+  main { flex: 1; min-height: 0; overflow: auto; }
+  [hidden] { display: none !important; }
+
+  /* Board */
+  .board { display: flex; gap: 12px; padding: 16px; align-items: flex-start; min-height: 100%; }
+  .lane { flex: 0 0 272px; background: var(--lane); border: 1px solid var(--border); border-radius: 12px; padding: 10px; }
+  .lane.over { outline: 2px dashed var(--muted); outline-offset: -2px; }
+  .lane-head { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 13px; padding: 2px 4px 10px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .count { font-size: 11px; color: var(--muted); background: var(--secondary); border-radius: 999px; padding: 0 7px; font-weight: 500; }
+  .cards { display: flex; flex-direction: column; gap: 8px; min-height: 40px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; cursor: grab; text-align: left; width: 100%; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+  .card:hover { border-color: var(--muted); }
+  .card.dragging { opacity: .4; }
+  .card .key { font-size: 11px; color: var(--muted); }
+  .card .title { font-weight: 500; margin: 2px 0 4px; }
+  .card .desc { font-size: 12px; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin-bottom: 6px; }
+  .meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 11px; }
+  .tag { border: 1px solid var(--border); border-radius: 4px; padding: 0 6px; color: var(--muted); }
+  .prio { border-radius: 4px; padding: 0 6px; font-weight: 600; font-size: 10px; text-transform: uppercase; letter-spacing: .02em; }
+  .prio-high { color: #ef4444; background: rgba(239,68,68,.1); }
+  .prio-medium { color: #f59e0b; background: rgba(245,158,11,.1); }
+  .prio-low { color: #6b7280; background: rgba(107,114,128,.12); }
+  .due { color: var(--muted); }
+  .due.late { color: #ef4444; }
+  .avatar { margin-left: auto; width: 22px; height: 22px; border-radius: 50%; color: #fff; font-size: 10px; font-weight: 600; display: grid; place-items: center; flex: none; }
+  .add { border: 0; background: none; color: var(--muted); font-size: 12px; padding: 8px 4px 0; cursor: pointer; }
+  .add:hover { color: var(--fg); }
+
+  /* List */
+  .list { padding: 16px; }
+  table { width: 100%; border-collapse: collapse; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  th { font-size: 12px; color: var(--muted); font-weight: 500; background: var(--lane); cursor: pointer; user-select: none; }
+  td:first-child { white-space: normal; min-width: 220px; }
+  tbody tr { cursor: pointer; }
+  tbody tr:hover { background: var(--secondary); }
+  .table-wrap { overflow-x: auto; }
+
+  /* Calendar */
+  .cal { padding: 16px; }
+  .cal-head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+  .cal-head h2 { font-size: 16px; margin: 0 8px 0 0; }
+  .grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); border-top: 1px solid var(--border); border-left: 1px solid var(--border); }
+  .grid > div { border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); min-height: 96px; padding: 4px; min-width: 0; }
+  .grid .dow { min-height: 0; font-size: 11px; color: var(--muted); text-align: center; background: var(--lane); }
+  .grid .num { font-size: 11px; color: var(--muted); }
+  .grid .other { background: var(--lane); }
+  .grid .today .num { background: var(--primary); color: var(--primary-fg); border-radius: 999px; padding: 0 6px; }
+  .chip { display: block; width: 100%; border: 0; text-align: left; font-size: 11px; padding: 2px 6px; margin-top: 3px; border-radius: 4px; cursor: pointer;
+          white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* Canvas */
+  .canvas { height: 100%; min-height: 480px; position: relative; }
+  .canvas .loading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); }
+
+  /* Dialog */
+  dialog { border: 1px solid var(--border); border-radius: 14px; background: var(--card); color: var(--fg); padding: 0; width: min(560px, calc(100vw - 32px)); }
+  dialog::backdrop { background: rgb(0 0 0 / .4); }
+  dialog form { padding: 20px; display: grid; gap: 12px; }
+  dialog h2 { margin: 0; font-size: 16px; }
+  label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+  input, select, textarea { border: 1px solid var(--border); background: var(--bg); border-radius: 8px; padding: 7px 10px; font-size: 14px; }
+  textarea { min-height: 90px; resize: vertical; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .actions { display: flex; gap: 8px; justify-content: flex-end; }
+  .actions .danger { margin-right: auto; }
+  .history { font-size: 12px; color: var(--muted); border-top: 1px solid var(--border); padding-top: 10px; max-height: 120px; overflow: auto; }
+  .history div { padding: 2px 0; }
+  @media (max-width: 640px) {
+    .search { order: 10; width: 100%; }
+    .project, .hide-sm { display: none; }
+    .row { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="banner">Live demo · changes stay in your browser · <a href="../">Back to Digital Board</a></div>
+<header>
+  <a class="brand" href="../">
+    <span class="logo"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><rect x="1" y="1" width="6" height="6" rx="1.2"/><rect x="9" y="1" width="6" height="6" rx="1.2" opacity=".6"/><rect x="1" y="9" width="6" height="6" rx="1.2" opacity=".6"/><rect x="9" y="9" width="6" height="6" rx="1.2" opacity=".3"/></svg></span>
+    <span class="hide-sm">Digital Board</span>
+  </a>
+  <span class="project">/ Web App</span>
+  <div class="tabs" role="tablist">
+    <button role="tab" data-view="board" aria-selected="true">Board</button>
+    <button role="tab" data-view="list">List</button>
+    <button role="tab" data-view="calendar">Calendar</button>
+    <button role="tab" data-view="canvas">Canvas</button>
+  </div>
+  <span class="spacer"></span>
+  <input class="search" id="search" type="search" placeholder="Search tasks…" aria-label="Search tasks">
+  <button class="btn ghost" id="reset" title="Put the sample data back">Reset demo</button>
+  <button class="icon-btn" id="theme" aria-label="Toggle theme">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+  </button>
+  <button class="btn" id="new">+ New task</button>
+</header>
+
+<main>
+  <section id="view-board" class="board"></section>
+  <section id="view-list" class="list" hidden></section>
+  <section id="view-calendar" class="cal" hidden></section>
+  <section id="view-canvas" class="canvas" hidden><div class="loading">Loading canvas…</div></section>
+</main>
+
+<dialog id="dialog">
+  <form method="dialog" id="form">
+    <h2 id="dialog-title">New task</h2>
+    <label>Title <input name="title" required maxlength="120" autocomplete="off"></label>
+    <label>Description <textarea name="desc" maxlength="2000"></textarea></label>
+    <div class="row">
+      <label>Status <select name="col"></select></label>
+      <label>Priority <select name="prio"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></label>
+    </div>
+    <div class="row">
+      <label>Assignee <select name="who"></select></label>
+      <label>Due date <input name="due" type="date"></label>
+    </div>
+    <label>Label <input name="label" maxlength="24" placeholder="e.g. Bug" autocomplete="off"></label>
+    <div class="history" id="history"></div>
+    <div class="actions">
+      <button type="button" class="btn danger" id="delete">Delete</button>
+      <button type="button" class="btn ghost" id="cancel">Cancel</button>
+      <button class="btn" value="save">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+const COLUMNS = [
+  { id: "backlog", title: "Backlog", color: "var(--c0)" },
+  { id: "todo", title: "Todo", color: "var(--c4)" },
+  { id: "progress", title: "In Progress", color: "var(--c1)" },
+  { id: "review", title: "In Review", color: "var(--c3)" },
+  { id: "done", title: "Done", color: "var(--c2)" },
+];
+const PEOPLE = [
+  { id: "ada", name: "Ada Lovelace", color: "#6366f1" },
+  { id: "ben", name: "Ben Ito", color: "#10b981" },
+  { id: "cleo", name: "Cleo Park", color: "#ec4899" },
+];
+const KEY = "digital-board-demo-v1";
+
+// Due dates are relative to today, so the calendar always has something on it.
+function day(offset) {
+  const d = new Date(); d.setDate(d.getDate() + offset);
+  return iso(d);
+}
+function iso(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
+
+function sample() {
+  const t = (n, col, title, desc, prio, label, who, due) =>
+    ({ id: n, key: `WEB-${n}`, col, title, desc, prio, label, who, due, history: [`Created by ${PEOPLE[0].name}`] });
+  return {
+    seq: 9,
+    tasks: [
+      t(1, "progress", "Set up CI pipeline (lint, test, build)", "Run on every pull request. Block merge when it fails.", "high", "Chore", "ben", day(2)),
+      t(2, "review", "Login page", "Acceptance criteria:\n- Email + password\n- Error on wrong password", "medium", "Feature", "ada", day(5)),
+      t(3, "review", "Fix: session expires too early", "Steps to reproduce:\n1. Log in\n2. Wait 10 minutes", "high", "Bug", "ben", day(-1)),
+      t(4, "backlog", "Write README setup section", "", "low", "Docs", "", ""),
+      t(5, "todo", "Dark mode for the settings page", "Follow the app theme toggle.", "medium", "Feature", "cleo", day(9)),
+      t(6, "todo", "Add rate limit to the inbound webhook", "", "high", "Security", "ada", day(4)),
+      t(7, "backlog", "Export board as CSV", "One row per task with its column.", "low", "Feature", "", day(14)),
+      t(8, "done", "Project templates", "Six templates with their own columns.", "medium", "Feature", "cleo", day(-6)),
+      t(9, "done", "Invite members by email", "", "low", "Feature", "ada", day(-3)),
+    ],
+  };
+}
+
+let state;
+try { state = JSON.parse(localStorage.getItem(KEY)) || sample(); } catch { state = sample(); }
+function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch {} }
+
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const person = (id) => PEOPLE.find((p) => p.id === id);
+const column = (id) => COLUMNS.find((c) => c.id === id);
+const initials = (name) => name.split(" ").map((w) => w[0]).join("");
+const fmt = (d) => new Date(d + "T00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" });
+let query = "";
+const visible = () => state.tasks.filter((t) => !query || `${t.key} ${t.title} ${t.desc} ${t.label}`.toLowerCase().includes(query));
+
+function meta(t) {
+  const p = person(t.who);
+  const late = t.due && t.col !== "done" && t.due < day(0);
+  return `<div class="meta">
+    ${t.label ? `<span class="tag">${esc(t.label)}</span>` : ""}
+    <span class="prio prio-${t.prio}">${t.prio}</span>
+    ${t.due ? `<span class="due${late ? " late" : ""}">${fmt(t.due)}</span>` : ""}
+    ${p ? `<span class="avatar" style="background:${p.color}" title="${esc(p.name)}">${initials(p.name)}</span>` : ""}
+  </div>`;
+}
+
+// ── Board ─────────────────────────────────────────────────────────────────
+function renderBoard() {
+  const tasks = visible();
+  $("#view-board").innerHTML = COLUMNS.map((c) => {
+    const mine = tasks.filter((t) => t.col === c.id);
+    return `<div class="lane" data-col="${c.id}">
+      <div class="lane-head"><span class="dot" style="background:${c.color}"></span>${c.title}<span class="count">${mine.length}</span></div>
+      <div class="cards">${mine.map((t) => `<button class="card" data-id="${t.id}">
+        <div class="key">${t.key}</div><div class="title">${esc(t.title)}</div>
+        ${t.desc ? `<div class="desc">${esc(t.desc)}</div>` : ""}${meta(t)}</button>`).join("")}</div>
+      <button class="add" data-add="${c.id}">+ Add task</button>
+    </div>`;
+  }).join("");
+}
+
+const board = $("#view-board");
+let drag = null; // { card, id, x, y, ghost, armed, timer, moved }
+board.addEventListener("click", (e) => {
+  const card = e.target.closest(".card");
+  if (card) return drag?.moved ? null : openTask(+card.dataset.id);
+  const add = e.target.closest("[data-add]");
+  if (add) openTask(null, add.dataset.add);
+});
+
+// Pointer events instead of HTML5 drag and drop, which phones don't support.
+// Mouse drags at once; touch needs a short hold so a swipe still scrolls the board.
+board.addEventListener("pointerdown", (e) => {
+  const card = e.target.closest(".card");
+  if (!card || e.button > 0) return;
+  drag = { card, id: +card.dataset.id, x: e.clientX, y: e.clientY, armed: e.pointerType === "mouse", moved: false };
+  if (!drag.armed) drag.timer = setTimeout(() => { if (drag) { drag.armed = true; navigator.vibrate?.(10); } }, 250);
+});
+addEventListener("pointermove", (e) => {
+  if (!drag) return;
+  const far = Math.hypot(e.clientX - drag.x, e.clientY - drag.y) > 6;
+  if (!drag.armed) { if (far) { clearTimeout(drag.timer); drag = null; } return; }
+  if (!drag.ghost) {
+    if (!far) return;
+    const r = drag.card.getBoundingClientRect();
+    drag.ghost = drag.card.cloneNode(true);
+    Object.assign(drag.ghost.style, { position: "fixed", left: 0, top: 0, width: `${r.width}px`, pointerEvents: "none",
+      zIndex: 50, rotate: "2deg", boxShadow: "0 12px 32px rgb(0 0 0 / .25)" });
+    drag.dx = drag.x - r.left; drag.dy = drag.y - r.top;
+    document.body.append(drag.ghost);
+    drag.card.classList.add("dragging");
+    drag.moved = true;
+  }
+  drag.ghost.style.transform = `translate(${e.clientX - drag.dx}px, ${e.clientY - drag.dy}px)`;
+  const lane = document.elementFromPoint(e.clientX, e.clientY)?.closest(".lane");
+  board.querySelectorAll(".over").forEach((l) => l !== lane && l.classList.remove("over"));
+  lane?.classList.add("over");
+});
+// While a touch drag is armed, stop the browser from scrolling instead.
+addEventListener("touchmove", (e) => { if (drag?.armed) e.preventDefault(); }, { passive: false });
+addEventListener("pointerup", (e) => {
+  if (!drag) return;
+  clearTimeout(drag.timer);
+  const { id, ghost } = drag;
+  if (!ghost) return void (drag = null);
+  ghost.remove();
+  const lane = document.elementFromPoint(e.clientX, e.clientY)?.closest(".lane");
+  if (lane) {
+    // Drop before the first card whose middle is below the pointer.
+    const before = [...lane.querySelectorAll(".card:not(.dragging)")]
+      .find((c) => e.clientY < c.getBoundingClientRect().top + c.offsetHeight / 2);
+    moveTask(id, lane.dataset.col, before ? +before.dataset.id : null);
+  }
+  renderBoard();
+  setTimeout(() => (drag = null)); // after the click that follows pointerup
+});
+addEventListener("pointercancel", () => { if (drag) { clearTimeout(drag.timer); drag.ghost?.remove(); drag = null; renderBoard(); } });
+
+function moveTask(id, col, beforeId) {
+  const task = state.tasks.find((t) => t.id === id);
+  const from = task.col;
+  state.tasks.splice(state.tasks.indexOf(task), 1);
+  task.col = col;
+  const at = beforeId ? state.tasks.findIndex((t) => t.id === beforeId) : state.tasks.length;
+  state.tasks.splice(at, 0, task);
+  if (from !== col) task.history.push(`Moved from ${column(from).title} to ${column(col).title}`);
+  save();
+}
+
+// ── List ──────────────────────────────────────────────────────────────────
+let sort = { by: "col", dir: 1 };
+const RANK = { col: (t) => COLUMNS.findIndex((c) => c.id === t.col), prio: (t) => ["high", "medium", "low"].indexOf(t.prio),
+  title: (t) => t.title.toLowerCase(), due: (t) => t.due || "9999", who: (t) => person(t.who)?.name || "~" };
+function renderList() {
+  const rows = [...visible()].sort((a, b) => (RANK[sort.by](a) > RANK[sort.by](b) ? 1 : RANK[sort.by](a) < RANK[sort.by](b) ? -1 : 0) * sort.dir);
+  const th = (by, label) => `<th data-sort="${by}">${label}${sort.by === by ? (sort.dir > 0 ? " ↑" : " ↓") : ""}</th>`;
+  $("#view-list").innerHTML = `<div class="table-wrap"><table>
+    <thead><tr>${th("title", "Task")}${th("col", "Status")}${th("prio", "Priority")}${th("due", "Due")}${th("who", "Assignee")}</tr></thead>
+    <tbody>${rows.map((t) => `<tr data-id="${t.id}">
+      <td><span class="key" style="color:var(--muted);font-size:12px">${t.key}</span> ${esc(t.title)}</td>
+      <td><span class="dot" style="display:inline-block;background:${column(t.col).color}"></span> ${column(t.col).title}</td>
+      <td><span class="prio prio-${t.prio}">${t.prio}</span></td>
+      <td>${t.due ? fmt(t.due) : "—"}</td>
+      <td>${person(t.who)?.name || "—"}</td></tr>`).join("")}</tbody></table></div>`;
+}
+$("#view-list").addEventListener("click", (e) => {
+  const th = e.target.closest("th");
+  if (th) { sort = { by: th.dataset.sort, dir: sort.by === th.dataset.sort ? -sort.dir : 1 }; return renderList(); }
+  const tr = e.target.closest("tr[data-id]");
+  if (tr) openTask(+tr.dataset.id);
+});
+
+// ── Calendar ──────────────────────────────────────────────────────────────
+let month = new Date(); month.setDate(1);
+function renderCalendar() {
+  const start = new Date(month); start.setDate(1 - ((start.getDay() + 6) % 7)); // weeks start Monday
+  const byDay = {};
+  for (const t of visible()) if (t.due) (byDay[t.due] ||= []).push(t);
+  const cells = [];
+  for (let i = 0; i < 42; i++) {
+    const d = new Date(start); d.setDate(start.getDate() + i);
+    const key = iso(d);
+    const cls = [d.getMonth() !== month.getMonth() && "other", key === day(0) && "today"].filter(Boolean).join(" ");
+    cells.push(`<div class="${cls}"><span class="num">${d.getDate()}</span>${(byDay[key] || []).map((t) =>
+      `<button class="chip prio-${t.prio}" data-id="${t.id}" title="${esc(t.title)}">${esc(t.title)}</button>`).join("")}</div>`);
+  }
+  $("#view-calendar").innerHTML = `<div class="cal-head">
+      <h2>${month.toLocaleDateString(undefined, { month: "long", year: "numeric" })}</h2>
+      <button class="btn ghost" data-step="-1" aria-label="Previous month">‹</button>
+      <button class="btn ghost" data-step="0">Today</button>
+      <button class="btn ghost" data-step="1" aria-label="Next month">›</button>
+    </div>
+    <div class="grid">${["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => `<div class="dow">${d}</div>`).join("")}${cells.join("")}</div>`;
+}
+$("#view-calendar").addEventListener("click", (e) => {
+  const step = e.target.closest("[data-step]");
+  if (step) {
+    if (step.dataset.step === "0") { month = new Date(); month.setDate(1); }
+    else month.setMonth(month.getMonth() + +step.dataset.step);
+    return renderCalendar();
+  }
+  const chip = e.target.closest(".chip");
+  if (chip) openTask(+chip.dataset.id);
+});
+
+// ── Task dialog ───────────────────────────────────────────────────────────
+const dialog = $("#dialog"), form = $("#form");
+form.col.innerHTML = COLUMNS.map((c) => `<option value="${c.id}">${c.title}</option>`).join("");
+form.who.innerHTML = `<option value="">Unassigned</option>` + PEOPLE.map((p) => `<option value="${p.id}">${p.name}</option>`).join("");
+let editing = null;
+function openTask(id, col = "todo") {
+  const t = state.tasks.find((t) => t.id === id);
+  editing = t || null;
+  $("#dialog-title").textContent = t ? t.key : "New task";
+  form.title.value = t?.title ?? "";
+  form.desc.value = t?.desc ?? "";
+  form.col.value = t?.col ?? col;
+  form.prio.value = t?.prio ?? "medium";
+  form.who.value = t?.who ?? "";
+  form.due.value = t?.due ?? "";
+  form.label.value = t?.label ?? "";
+  $("#delete").hidden = !t;
+  $("#history").hidden = !t;
+  $("#history").innerHTML = t ? `<b>History</b>${t.history.map((h) => `<div>${esc(h)}</div>`).join("")}` : "";
+  dialog.showModal();
+  form.title.focus();
+}
+form.addEventListener("submit", () => {
+  const v = Object.fromEntries(new FormData(form));
+  if (!editing) {
+    const id = ++state.seq;
+    state.tasks.push({ id, key: `WEB-${id}`, ...v, title: v.title.trim(), history: ["Created by you"] });
+  } else {
+    const changed = ["title", "desc", "col", "prio", "who", "due", "label"].filter((k) => editing[k] !== v[k]);
+    if (editing.col !== v.col) editing.history.push(`Moved from ${column(editing.col).title} to ${column(v.col).title}`);
+    const other = changed.filter((k) => k !== "col");
+    if (other.length) editing.history.push(`Edited ${other.map((k) => ({ desc: "description", prio: "priority", who: "assignee", due: "due date" })[k] || k).join(", ")}`);
+    Object.assign(editing, v, { title: v.title.trim() });
+  }
+  save(); render();
+});
+$("#cancel").onclick = () => dialog.close();
+$("#delete").onclick = () => {
+  state.tasks = state.tasks.filter((t) => t !== editing);
+  save(); dialog.close(); render();
+};
+
+// ── Shell ─────────────────────────────────────────────────────────────────
+let view = "board";
+function render() {
+  ({ board: renderBoard, list: renderList, calendar: renderCalendar, canvas: () => {} })[view]();
+}
+document.querySelector(".tabs").addEventListener("click", (e) => {
+  const tab = e.target.closest("[data-view]");
+  if (!tab) return;
+  view = tab.dataset.view;
+  document.querySelectorAll(".tabs button").forEach((b) => b.setAttribute("aria-selected", b === tab));
+  document.querySelectorAll("main > section").forEach((s) => (s.hidden = s.id !== `view-${view}`));
+  $("#search").hidden = view === "canvas";
+  if (view === "canvas") window.loadCanvas?.();
+  render();
+});
+$("#search").addEventListener("input", (e) => { query = e.target.value.trim().toLowerCase(); render(); });
+$("#new").onclick = () => openTask(null);
+$("#reset").onclick = () => {
+  state = sample(); save();
+  try { localStorage.removeItem(KEY + "-canvas"); } catch {}
+  location.reload();
+};
+
+const root = document.documentElement;
+try { const t = localStorage.getItem("theme"); if (t) root.dataset.theme = t; } catch {}
+const isDark = () => root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+$("#theme").onclick = () => {
+  root.dataset.theme = isDark() ? "light" : "dark";
+  try { localStorage.setItem("theme", root.dataset.theme); } catch {}
+  window.dispatchEvent(new Event("themechange"));
+};
+render();
+</script>
+
+<script type="module">
+// Excalidraw (the same editor the app uses) is loaded only when the Canvas tab opens.
+window.EXCALIDRAW_ASSET_PATH = "https://unpkg.com/@excalidraw/excalidraw@0.18.1/dist/prod/";
+const CANVAS_KEY = "digital-board-demo-v1-canvas";
+let started = false;
+
+window.loadCanvas = async () => {
+  if (started) return;
+  started = true;
+  const host = document.getElementById("view-canvas");
+  try {
+    const [{ createElement, useEffect, useState }, { createRoot }, ex] = await Promise.all([
+      import("react"),
+      import("react-dom/client"),
+      import("https://esm.sh/@excalidraw/excalidraw@0.18.1?external=react,react-dom"),
+    ]);
+
+    let elements;
+    try { elements = JSON.parse(localStorage.getItem(CANVAS_KEY)); } catch {}
+    elements ||= ex.convertToExcalidrawElements(seed());
+
+    const dark = () => {
+      const t = document.documentElement.dataset.theme;
+      return t ? t === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+    };
+    let timer;
+    function Canvas() {
+      const [theme, setTheme] = useState(dark() ? "dark" : "light");
+      useEffect(() => {
+        const sync = () => setTheme(dark() ? "dark" : "light");
+        window.addEventListener("themechange", sync);
+        return () => window.removeEventListener("themechange", sync);
+      }, []);
+      return createElement(ex.Excalidraw, {
+        theme,
+        initialData: { elements, scrollToContent: true },
+        onChange: (els) => {
+          clearTimeout(timer);
+          timer = setTimeout(() => { try { localStorage.setItem(CANVAS_KEY, JSON.stringify(els.filter((e) => !e.isDeleted))); } catch {} }, 400);
+        },
+      });
+    }
+    host.innerHTML = "";
+    createRoot(host).render(createElement(Canvas));
+  } catch (error) {
+    console.error(error);
+    host.innerHTML = `<div class="loading">The canvas could not load (it needs esm.sh and unpkg.com). The board, list and calendar still work.</div>`;
+  }
+};
+
+// A small release flow, like the one the Tech template seeds.
+function seed() {
+  const W = 170, H = 64, at = {};
+  const box = (id, x, y, text, type = "rectangle", backgroundColor = "#e7f5ff") =>
+    (at[id] = { x, y }, { id, type, x, y, width: W, height: H, backgroundColor, fillStyle: "solid", label: { text, fontFamily: 2 } });
+  // convertToExcalidrawElements keeps the given points, so each arrow is placed by hand.
+  const arrow = (from, to, points) => ({ type: "arrow", ...points, start: { id: from }, end: { id: to } });
+  const down = (from, to) => arrow(from, to, { x: at[from].x + W / 2, y: at[from].y + H, points: [[0, 0], [0, at[to].y - at[from].y - H]] });
+  return [
+    box("a", 0, 0, "Branch WEB-42", "ellipse", "#d3f9d8"),
+    box("b", 0, 130, "Open pull request"),
+    box("c", 0, 260, "CI passes?", "diamond", "#fff3bf"),
+    box("d", 0, 400, "Merge → Done", "ellipse", "#d3f9d8"),
+    box("e", 280, 260, "Fix and push", "rectangle", "#ffe3e3"),
+    down("a", "b"), down("b", "c"), down("c", "d"),
+    arrow("c", "e", { x: W, y: 260 + H / 2, points: [[0, 0], [280 - W, 0]] }),
+    arrow("e", "b", { x: 280 + W / 2, y: 260, points: [[0, 0], [0, -98], [-(280 + W / 2 - W), -98]] }),
+    { type: "text", x: 0, y: -60, text: "Try it: drag, draw, add shapes", fontSize: 18, fontFamily: 2, strokeColor: "#868e96" },
+  ];
+}
+</script>
+</body>
+</html>
