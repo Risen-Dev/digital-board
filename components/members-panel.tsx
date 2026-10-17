@@ -4,8 +4,9 @@ import { startTransition, useActionState, useEffect, useEffectEvent, useRef, use
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, FolderKanban, FolderPlus, KeyRound, Plus, Settings2, Sparkles, Trash2, UserRound, Users, X } from "lucide-react";
 import { OUTGOING_EVENTS } from "@/lib/outgoing-events";
-import { changeMyPassword, fetchAiModels, rotateGithubWebhook, rotateInboundToken, saveGithub, saveOutgoing, testOutgoing, setProjectKey, saveAiConfig, deleteProject, inviteMember, renameProject, renameWorkspace, setMemberPassword, setProjectMember } from "@/lib/actions";
+import { changeMyPassword, fetchAiModels, importIntoProject, rotateGithubWebhook, rotateInboundToken, saveGithub, saveOutgoing, testOutgoing, setProjectKey, saveAiConfig, deleteProject, inviteMember, renameProject, renameWorkspace, setMemberPassword, setProjectMember } from "@/lib/actions";
 import { initials } from "@/lib/board";
+import { parseImport, type Imported } from "@/lib/trello";
 import type { MemberPresence, Project, ProjectMember } from "@/lib/queries";
 import { Avatar } from "./avatar";
 import { PresenceDot } from "./views/chat-view";
@@ -410,6 +411,7 @@ function ProjectDetail({ project, memberId, presence, isAdmin, assignments, onBa
       )}
       {error && <p className="mt-2 text-xs text-[var(--chart-7)]">{error}</p>}
 
+      {canRename && <ImportCards key={`import-${project.id}`} project={project} />}
       {canRename && <GithubSettings project={project} />}
       {canRename && <InboundWebhook project={project} />}
       {canRename && <OutgoingWebhook key={project.id} project={project} />}
@@ -426,6 +428,80 @@ function ProjectDetail({ project, memberId, presence, isAdmin, assignments, onBa
         </div>
       )}
     </>
+  );
+}
+
+/** Trello/CSV import into this project: keep the cards already here, or replace them all. */
+function ImportCards({ project }: { project: Project }) {
+  const router = useRouter();
+  const [imported, setImported] = useState<Imported>();
+  const [replace, setReplace] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, startBusy] = useTransition();
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  async function pick(file: File | undefined) {
+    setImported(undefined);
+    setError(null);
+    setNote(null);
+    if (!file) return;
+    const res = parseImport(await file.text());
+    if (typeof res === "string") return setError(res);
+    setImported(res);
+  }
+
+  const run = () =>
+    startBusy(async () => {
+      if (!imported) return;
+      if (replace && !confirm(`Delete every column and card in "${project.name}" (archived ones too, with their comments and history), then import ${imported.columns.length} columns and ${imported.cards.length} cards?`)) return;
+      const res = await importIntoProject(project.id, imported, replace);
+      if ("error" in res) return setError(res.error ?? null);
+      setImported(undefined);
+      if (fileRef.current) fileRef.current.value = "";
+      setNote(`Imported ${res.cards} cards.`);
+      router.refresh();
+    });
+
+  return (
+    <section className="mt-8">
+      <h3 className="mb-1 text-sm font-medium">Import cards</h3>
+      <div className="flex flex-col gap-3 rounded-lg border bg-card p-3">
+        <p className="text-[11px] text-muted-foreground">
+          From a Trello export (board menu → Print, export, and share → Export as JSON) or a CSV with a{" "}
+          <span className="font-mono">Title</span> column. Lists go into the column with the same name, or a new one.
+        </p>
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".json,.csv,application/json,text/csv"
+          onChange={(e) => void pick(e.target.files?.[0])}
+          className="text-xs file:mr-2 file:rounded-md file:border file:bg-background file:px-2 file:py-1 file:text-xs"
+        />
+        {imported && (
+          <>
+            <p className="text-[11px] text-muted-foreground">{imported.cards.length} cards in {imported.columns.length} columns.</p>
+            <div role="radiogroup" aria-label="Existing cards" className="flex flex-col gap-1.5 text-xs">
+              <label className="flex items-center gap-2">
+                <input type="radio" name="import-mode" checked={!replace} onChange={() => setReplace(false)} className="accent-primary" />
+                Keep the cards already in this project
+              </label>
+              <label className="flex items-center gap-2">
+                <input type="radio" name="import-mode" checked={replace} onChange={() => setReplace(true)} className="accent-primary" />
+                Replace the whole board: delete all columns and cards, use the file&rsquo;s lists
+              </label>
+            </div>
+          </>
+        )}
+        {error && <FormError error={error} />}
+        {note && <p className="text-[11px] text-[var(--chart-2)]">{note}</p>}
+        <div>
+          <button type="button" disabled={busy || !imported} onClick={run} className="rounded-md border px-3 py-1.5 text-xs hover:bg-secondary disabled:opacity-50">
+            {busy ? "Importing…" : replace && imported ? "Replace and import" : "Import"}
+          </button>
+        </div>
+      </div>
+    </section>
   );
 }
 

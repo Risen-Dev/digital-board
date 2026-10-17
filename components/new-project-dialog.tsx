@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { addProject } from "@/lib/actions";
 import { TEMPLATES } from "@/lib/board";
+import { parseImport, type Imported } from "@/lib/trello";
 import { FormError } from "./form-bits";
 import { Modal } from "./modal";
 import { TemplatePicker } from "./template-picker";
@@ -15,12 +16,23 @@ export function NewProjectDialog({ onClose }: { onClose: () => void }) {
   const [withExamples, setWithExamples] = useState(false);
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
+  const [imported, setImported] = useState<Imported>();
+
+  async function pick(file: File | undefined) {
+    setImported(undefined);
+    setError(undefined);
+    if (!file) return;
+    const res = parseImport(await file.text());
+    if (typeof res === "string") return setError(res);
+    setImported(res);
+    if (!name.trim()) setName(res.name || file.name.replace(/\.(json|csv)$/i, ""));
+  }
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim() || busy) return;
     setBusy(true);
-    const res = await addProject(name, templateId, withExamples);
+    const res = await addProject(name, templateId, withExamples, imported);
     setBusy(false);
     if (res?.error) return setError(res.error);
     onClose();
@@ -42,20 +54,38 @@ export function NewProjectDialog({ onClose }: { onClose: () => void }) {
             className="rounded-md border bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-ring"
           />
         </label>
-        <div className="flex flex-col gap-2">
-          <span className="text-xs font-medium">Template</span>
-          <TemplatePicker value={templateId} onChange={setTemplateId} withExamples={withExamples} />
-        </div>
-        <label className="flex items-center gap-2 text-xs">
-          <input type="checkbox" checked={withExamples} onChange={(e) => setWithExamples(e.target.checked)} className="accent-primary" />
-          Add example tasks and a canvas sheet
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs font-medium">Import from Trello or CSV (optional)</span>
+          <input
+            type="file"
+            accept=".json,.csv,application/json,text/csv"
+            onChange={(e) => pick(e.target.files?.[0])}
+            className="text-xs file:mr-2 file:rounded-md file:border file:bg-background file:px-2 file:py-1 file:text-xs"
+          />
+          <span className="text-[11px] text-muted-foreground">
+            {imported
+              ? `${imported.cards.length} cards in ${imported.columns.length} columns. Members are matched by name.`
+              : "Trello: board menu → Print, export, and share → Export as JSON."}
+          </span>
         </label>
+        {!imported && (
+          <>
+            <div className="flex flex-col gap-2">
+              <span className="text-xs font-medium">Template</span>
+              <TemplatePicker value={templateId} onChange={setTemplateId} withExamples={withExamples} />
+            </div>
+            <label className="flex items-center gap-2 text-xs">
+              <input type="checkbox" checked={withExamples} onChange={(e) => setWithExamples(e.target.checked)} className="accent-primary" />
+              Add example tasks and a canvas sheet
+            </label>
+          </>
+        )}
         <FormError error={error} />
         <button
           disabled={busy || !name.trim()}
           className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground disabled:opacity-40"
         >
-          {busy ? "Creating…" : "Create project"}
+          {busy ? "Creating…" : imported ? "Import project" : "Create project"}
         </button>
       </form>
     </Modal>

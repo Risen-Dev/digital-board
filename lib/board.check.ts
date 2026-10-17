@@ -7,6 +7,7 @@ import { resolveActions } from "./board-agent.ts";
 import { addressOf, emailOf, parseInbound } from "./inbound.ts";
 
 import { toIcal } from "./ical.ts";
+import { cleanImport, parseCsv, parseImport } from "./trello.ts";
 import { outgoingPayload } from "./outgoing-events.ts";
 import examples from "./template-examples.json" with { type: "json" };
 
@@ -241,4 +242,42 @@ assert.equal(nextDue("2026-12-15", "monthly"), "2027-01-15");
   assert.deepEqual(ops[0], { op: "checklist", taskId: "t1", items: [{ text: "a", done: true }, { text: "b", done: false }], summary: "Added 1 checklist item to WEB-1" });
   assert.deepEqual(ops.slice(1).map((o) => o.op), ["comment", "archive"]);
   assert.equal(errors.length, 2);
+}
+
+// Trello / CSV import
+{
+  assert.deepEqual(parseCsv('a,b\r\n"x, ""y""","line1\nline2"\n\n'), [["a", "b"], ['x, "y"', "line1\nline2"]]);
+
+  const json = JSON.stringify({
+    name: "Launch",
+    lists: [{ id: "l2", name: "Done", pos: 2 }, { id: "l1", name: "Todo", pos: 1 }, { id: "l3", name: "Old", closed: true, pos: 3 }],
+    members: [{ id: "m1", fullName: "Ada L" }],
+    cards: [
+      { id: "c2", name: "Second", idList: "l1", pos: 2, labels: [{ name: "", color: "red" }, { name: "Bug", color: "orange" }], idMembers: ["m1"] },
+      { id: "c1", name: "First", desc: "Body", idList: "l1", pos: 1, due: "2026-05-01T12:00:00.000Z", closed: true },
+      { id: "c3", name: "Gone", idList: "l3" },
+    ],
+    checklists: [{ idCard: "c1", checkItems: [{ name: "b", state: "incomplete", pos: 2 }, { name: "a", state: "complete", pos: 1 }] }],
+  });
+  const j = parseImport(json);
+  assert.ok(typeof j !== "string");
+  assert.equal(j.name, "Launch");
+  assert.deepEqual(j.columns, ["Todo", "Done"]);
+  assert.deepEqual(j.cards.map((c) => c.title), ["First", "Second"]);
+  assert.deepEqual(j.cards[0], { column: "Todo", title: "First", description: "Body", label: null, dueDate: "2026-05-01", members: [], checklist: [{ text: "a", done: true }, { text: "b", done: false }], archived: true });
+  assert.equal(j.cards[1].label, "red, Bug");
+  assert.deepEqual(j.cards[1].members, ["Ada L"]);
+
+  const csv = parseImport('\uFEFFCard Name,List Name,Labels,Due Date,Members,Archived,Board Name\nShip it,Doing,"Urgent (red), Bug (orange)",2026-06-02,"Ada L, Bo",false,Launch\n,Doing,,,,,\nPlain,,,,,true,\n');
+  assert.ok(typeof csv !== "string");
+  assert.equal(csv.name, "Launch");
+  assert.deepEqual(csv.columns, ["Doing", "To Do"]);
+  assert.deepEqual(csv.cards.map((c) => [c.title, c.label, c.dueDate, c.members, c.archived]), [
+    ["Ship it", "Urgent, Bug", "2026-06-02", ["Ada L", "Bo"], false], ["Plain", null, null, [], true],
+  ]);
+  assert.match(String(parseImport("Foo,Bar\n1,2")), /No title column/);
+  assert.match(String(parseImport("{nope")), /couldn't be read/);
+  assert.equal(cleanImport({ name: 1, columns: "x", cards: [{ title: "  " }] }), null);
+  // Untrusted shape: a card whose column wasn't listed still lands in one.
+  assert.deepEqual(cleanImport({ columns: [], cards: [{ title: "T", column: "", checklist: [{ text: "x", done: "yes" }] }] })?.cards[0].checklist, [{ text: "x", done: false }]);
 }
