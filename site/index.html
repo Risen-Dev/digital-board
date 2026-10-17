@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Digital Board — self-hosted kanban for teams</title>
+<meta name="description" content="Open-source, self-hosted kanban and project management: boards, list/calendar/analytics views, Excalidraw canvas, team chat, meetings, GitHub sync, Trello import and an AI agent. Next.js + PostgreSQL, MIT.">
+<meta property="og:title" content="Digital Board — self-hosted kanban for teams">
+<meta property="og:description" content="Boards, canvas, chat, meetings, GitHub sync and an AI agent on your own server. MIT licensed.">
+<meta property="og:image" content="https://risen-dev.github.io/digital-board/screenshots/board.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%2318181b'/%3E%3Crect x='3' y='3' width='4.5' height='4.5' rx='1' fill='%23fff'/%3E%3Crect x='8.5' y='3' width='4.5' height='4.5' rx='1' fill='%23fff' opacity='.6'/%3E%3Crect x='3' y='8.5' width='4.5' height='4.5' rx='1' fill='%23fff' opacity='.6'/%3E%3Crect x='8.5' y='8.5' width='4.5' height='4.5' rx='1' fill='%23fff' opacity='.3'/%3E%3C/svg%3E">
+<style>
+  /* Same tokens as app/globals.css, so the page looks like the app. */
+  :root {
+    --bg: oklch(1 0 0); --fg: oklch(0.141 0.005 285.823); --card: oklch(1 0 0);
+    --primary: oklch(0.21 0.006 285.885); --primary-fg: oklch(0.985 0 0);
+    --secondary: oklch(0.967 0.001 286.375); --muted: oklch(0.552 0.016 285.938);
+    --border: oklch(0.92 0.004 286.32);
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: oklch(0.141 0.005 285.823); --fg: oklch(0.985 0 0); --card: oklch(0.179 0.006 285.885);
+      --primary: oklch(0.985 0 0); --primary-fg: oklch(0.21 0.006 285.885);
+      --secondary: oklch(0.214 0.007 285.885); --muted: oklch(0.652 0.013 285.938);
+      --border: oklch(0.274 0.006 286.033);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: oklch(0.141 0.005 285.823); --fg: oklch(0.985 0 0); --card: oklch(0.179 0.006 285.885);
+    --primary: oklch(0.985 0 0); --primary-fg: oklch(0.21 0.006 285.885);
+    --secondary: oklch(0.214 0.007 285.885); --muted: oklch(0.652 0.013 285.938);
+    --border: oklch(0.274 0.006 286.033);
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 16px/1.6 Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: inherit; }
+  .wrap { max-width: 72rem; margin: 0 auto; padding: 0 16px; }
+  nav { position: sticky; top: 0; z-index: 10; border-bottom: 1px solid var(--border);
+        background: color-mix(in oklch, var(--bg) 85%, transparent); backdrop-filter: blur(12px); }
+  nav .wrap { display: flex; align-items: center; gap: 12px; height: 56px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 14px; text-decoration: none; margin-right: auto; }
+  .logo { width: 32px; height: 32px; border-radius: 8px; background: var(--primary); display: grid; place-items: center; }
+  .logo svg rect { fill: var(--primary-fg); }
+  .link { font-size: 14px; color: var(--muted); text-decoration: none; padding: 6px 10px; border-radius: 6px; }
+  .link:hover { background: var(--secondary); color: var(--fg); }
+  .btn { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 500; text-decoration: none;
+         padding: 8px 16px; border-radius: 8px; background: var(--primary); color: var(--primary-fg); border: 1px solid var(--primary); }
+  .btn.ghost { background: transparent; color: var(--fg); border-color: var(--border); }
+  .btn:hover { opacity: .9; }
+  .hero { text-align: center; padding-top: 88px; padding-bottom: 48px; }
+  .pill { display: inline-block; font-size: 12px; font-weight: 500; color: var(--muted); background: var(--secondary);
+          border: 1px solid var(--border); border-radius: 999px; padding: 4px 12px; margin-bottom: 28px; }
+  h1 { font-size: clamp(2.25rem, 6vw, 3.75rem); line-height: 1.1; letter-spacing: -0.03em; font-weight: 600; margin: 0 auto 20px; max-width: 48rem; }
+  h1 span { color: var(--muted); }
+  .lead { max-width: 38rem; margin: 0 auto 32px; color: var(--muted); }
+  .ctas { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  .shot { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--card);
+          box-shadow: 0 24px 48px -24px rgb(0 0 0 / .25); }
+  .shot img { display: block; width: 100%; height: auto; }
+  .hero-shot { margin-top: 56px; }
+  section { padding: 56px 0; }
+  h2 { font-size: 1.75rem; letter-spacing: -0.02em; font-weight: 600; margin: 0 0 8px; }
+  .sub { color: var(--muted); margin: 0 0 32px; }
+  .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 18rem), 1fr)); }
+  .card { border: 1px solid var(--border); border-radius: 12px; padding: 20px; background: var(--card); }
+  .card h3 { font-size: 15px; margin: 0 0 6px; font-weight: 600; }
+  .card p { font-size: 14px; color: var(--muted); margin: 0; }
+  .gallery { display: grid; gap: 24px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 26rem), 1fr)); }
+  figure { margin: 0; }
+  figcaption { font-size: 13px; color: var(--muted); margin-top: 10px; }
+  figcaption b { color: var(--fg); font-weight: 600; }
+  pre { margin: 0; overflow-x: auto; background: var(--secondary); border: 1px solid var(--border); border-radius: 12px;
+        padding: 20px; font: 13px/1.7 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .note { font-size: 14px; color: var(--muted); margin-top: 16px; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .9em; }
+  footer { border-top: 1px solid var(--border); padding: 28px 0; font-size: 13px; color: var(--muted); }
+  footer .wrap { display: flex; gap: 16px; flex-wrap: wrap; justify-content: space-between; }
+  .icon-btn { background: none; border: 0; color: var(--muted); cursor: pointer; padding: 6px; border-radius: 6px; display: grid; place-items: center; }
+  .icon-btn:hover { background: var(--secondary); color: var(--fg); }
+  @media (max-width: 480px) { .hide-sm { display: none; } .hero { padding-top: 56px; } }
+</style>
+</head>
+<body>
+<nav>
+  <div class="wrap">
+    <a class="brand" href="#">
+      <span class="logo"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="1" y="1" width="6" height="6" rx="1.2"/><rect x="9" y="1" width="6" height="6" rx="1.2" opacity=".6"/><rect x="1" y="9" width="6" height="6" rx="1.2" opacity=".6"/><rect x="9" y="9" width="6" height="6" rx="1.2" opacity=".3"/></svg></span>
+      Digital Board
+    </a>
+    <a class="link hide-sm" href="#features">Features</a>
+    <a class="link hide-sm" href="#install">Install</a>
+    <button class="icon-btn" id="theme" aria-label="Toggle theme">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+    </button>
+    <a class="btn" href="https://github.com/Risen-Dev/digital-board">GitHub</a>
+  </div>
+</nav>
+
+<main>
+  <div class="wrap hero">
+    <span class="pill">Open source · Self-hosted · MIT</span>
+    <h1>A team board<br><span>whose data stays yours.</span></h1>
+    <p class="lead">Kanban, canvas, chat, meetings and GitHub sync for your team, running on your own server against your own PostgreSQL. No per-seat billing, no third-party services.</p>
+    <div class="ctas">
+      <a class="btn" href="#install">Install in 5 minutes</a>
+      <a class="btn ghost" href="https://github.com/Risen-Dev/digital-board">★ Star on GitHub</a>
+    </div>
+    <div class="shot hero-shot"><img src="screenshots/board.png" alt="The Digital Board kanban board" width="2880" height="1800"></div>
+  </div>
+
+  <section id="features">
+    <div class="wrap">
+      <h2>Everything a team needs in one place</h2>
+      <p class="sub">Every view reads the same tasks, so nothing has to be kept in sync by hand.</p>
+      <div class="grid">
+        <div class="card"><h3>Kanban board</h3><p>Drag and drop with mouse, touch or keyboard. Bulk edit, archive, a done column, and a history of every change with who made it.</p></div>
+        <div class="card"><h3>List, Calendar, Analytics</h3><p>The same tasks as a table, on a month grid by due date, and as charts for workload and 14-day activity.</p></div>
+        <div class="card"><h3>Canvas</h3><p>Excalidraw sheets per project with live collaboration: you see other members' cursors and edits as they happen.</p></div>
+        <div class="card"><h3>AI agent</h3><p>"Move WEB-12 to In Review", "draw the onboarding flow". Use it from the board, the canvas or <code>@agent</code> in chat. Works with Anthropic, OpenAI, Gemini or any compatible API.</p></div>
+        <div class="card"><h3>Chat &amp; meetings</h3><p>Workspace channel and DMs with attachments, recurring meetings with attendee reminders, and a notification bell for mentions and due dates.</p></div>
+        <div class="card"><h3>GitHub sync</h3><p>Cards move as branches and PRs progress. Create an issue or open a PR from a card; CI results land in the card's history.</p></div>
+        <div class="card"><h3>Integrations</h3><p>An inbound webhook, email-to-ticket, an iCal feed for your calendar app, and an outgoing webhook that Slack and Discord accept as is.</p></div>
+        <div class="card"><h3>Templates &amp; Trello import</h3><p>Six project templates (Tech, Sales, Marketing, Support, Recruiting, General) and import from a Trello JSON or CSV export.</p></div>
+        <div class="card"><h3>Roles &amp; accounts</h3><p>Multi-user with per-project admin, editor and viewer roles, scrypt-hashed passwords and presence. Works on phones.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <h2>A closer look</h2>
+      <p class="sub">Screenshots from a running instance.</p>
+      <div class="gallery">
+        <figure><div class="shot"><img src="screenshots/canvas.png" alt="Canvas" loading="lazy" width="2880" height="1800"></div><figcaption><b>Canvas</b> · Excalidraw sheets per project</figcaption></figure>
+        <figure><div class="shot"><img src="screenshots/analytics.png" alt="Analytics" loading="lazy" width="2880" height="1800"></div><figcaption><b>Analytics</b> · column, priority, workload, 14-day activity</figcaption></figure>
+        <figure><div class="shot"><img src="screenshots/github.png" alt="GitHub view" loading="lazy" width="2880" height="1800"></div><figcaption><b>GitHub</b> · the repo's PRs, issues, commits and branches</figcaption></figure>
+        <figure><div class="shot"><img src="screenshots/task.png" alt="Task linked to GitHub" loading="lazy" width="2880" height="1800"></div><figcaption><b>Task</b> · linked PRs with CI, branch name to copy</figcaption></figure>
+        <figure><div class="shot"><img src="screenshots/chat.png" alt="Chat" loading="lazy" width="2880" height="1800"></div><figcaption><b>Chat</b> · workspace channel and direct messages</figcaption></figure>
+        <figure><div class="shot"><img src="screenshots/settings.png" alt="Settings" loading="lazy" width="2880" height="1800"></div><figcaption><b>Settings</b> · members, projects, GitHub, AI agent</figcaption></figure>
+      </div>
+    </div>
+  </section>
+
+  <section id="install">
+    <div class="wrap">
+      <h2>Install</h2>
+      <p class="sub">Requires Node 22+ and PostgreSQL 14+.</p>
+<pre><code>sudo -u postgres psql -c "CREATE ROLE board LOGIN PASSWORD 'choose-something';"
+sudo -u postgres psql -c "CREATE DATABASE board OWNER board;"
+
+git clone https://github.com/Risen-Dev/digital-board.git
+cd digital-board
+npm install
+cp .env.example .env      # set DATABASE_URL
+npm run build
+npm start</code></pre>
+      <p class="note">Open <code>http://localhost:3000</code> and choose <b>Create a workspace</b>. Tables create themselves on first use; there is no migration command. Full guide in the <a href="https://github.com/Risen-Dev/digital-board#readme">README</a>.</p>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>Digital Board · MIT License</span>
+    <a href="https://github.com/Risen-Dev/digital-board">github.com/Risen-Dev/digital-board</a>
+  </div>
+</footer>
+
+<script>
+  // Remembers an explicit pick; otherwise the OS theme applies.
+  const root = document.documentElement;
+  try { const t = localStorage.getItem("theme"); if (t) root.dataset.theme = t; } catch {}
+  document.getElementById("theme").onclick = () => {
+    const dark = root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+    root.dataset.theme = dark ? "light" : "dark";
+    try { localStorage.setItem("theme", root.dataset.theme); } catch {}
+  };
+</script>
+</body>
+</html>
