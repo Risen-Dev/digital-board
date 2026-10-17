@@ -5,6 +5,7 @@ import {
   useEffect,
   useMemo,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 
@@ -134,6 +135,14 @@ async function drawFlow(api: ExcalidrawImperativeAPI, flow: Flow, by: string) {
   return added.length;
 }
 
+// The theme toggle only flips the <html> class; the `dark` prop (from the cookie)
+// is stale until the next request, so follow the class live.
+function subscribeTheme(onChange: () => void) {
+  const observer = new MutationObserver(onChange);
+  observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+  return () => observer.disconnect();
+}
+
 type CanvasViewProps = {
   projectId: string;
   sheets: CanvasMeta[];
@@ -152,6 +161,11 @@ export function CanvasView({
   onChanged,
 }: CanvasViewProps) {
   const [agentOpen, setAgentOpen] = useState(false);
+  const isDark = useSyncExternalStore(
+    subscribeTheme,
+    () => document.documentElement.classList.contains("dark"),
+    () => dark,
+  );
 
   const [selected, setSelected] = useState<
     string | null
@@ -484,7 +498,7 @@ export function CanvasView({
                 live.onChange();
               }}
               onPointerUpdate={live.onPointerUpdate}
-              theme={dark ? "dark" : "light"}
+              theme={isDark ? "dark" : "light"}
               viewModeEnabled={readOnly}
             />
           </CanvasBoundary>
