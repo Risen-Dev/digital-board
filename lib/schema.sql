@@ -259,3 +259,28 @@ ALTER TABLE projects ADD COLUMN IF NOT EXISTS done_column_id TEXT REFERENCES col
 -- Chat messages written by the AI agent (called with "@agent" or in a member's private
 -- agent thread, a DM to themselves). author_id is the member who called it.
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS agent BOOLEAN NOT NULL DEFAULT false;
+
+-- Meetings: a workspace-level schedule, separate from cards. `start_date` + `start_time`
+-- are wall-clock (each viewer's browser reads them in its own time zone); `repeat` is
+-- 'none', 'daily', 'weekdays', 'weekly' or 'monthly'. Attendees get a reminder
+-- `remind_min` minutes before each occurrence (derived in the browser, nothing stored).
+CREATE TABLE IF NOT EXISTS meetings (
+  id           TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  title        TEXT NOT NULL,
+  notes        TEXT,
+  link         TEXT,
+  start_date   TEXT NOT NULL,
+  start_time   TEXT NOT NULL,
+  duration_min INTEGER NOT NULL DEFAULT 30,
+  repeat       TEXT NOT NULL DEFAULT 'none',
+  remind_min   INTEGER NOT NULL DEFAULT 15,
+  created_by   TEXT REFERENCES users(id) ON DELETE SET NULL,
+  created_at   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS meetings_workspace ON meetings(workspace_id);
+CREATE TABLE IF NOT EXISTS meeting_attendees (
+  meeting_id TEXT NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
+  user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  PRIMARY KEY (meeting_id, user_id)
+);

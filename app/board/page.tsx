@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { currentUser } from "@/lib/auth";
-import { activityFeed, activityNotifications, analytics, getBoard, listCanvases, listMembers, listMembersWithPresence, listProjects, myTasks, projectMembers, unreadCounts, workspaceName } from "@/lib/queries";
+import { activityFeed, activityNotifications, analytics, getBoard, listCanvases, listMembers, listMembersWithPresence, listMeetings, listProjects, myTasks, projectMembers, unreadCounts, workspaceName } from "@/lib/queries";
 import { Workspace } from "@/components/workspace";
 import { aiConfig, aiSettings } from "@/lib/ai";
 
@@ -30,6 +30,7 @@ export default async function BoardPage({ searchParams }: PageProps<"/board">) {
       notifications={await activityNotifications(ws, user.id, user.is_admin)}
       unread={await unreadCounts(ws, user.id)}
       mine={await myTasks(user.id)}
+      meetings={await listMeetings(ws)}
       stats={project ? await analytics(project.id) : null}
       sheets={project ? await listCanvases(project.id) : []}
       today={new Date().toISOString().slice(0, 10)}

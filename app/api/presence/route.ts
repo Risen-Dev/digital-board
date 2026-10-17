@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { currentUser } from "@/lib/auth";
-import { activityNotifications, listMembersWithPresence, markActivityItemsRead, markActivityRead, markAllMessagesRead, unreadCounts } from "@/lib/queries";
+import { activityNotifications, listMeetings, listMembersWithPresence, markActivityItemsRead, markActivityRead, markAllMessagesRead, unreadCounts } from "@/lib/queries";
 
 /**
  * Lightweight ping from the workspace shell so presence and unread badges stay
@@ -11,7 +11,9 @@ export async function GET() {
   if (!me) return new NextResponse("Unauthorized", { status: 401 });
 
   return NextResponse.json(
-    { members: await listMembersWithPresence(me.workspace_id), unread: await unreadCounts(me.workspace_id, me.id), notifications: await activityNotifications(me.workspace_id, me.id, me.is_admin) },
+    { members: await listMembersWithPresence(me.workspace_id), unread: await unreadCounts(me.workspace_id, me.id), notifications: await activityNotifications(me.workspace_id, me.id, me.is_admin),
+      // Meetings ride along so a new invite reaches attendees without a reload.
+      meetings: await listMeetings(me.workspace_id) },
     { headers: { "cache-control": "no-store" } },
   );
 }

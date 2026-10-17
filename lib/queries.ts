@@ -2,6 +2,7 @@ import "server-only";
 import { all, get, run } from "./db";
 import type { CheckItem, Column, Entry, Member, Priority, Repeat, Task } from "./board";
 import { day, stamp } from "./format";
+import type { Meeting } from "./meetings";
 
 type TaskRow = {
   id: string;
@@ -64,6 +65,16 @@ export const listProjects = (workspaceId: string, userId: string, isAdmin: boole
 
 export const listMembers = (workspaceId: string) =>
   all<Member>("SELECT id, name, color FROM users WHERE workspace_id = ? ORDER BY created_at", workspaceId);
+
+/** Every meeting in the workspace; members see all of them, attendees get the reminders. */
+export const listMeetings = (workspaceId: string) =>
+  all<Meeting>(
+    `SELECT m.id, m.title, m.notes, m.link, m.start_date AS "startDate", m.start_time AS "startTime",
+            m.duration_min AS "durationMin", m.repeat, m.remind_min AS "remindMin", m.created_by AS "createdBy",
+            COALESCE((SELECT json_agg(a.user_id) FROM meeting_attendees a WHERE a.meeting_id = m.id), '[]') AS "attendeeIds"
+       FROM meetings m WHERE m.workspace_id = ? ORDER BY m.start_time, m.title`,
+    workspaceId,
+  );
 
 export type ProjectMember = { user_id: string; project_id: string; role: "admin" | "editor" | "viewer" };
 export const projectMembers = (workspaceId: string) =>
