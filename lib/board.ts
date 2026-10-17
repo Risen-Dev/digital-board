@@ -168,6 +168,15 @@ export const branchNameOf = (task: Pick<Task, "key" | "title" | "label">) => {
   return `${/bug|fix/i.test(task.label ?? "") ? "fix" : "feat"}/${task.key}${slug ? `-${slug}` : ""}`;
 };
 
+/**
+ * GitHub's "open a pull request" page for the card's branch (`branchNameOf`), with the title
+ * prefilled so the key links the PR back. One ref in /compare means "against the default branch".
+ * `closes` ("#21") go in the body as "Closes #21", one per line, so merging closes those issues.
+ */
+export const pullRequestUrlOf = (repo: string, task: Pick<Task, "key" | "title" | "label">, closes: string[] = []) =>
+  `https://github.com/${repo}/compare/${branchNameOf(task)}?expand=1&title=${encodeURIComponent(`[${task.key}] ${task.title}`)}` +
+  (closes.length ? `&body=${encodeURIComponent(closes.map((ref) => `Closes ${ref}`).join("\n"))}` : "");
+
 export type CiState = "success" | "failure" | "pending" | null;
 
 /** One state for a commit's check runs: any failure wins, then anything unfinished, else success; none → null. */

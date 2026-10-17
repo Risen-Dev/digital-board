@@ -6,11 +6,12 @@ import { CalendarDays, ListChecks, MessageSquare, Repeat } from "lucide-react";
 import { initials, labelsOf, PRIORITY_CFG, type Task } from "@/lib/board";
 import type { TaskLinks } from "@/lib/github";
 import { Avatar } from "./avatar";
-import { PullBadge, primaryPull } from "./views/github-view";
+import { PullBadge, primaryIssue, primaryPull } from "./views/github-view";
 
 export function TaskCard({ task, links, onOpen, overlay = false }: { task: Task; links?: TaskLinks; onOpen?: () => void; overlay?: boolean }) {
   const priority = PRIORITY_CFG[task.priority];
   const pull = primaryPull(links);
+  const issue = pull ? undefined : primaryIssue(links);
   return (
     <div
       onClick={onOpen}
@@ -22,6 +23,7 @@ export function TaskCard({ task, links, onOpen, overlay = false }: { task: Task;
         <div className="mb-1 flex items-center gap-2 text-[10px] text-muted-foreground">
           <span className="font-mono">{task.key}</span>
           {pull && <PullBadge pull={pull} />}
+          {issue && <PullBadge pull={issue} kind="issues" />}
         </div>
       )}
       <p className="mb-2.5 text-sm font-medium leading-snug">{task.title}</p>

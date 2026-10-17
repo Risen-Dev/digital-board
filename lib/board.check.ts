@@ -1,6 +1,6 @@
 // Run: node --experimental-strip-types lib/board.check.ts
 import assert from "node:assert/strict";
-import { applyFilters, branchNameOf, ciOf, columnOf, initials, joinLabels, labelsOf, nextDue, placeTask, projectKeyOf, reorder, TEMPLATES, templateOf, type Column } from "./board.ts";
+import { applyFilters, branchNameOf, pullRequestUrlOf, ciOf, columnOf, initials, joinLabels, labelsOf, nextDue, placeTask, projectKeyOf, reorder, TEMPLATES, templateOf, type Column } from "./board.ts";
 import { parseFlow } from "./canvas/flow.ts";
 import { columnFor, keysIn, planEvent } from "./github-events.ts";
 import { resolveActions } from "./board-agent.ts";
@@ -281,3 +281,12 @@ assert.equal(nextDue("2026-12-15", "monthly"), "2027-01-15");
   // Untrusted shape: a card whose column wasn't listed still lands in one.
   assert.deepEqual(cleanImport({ columns: [], cards: [{ title: "T", column: "", checklist: [{ text: "x", done: "yes" }] }] })?.cards[0].checklist, [{ text: "x", done: false }]);
 }
+
+assert.equal(
+  pullRequestUrlOf("acme/web", { key: "WEB-7", title: "Fix login & logout", label: "Bug" }),
+  "https://github.com/acme/web/compare/fix/WEB-7-fix-login-logout?expand=1&title=%5BWEB-7%5D%20Fix%20login%20%26%20logout",
+);
+assert.equal(
+  pullRequestUrlOf("acme/web", { key: "WEB-7", title: "T", label: null }, ["#21", "#22"]),
+  "https://github.com/acme/web/compare/feat/WEB-7-t?expand=1&title=%5BWEB-7%5D%20T&body=Closes%20%2321%0ACloses%20%2322",
+);

@@ -154,21 +154,25 @@ function CiDot({ ci }: { ci: CiState | undefined }) {
   return <span title={s.label} aria-label={s.label} className="size-1.5 shrink-0 rounded-full" style={{ background: s.color }} />;
 }
 
-/** Compact "#12 ●" badge for a card: PR state icon, number, CI dot. */
-export function PullBadge({ pull }: { pull: TaskLinks["pulls"][number] }) {
+/** The issue a card shows when it has no PR: an open one first. */
+export const primaryIssue = (links: TaskLinks | undefined) => links?.issues.toSorted((a, b) => Number(a.state !== "open") - Number(b.state !== "open"))[0];
+
+/** Compact "#12 ●" badge for a card: PR (or issue) state icon, number, CI dot. */
+export function PullBadge({ pull, kind = "pulls" }: { pull: TaskLinks["pulls"][number]; kind?: "pulls" | "issues" }) {
   return (
     <span className="flex items-center gap-1" title={`${pull.ref} ${pull.title} (${pull.state})`}>
-      <StateIcon kind="pulls" state={pull.state} size="size-3" />
+      <StateIcon kind={kind} state={pull.state} size="size-3" />
       <span className="font-mono">{pull.ref}</span>
       <CiDot ci={pull.ci} />
     </span>
   );
 }
 
-/** The task dialog's list of linked PRs, branches and commits. */
+/** The task dialog's list of linked PRs, issues, branches and commits. */
 export function TaskGithubLinks({ links }: { links: TaskLinks }) {
   const rows: { kind: GithubKind; item: TaskLinks["pulls"][number] }[] = [
     ...links.pulls.map((item) => ({ kind: "pulls" as const, item })),
+    ...links.issues.map((item) => ({ kind: "issues" as const, item })),
     ...links.branches.map((item) => ({ kind: "branches" as const, item })),
     ...links.commits.map((item) => ({ kind: "commits" as const, item })),
   ];
