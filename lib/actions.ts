@@ -11,6 +11,7 @@ import { projectRole } from "./canvas/guard";
 import { notify } from "./outgoing";
 import { nextTaskNumber, relocateTask } from "./tasks";
 import { DONE_COLUMN } from "./queries";
+import { cleanImport, type Imported } from "./trello";
 import type { Flow } from "./canvas/flow";
 import examplesData from "./template-examples.json";
 
@@ -485,11 +486,54 @@ export async function setProjectMember(projectId: string, userId: string, role: 
   return { ok: true };
 }
 
-export async function addProject(name: string, templateId?: string, examples = false) {
+/**
+ * Adds the imported columns and cards to a project. An imported column whose title matches an
+ * existing one (ignoring case) reuses it; the rest are added after it. Cards go below the
+ * cards already there. Members are matched to workspace members by name, ignoring case;
+ * unknown names are dropped. Comments are not imported.
+ */
+async function seedImport(projectId: string, data: Imported, user: User) {
+  const existing = await all<{ id: string; title: string; n: number }>(
+    `SELECT c.id, c.title, (SELECT COALESCE(MAX(position) + 1, 0) FROM tasks WHERE column_id = c.id) n
+       FROM columns c WHERE c.project_id = ? ORDER BY c.position`, projectId,
+  );
+  const columnIds = new Map(existing.map((c) => [c.title.trim().toLowerCase(), c.id]));
+  const positions = new Map(existing.map((c) => [c.id, c.n]));
+  for (const title of data.columns) {
+    if (columnIds.has(title.toLowerCase())) continue;
+    const id = randomUUID();
+    const i = columnIds.size;
+    columnIds.set(title.toLowerCase(), id);
+    await run(
+      "INSERT INTO columns (id, project_id, title, color, position) VALUES (?,?,?,?,?)",
+      id, projectId, title, COLUMN_COLORS[i % COLUMN_COLORS.length], i,
+    );
+  }
+  const members = await all<{ id: string; name: string }>("SELECT id, name FROM users WHERE workspace_id = ?", user.workspace_id);
+  const memberId = new Map(members.map((m) => [m.name.trim().toLowerCase(), m.id]));
+  for (const c of data.cards) {
+    const columnId = columnIds.get(c.column.toLowerCase())!;
+    const position = positions.get(columnId) ?? 0;
+    positions.set(columnId, position + 1);
+    const id = randomUUID();
+    await run(
+      `INSERT INTO tasks (id, column_id, title, description, label, priority, due_date, checklist, archived_at, position, number, created_at)
+       VALUES (?,?,?,?,?,'medium',?,?::jsonb,?,?,?,?)`,
+      id, columnId, c.title, c.description, c.label, c.dueDate, JSON.stringify(c.checklist),
+      c.archived ? now() : null, position, await nextTaskNumber(projectId), now(),
+    );
+    // No per-card history event: hundreds of "Imported" lines would flood everyone's bell and Inbox.
+    await setAssignees(id, [...new Set(c.members.map((m) => memberId.get(m.toLowerCase())).filter((m) => m !== undefined))]);
+  }
+}
+
+export async function addProject(name: string, templateId?: string, examples = false, imported?: Imported) {
   const user = await requireUser();
   if (!user.is_admin) return { error: "Only workspace admins can create projects." };
   const clean = name.trim();
   if (!clean) return { error: "Project name is required." };
+  const data = imported === undefined ? null : cleanImport(imported);
+  if (imported !== undefined && !data) return { error: "Nothing to import from that file." };
 
   const id = randomUUID();
   const next = (await get<{ n: number }>(
@@ -501,10 +545,30 @@ export async function addProject(name: string, templateId?: string, examples = f
       id, user.workspace_id, clean, projectKeyOf(clean), next, now(),
     );
     // A project with no columns is a dead end, so seed the template's.
-    await seedProject(id, templateId, null, examples, user.id);
+    if (data?.columns.length) await seedImport(id, data, user);
+    else await seedProject(id, templateId, null, examples, user.id);
   });
   revalidatePath("/board");
   return { ok: true, id };
+}
+
+/**
+ * Imports a Trello/CSV board into an existing project. `replace` first deletes every column
+ * and card (archived ones too, with their history and comments), so the board becomes the
+ * file's lists in its order; otherwise matching columns are reused and the rest appended.
+ */
+export async function importIntoProject(projectId: string, imported: Imported, replace: boolean) {
+  const user = await requireUser();
+  if (!await canManage(user, projectId)) return { error: "Only project admins can import." };
+  const data = cleanImport(imported);
+  if (!data) return { error: "Nothing to import from that file." };
+  await transaction(async () => {
+    // cleanImport always returns at least one column, so the board never ends up empty.
+    if (replace) await run("DELETE FROM columns WHERE project_id = ?", projectId);
+    await seedImport(projectId, data, user);
+  });
+  revalidatePath("/board");
+  return { ok: true, cards: data.cards.length };
 }
 
 /** Removes the project and everything under it: columns, tasks, history, canvas sheets. */
