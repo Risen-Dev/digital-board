@@ -575,6 +575,7 @@ export function Workspace({
           members={members}
           defaultColumnId={creating ?? undefined}
           links={editing?.key ? links[editing.key] : undefined}
+          repo={project?.repo}
           onClose={close}
         />
       )}

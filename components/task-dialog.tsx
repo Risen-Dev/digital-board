@@ -1,9 +1,9 @@
 "use client";
 
 import { useActionState, useCallback, useEffect, useState } from "react";
-import { Archive, Check, GitBranch, GitPullRequest, History, ListChecks, Trash2, X } from "lucide-react";
-import { addComment, archiveTask, createTask, deleteTask, fetchHistory, setChecklist, updateTask } from "@/lib/actions";
-import { branchNameOf, initials, PRIORITIES, PRIORITY_CFG, REPEATS, type CheckItem, type Column, type Entry, type Member, type Task } from "@/lib/board";
+import { Archive, Check, CircleDot, GitBranch, GitPullRequest, History, ListChecks, Trash2, X } from "lucide-react";
+import { addComment, archiveTask, createGithubIssue, createTask, deleteTask, fetchHistory, setChecklist, updateTask } from "@/lib/actions";
+import { branchNameOf, initials, pullRequestUrlOf, PRIORITIES, PRIORITY_CFG, REPEATS, type CheckItem, type Column, type Entry, type Member, type Task } from "@/lib/board";
 import { Avatar } from "./avatar";
 import type { TaskLinks } from "@/lib/github";
 import { TaskGithubLinks } from "./views/github-view";
@@ -16,15 +16,17 @@ type Props = {
   defaultColumnId?: string;
   /** Linked PRs / branches / commits, when the project has a GitHub repo. */
   links?: TaskLinks;
+  /** The project's GitHub repo ("owner/name"), for the create issue / PR buttons. */
+  repo?: string | null;
   onClose: () => void;
 };
 
-export function TaskDialog({ task, columns, members, defaultColumnId, links, onClose }: Props) {
+export function TaskDialog({ task, columns, members, defaultColumnId, links, repo, onClose }: Props) {
   const editing = task !== null;
   const [state, action] = useActionState(editing ? updateTask : createTask, null);
   const [history, setHistory] = useState<Entry[]>([]);
   const [copied, setCopied] = useState(false);
-  const linked = links ? links.pulls.length + links.branches.length + links.commits.length : 0;
+  const linked = links ? links.pulls.length + links.issues.length + links.branches.length + links.commits.length : 0;
 
   useEffect(() => {
     if (state?.ok) onClose();
@@ -157,15 +159,26 @@ export function TaskDialog({ task, columns, members, defaultColumnId, links, onC
           </div>
         </form>
 
-        {links && linked > 0 && (
+        {(linked > 0 || (repo && task?.key)) && (
           <div className="shrink-0 border-t px-5 py-4">
             <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
               <GitPullRequest className="size-3.5" />
               GitHub
             </h3>
-            <div className="max-h-40 overflow-y-auto">
-              <TaskGithubLinks links={links} />
-            </div>
+            {repo && task?.key && (
+              <GithubActions
+                taskId={task.id}
+                repo={repo}
+                task={task}
+                closes={links?.issues.filter((i) => i.state === "open").map((i) => i.ref) ?? []}
+                onDone={loadHistory}
+              />
+            )}
+            {links && linked > 0 && (
+              <div className="mt-2 max-h-40 overflow-y-auto">
+                <TaskGithubLinks links={links} />
+              </div>
+            )}
           </div>
         )}
 
@@ -307,5 +320,47 @@ function Mentions({ text, members }: { text: string; members: Member[] }) {
   const re = new RegExp(`(@(?:${names.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")}))`, "g");
   return text.split(re).map((part, i) =>
     i % 2 ? <span key={i} className="font-semibold text-primary">{part}</span> : part,
+  );
+}
+
+/** Create a GitHub issue from the card, or open GitHub's new-PR page for its branch. */
+function GithubActions({ taskId, repo, task, closes, onDone }: { taskId: string; repo: string; task: Task; closes: string[]; onDone: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  const btn = "flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-50";
+
+  async function issue() {
+    // Opened before the await, or the browser treats it as a popup and blocks it.
+    const tab = window.open("", "_blank");
+    setBusy(true);
+    const res = await createGithubIssue(taskId);
+    setBusy(false);
+    if ("error" in res) {
+      tab?.close();
+      return setError(res.error);
+    }
+    setError(undefined);
+    if (tab) tab.location.href = res.url;
+    onDone();
+  }
+
+  return (
+    <>
+      <div className="flex flex-wrap gap-2">
+        <button type="button" disabled={busy} onClick={() => void issue()} className={btn}>
+          <CircleDot className="size-3" /> {busy ? "Creating issue…" : "Create issue"}
+        </button>
+        <a
+          href={pullRequestUrlOf(repo, task, closes)}
+          target="_blank"
+          rel="noreferrer"
+          title={`Push ${branchNameOf(task)} first; GitHub opens a pull request from it into the default branch.${closes.length ? ` Merging it closes ${closes.join(", ")}.` : ""}`}
+          className={btn}
+        >
+          <GitPullRequest className="size-3" /> Open pull request
+        </a>
+      </div>
+      {error && <p className="mt-1.5 text-[11px] text-[#ef4444]">{error}</p>}
+    </>
   );
 }

@@ -98,7 +98,11 @@ address of the board, not `localhost`.
    Metadata. Public repos work without a token (GitHub allows 60 requests an hour).
 2. The project gets a **GitHub** view. Any branch, PR title or commit message
    that names a card key (`WEB-42`) shows on that card. Use **Copy branch name**
-   in the task dialog to get `feat/WEB-42-title`.
+   in the task dialog to get `feat/WEB-42-title`. **Create issue** opens a
+   GitHub issue `[WEB-42] title` from the card, which then shows on it like a
+   PR (the token needs Issues: Read and write), and **Open pull request** opens GitHub's new-PR page for the
+   card's branch, title prefilled and `Closes #21` for the card's open issues,
+   so merging the PR closes them.
 3. To have cards move by themselves, click **Generate secret**. Then in the repo
    go to Settings → Webhooks → Add webhook, paste the payload URL and secret,
    set the content type to `application/json`, and pick the events
@@ -107,6 +111,19 @@ address of the board, not `localhost`.
 Cards only move forward: push to the card's branch → In Progress, PR opened →
 In Review, PR merged → QA (or Done). Failing checks are added to the card's
 history.
+
+**From a card to a merged PR** (card `WEB-42`, in its dialog's GitHub section):
+
+1. **Create issue** (optional) opens `[WEB-42] title` on GitHub; the card then
+   shows its number.
+2. **Copy branch name** → `git checkout -b feat/WEB-42-title`, commit,
+   `git push -u origin feat/WEB-42-title` (card → In Progress).
+3. **Open pull request** opens GitHub's new-PR page for that branch with the
+   title and `Closes #21` filled in; click *Create pull request* (card → In
+   Review, the PR badge replaces the issue's).
+4. Merge: GitHub closes the issue, the card goes to QA (or Done).
+
+Without the webhook the links still show, but you move the card by hand.
 
 ### Inbound webhook
 

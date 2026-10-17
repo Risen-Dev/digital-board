@@ -532,7 +532,7 @@ function GithubSettings({ project }: { project: Project }) {
         <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noreferrer" className="underline">
           fine-grained token
         </a>{" "}
-        limited to this repo with read-only Contents, Issues, Pull requests and Metadata.
+        limited to this repo with read-only Contents, Issues, Pull requests and Metadata. Give Issues Read and write to create issues from cards.
       </p>
       <form
         onSubmit={(e) => { e.preventDefault(); save(repo); }}

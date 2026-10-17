@@ -693,6 +693,30 @@ export async function setProjectKey(projectId: string, key: string) {
  * Links a project to a GitHub repo. A blank token keeps the saved one; an empty
  * repo disconnects. The pair is checked against GitHub before it is stored.
  */
+/** Opens a GitHub issue from a card: "[KEY] title", the description, and a back-reference. */
+export async function createGithubIssue(taskId: string) {
+  const user = await requireUser();
+  if (!await writableTask(user, taskId)) return { error: "You cannot edit this task." };
+  const task = (await get<{ title: string; description: string | null; project_id: string; key: string }>(
+    `SELECT t.title, t.description, c.project_id, p.key || '-' || t.number AS key
+       FROM tasks t JOIN columns c ON c.id = t.column_id JOIN projects p ON p.id = c.project_id WHERE t.id = ?`, taskId,
+  ))!;
+  const { GithubError, createIssue, forgetGithub, githubConfig } = await import("./github");
+  const config = await githubConfig(task.project_id);
+  if (!config?.repo) return { error: "Connect a GitHub repo in Settings → Projects first." };
+  if (!config.token) return { error: "Creating issues needs a token with Issues: Read and write (Settings → Projects → GitHub)." };
+  try {
+    const body = `${task.description ?? ""}\n\n---\nFrom digital board card ${task.key}.`.trim();
+    const issue = await createIssue(config, `[${task.key}] ${task.title}`, body);
+    await logEvent(taskId, user.id, `Created GitHub issue #${issue.number}: ${issue.url}`);
+    forgetGithub(task.project_id);
+    revalidatePath("/board");
+    return { ok: true, url: issue.url };
+  } catch (e) {
+    return { error: e instanceof GithubError ? e.message : "Could not reach GitHub." };
+  }
+}
+
 export async function saveGithub(projectId: string, repo: string, token: string) {
   const user = await requireUser();
   if (!await canManage(user, projectId)) return { error: "You cannot manage this project." };

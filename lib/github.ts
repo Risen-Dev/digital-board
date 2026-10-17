@@ -40,15 +40,21 @@ export async function githubConfig(projectId: string): Promise<GithubConfig | nu
 
 export class GithubError extends Error {}
 
-async function gh<T>(config: GithubConfig, path: string): Promise<T> {
+async function gh<T>(config: GithubConfig, path: string, post?: unknown): Promise<T> {
   const res = await fetch(`https://api.github.com/repos/${config.repo}${path}`, {
+    method: post === undefined ? "GET" : "POST",
     headers: {
       accept: "application/vnd.github+json",
       ...(config.token ? { authorization: `Bearer ${config.token}` } : {}),
       "x-github-api-version": "2022-11-28",
     },
+    body: post === undefined ? undefined : JSON.stringify(post),
     cache: "no-store",
   });
+  // A read-only token gets 403 (fine-grained) or 404 (classic) on writes.
+  if (post !== undefined && (res.status === 403 || res.status === 404)) {
+    throw new GithubError("The token can't create issues. Give it Issues: Read and write in Settings → Projects → GitHub.");
+  }
   if (res.ok) return res.json();
   if (res.status === 401) throw new GithubError("GitHub rejected the token. It may have expired; save a new one in Settings.");
   if (res.status === 404) {
@@ -56,6 +62,12 @@ async function gh<T>(config: GithubConfig, path: string): Promise<T> {
   }
   if (res.status === 403 || res.status === 429) throw new GithubError("GitHub rate limit or permission error. Try again in a minute.");
   throw new GithubError(`GitHub answered ${res.status}.`);
+}
+
+/** Opens an issue; returns its number and page. */
+export async function createIssue(config: GithubConfig, title: string, body: string) {
+  const issue = await gh<{ number: number; html_url: string }>(config, "/issues", { title, body });
+  return { number: issue.number, url: issue.html_url };
 }
 
 /** Checks a repo + token pair before saving it; returns the repo's canonical full name. */
@@ -104,9 +116,20 @@ async function load(config: GithubConfig, kind: GithubKind): Promise<GithubItem[
   }
 }
 
+declare global {
+  var __githubCache: Map<string, { at: number; items: GithubItem[] }> | undefined;
+}
+
 // ponytail: in-process cache, per server instance; fine for one self-hosted node.
-const cache = new Map<string, { at: number; items: GithubItem[] }>();
+// On globalThis because route handlers and server actions load separate copies of this
+// module, and `forgetGithub` (called from an action) must clear the route's cache too.
+const cache = (globalThis.__githubCache ??= new Map());
 const TTL = 60_000;
+
+/** Drops a project's cached lists, so the next read sees what was just created. */
+export function forgetGithub(projectId: string) {
+  for (const key of cache.keys()) if (key.startsWith(`${projectId}:`)) cache.delete(key);
+}
 
 /** A project's PRs / issues / commits / branches, cached for a minute so the view can't burn the rate limit. */
 export async function githubItems(projectId: string, config: GithubConfig, kind: GithubKind, fresh = false) {
@@ -119,7 +142,7 @@ export async function githubItems(projectId: string, config: GithubConfig, kind:
   return items;
 }
 
-export type TaskLinks = { pulls: (GithubItem & { ci?: CiState })[]; commits: GithubItem[]; branches: GithubItem[] };
+export type TaskLinks = { pulls: (GithubItem & { ci?: CiState })[]; commits: GithubItem[]; branches: GithubItem[]; issues: GithubItem[] };
 
 type CheckRuns = { check_runs: { status: string; conclusion: string | null }[] };
 
@@ -142,23 +165,25 @@ async function ciFor(config: GithubConfig, sha: string): Promise<CiState> {
  */
 export async function githubLinks(projectId: string, config: GithubConfig, projectKey: string, fresh = false) {
   // GitHub down or rate-limited: still serve what the webhook stored.
-  const [pulls, commits, branches] = await Promise.all(
-    (["pulls", "commits", "branches"] as const).map((k) => githubItems(projectId, config, k, fresh)),
-  ).catch(() => [[], [], []] as GithubItem[][]);
+  const [pulls, commits, branches, issues] = await Promise.all(
+    (["pulls", "commits", "branches", "issues"] as const).map((k) => githubItems(projectId, config, k, fresh)),
+  ).catch(() => [[], [], [], []] as GithubItem[][]);
   const links: Record<string, TaskLinks> = {};
   const add = (kind: keyof TaskLinks, text: string, item: GithubItem) => {
     for (const key of keysIn(text, projectKey)) {
-      const entry = (links[key] ??= { pulls: [], commits: [], branches: [] });
+      const entry = (links[key] ??= { pulls: [], commits: [], branches: [], issues: [] });
       entry[kind].push(item);
     }
   };
   for (const p of pulls) add("pulls", `${p.title} ${p.head?.ref ?? ""}`, p);
   for (const c of commits) add("commits", c.title, c);
   for (const b of branches) add("branches", b.title, b);
+  // Issues match by title only (the last 30 updated); "Create issue" titles them "[KEY] …".
+  for (const i of issues) add("issues", i.title, i);
 
   // Older links the webhook stored (task_links); the live lists above win on duplicates.
   const stored = await all<{
-    task_key: string; kind: keyof TaskLinks; ext_id: string; title: string; url: string; ref: string;
+    task_key: string; kind: "pulls" | "commits" | "branches"; ext_id: string; title: string; url: string; ref: string;
     state: string | null; author: string | null; sha: string | null; ci: CiState; at: string | null;
   }>(
     `SELECT p.key || '-' || t.number AS task_key, l.kind, l.ext_id, l.title, l.url, l.ref, l.state, l.author, l.sha, l.ci, l.at
@@ -167,7 +192,7 @@ export async function githubLinks(projectId: string, config: GithubConfig, proje
     projectId,
   );
   for (const r of stored) {
-    const entry = (links[r.task_key] ??= { pulls: [], commits: [], branches: [] });
+    const entry = (links[r.task_key] ??= { pulls: [], commits: [], branches: [], issues: [] });
     if (entry[r.kind].some((i) => i.id === r.ext_id)) continue;
     entry[r.kind].push({
       id: r.ext_id, title: r.title, url: r.url, state: r.state, ref: r.ref, author: r.author, at: r.at, meta: [],
