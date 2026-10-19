@@ -1,10 +1,12 @@
 "use client";
 
 import { useActionState, useCallback, useEffect, useState } from "react";
-import { Archive, Check, CircleDot, GitBranch, GitPullRequest, History, ListChecks, Trash2, X } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Archive, Check, CircleDot, GitBranch, GitPullRequest, History, Image as ImageIcon, ImagePlus, ListChecks, Trash2, X } from "lucide-react";
 import { addComment, archiveTask, createGithubIssue, createTask, deleteTask, fetchHistory, setChecklist, updateTask } from "@/lib/actions";
-import { branchNameOf, initials, pullRequestUrlOf, PRIORITIES, PRIORITY_CFG, REPEATS, type CheckItem, type Column, type Entry, type Member, type Task } from "@/lib/board";
+import { branchNameOf, initials, pullRequestUrlOf, PRIORITIES, PRIORITY_CFG, REPEATS, type CheckItem, type Column, type Entry, type Member, type Task, type TaskImage } from "@/lib/board";
 import { Avatar } from "./avatar";
+import { imageUrl } from "./task-card";
 import type { TaskLinks } from "@/lib/github";
 import { TaskGithubLinks } from "./views/github-view";
 import { Field, FormError, Select, SubmitButton } from "./form-bits";
@@ -182,6 +184,8 @@ export function TaskDialog({ task, columns, members, defaultColumnId, links, rep
           </div>
         )}
 
+        {editing && <Images key={`images-${task.id}`} task={task} />}
+
         {editing && <Checklist key={task.id} taskId={task.id} initial={task.checklist} />}
 
         {editing && (
@@ -212,6 +216,81 @@ export function TaskDialog({ task, columns, members, defaultColumnId, links, rep
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/** Images inside the card; the first is its cover on the board. Saves on pick, like the checklist. */
+function Images({ task }: { task: Task }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  // The dialog keeps the task it opened with; this tracks the images until it closes.
+  const [images, setImages] = useState(task.images);
+  const btn = "flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-50";
+
+  async function add(files: File[]) {
+    setBusy(true);
+    const body = new FormData();
+    for (const f of files) body.append("files", f);
+    const res = await fetch(`/api/tasks/${task.id}/images`, { method: "POST", body });
+    setBusy(false);
+    if (!res.ok) return setError(await res.text());
+    setError(undefined);
+    setImages(await res.json());
+    router.refresh();
+  }
+
+  async function remove(image: TaskImage) {
+    if (!confirm(`Delete "${image.name}"?`)) return;
+    const res = await fetch(`/api/tasks/${task.id}/images/${image.id}`, { method: "DELETE" });
+    if (!res.ok) return setError(await res.text());
+    setImages((all) => all.filter((i) => i.id !== image.id));
+    router.refresh();
+  }
+
+  return (
+    <div className="shrink-0 border-t px-5 py-4">
+      <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+        <ImageIcon className="size-3.5" />
+        Images {images.length > 0 && images.length}
+      </h3>
+      {images.length > 0 && (
+        <div className="mb-2 grid grid-cols-3 gap-2">
+          {images.map((image, i) => (
+            <div key={image.id} className="group relative">
+              <a href={imageUrl(task.id, image.id)} target="_blank" rel="noreferrer" title={image.name}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={imageUrl(task.id, image.id)} alt={image.name} className="aspect-video w-full rounded-md border bg-secondary object-cover" />
+              </a>
+              {i === 0 && <span className="absolute left-1 top-1 rounded bg-black/60 px-1 text-[10px] text-white">Cover</span>}
+              <button
+                type="button"
+                aria-label={`Delete ${image.name}`}
+                onClick={() => void remove(image)}
+                className="absolute right-1 top-1 rounded bg-black/60 p-0.5 text-white opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
+              >
+                <X className="size-3" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <label className={`${btn} w-fit cursor-pointer ${busy ? "pointer-events-none opacity-50" : ""}`}>
+        <ImagePlus className="size-3" /> {busy ? "Uploading…" : "Add images"}
+        <input
+          type="file"
+          multiple
+          accept="image/png,image/jpeg,image/gif,image/webp,image/avif"
+          className="sr-only"
+          onChange={(e) => {
+            const files = [...(e.target.files ?? [])];
+            e.target.value = "";
+            if (files.length) void add(files);
+          }}
+        />
+      </label>
+      {error && <p className="mt-1.5 text-[11px] text-[#ef4444]">{error}</p>}
     </div>
   );
 }

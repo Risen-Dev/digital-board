@@ -284,3 +284,15 @@ CREATE TABLE IF NOT EXISTS meeting_attendees (
   user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   PRIMARY KEY (meeting_id, user_id)
 );
+
+-- Images added inside a card; the first one is the card's cover on the board.
+-- Bytes live here, not in tasks, so board queries never drag them along.
+CREATE TABLE IF NOT EXISTS task_images (
+  id         TEXT PRIMARY KEY,
+  task_id    TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  name       TEXT NOT NULL,
+  mime       TEXT NOT NULL,
+  data       BYTEA NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS task_images_task ON task_images(task_id, created_at);

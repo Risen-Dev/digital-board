@@ -15,10 +15,19 @@ export function TaskCard({ task, links, onOpen, overlay = false }: { task: Task;
   return (
     <div
       onClick={onOpen}
-      className={`group rounded-lg border bg-card p-3 shadow-sm transition-all ${
+      className={`group overflow-hidden rounded-lg border bg-card p-3 shadow-sm transition-all ${
         overlay ? "rotate-1 cursor-grabbing shadow-lg" : "cursor-grab hover:-translate-y-px hover:shadow-md"
       }`}
     >
+      {task.images[0] && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={imageUrl(task.id, task.images[0].id)}
+          alt=""
+          draggable={false}
+          className="-mx-3 -mt-3 mb-3 block max-h-48 w-[calc(100%+1.5rem)] max-w-none bg-secondary object-cover"
+        />
+      )}
       {task.key && (
         <div className="mb-1 flex items-center gap-2 text-[10px] text-muted-foreground">
           <span className="font-mono">{task.key}</span>
@@ -72,6 +81,8 @@ export function TaskCard({ task, links, onOpen, overlay = false }: { task: Task;
     </div>
   );
 }
+
+export const imageUrl = (taskId: string, imageId: string) => `/api/tasks/${taskId}/images/${imageId}`;
 
 export function SortableTaskCard({ task, links, onOpen }: { task: Task; links?: TaskLinks; onOpen: () => void }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });

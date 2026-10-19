@@ -39,7 +39,7 @@ function DropZone({ id, children }: { id: string; children: React.ReactNode }) {
   return (
     <div
       ref={setNodeRef}
-      className={`flex min-w-[220px] max-w-[320px] flex-1 flex-col gap-2 rounded-lg transition-colors ${
+      className={`flex w-[272px] shrink-0 flex-col gap-2 rounded-lg transition-colors ${
         isOver ? "bg-secondary" : ""
       }`}
     >
@@ -145,7 +145,7 @@ export function BoardView({
           setLocal(null);
         }}
       >
-        <div className="flex h-full min-w-[880px] gap-4 p-5">
+        <div className="flex h-full w-max gap-4 p-5">
           {view.map((col) => (
             <DropZone key={col.id} id={col.id}>
               <div className="relative mb-1 flex items-center justify-between px-1">
