@@ -19,7 +19,11 @@ export type Task = {
   checklist: CheckItem[];
   repeat: Repeat | null;
   comments: number;
+  /** Oldest first; the first is the card's cover. Served at /api/tasks/:id/images/:imageId. */
+  images: TaskImage[];
 };
+
+export type TaskImage = { id: string; name: string };
 
 export type CheckItem = { text: string; done: boolean };
 

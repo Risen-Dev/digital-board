@@ -1,6 +1,6 @@
 import "server-only";
 import { all, get, run } from "./db";
-import type { CheckItem, Column, Entry, Member, Priority, Repeat, Task } from "./board";
+import type { CheckItem, Column, Entry, Member, Priority, Repeat, Task, TaskImage } from "./board";
 import { day, stamp } from "./format";
 import type { Meeting } from "./meetings";
 
@@ -17,6 +17,7 @@ type TaskRow = {
   checklist: CheckItem[];
   repeat: Repeat | null;
   comments: number;
+  images: TaskImage[];
 };
 
 const toTask = (r: TaskRow): Task => ({
@@ -32,6 +33,7 @@ const toTask = (r: TaskRow): Task => ({
   checklist: r.checklist,
   repeat: r.repeat,
   comments: r.comments,
+  images: r.images,
 });
 
 /** The project's done column for `p` (projects): the chosen one, else its last column. */
@@ -42,7 +44,9 @@ const TASK_COLS = `t.id, t.column_id, t.title, t.description, t.label, t.priorit
             p.key || '-' || t.number AS task_key,
             COALESCE((SELECT json_agg(json_build_object('id', u.id, 'name', u.name, 'color', u.color) ORDER BY u.name)
                         FROM task_assignees ta JOIN users u ON u.id = ta.user_id WHERE ta.task_id = t.id), '[]') AS assignees,
-            (SELECT COUNT(*) FROM task_events e WHERE e.task_id = t.id AND e.kind = 'comment') AS comments`;
+            (SELECT COUNT(*) FROM task_events e WHERE e.task_id = t.id AND e.kind = 'comment') AS comments,
+            COALESCE((SELECT json_agg(json_build_object('id', ti.id, 'name', ti.name) ORDER BY ti.created_at, ti.id)
+                        FROM task_images ti WHERE ti.task_id = t.id), '[]') AS images`;
 
 /** `repo` / `tokenHint` describe the GitHub link; the token itself never leaves the server. */
 export type Project = { id: string; name: string; key: string; doneColumnId: string | null; repo: string | null; tokenHint: string | null; webhookHint: string | null; inbound: boolean;

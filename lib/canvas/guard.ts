@@ -25,3 +25,11 @@ export async function guard(projectId: string, write = false) {
   const role = user && await projectRole(user, projectId);
   return role && (!write || role !== "viewer") ? user : null;
 }
+
+/** `guard` for the project a task belongs to. */
+export async function taskGuard(taskId: string, write = false) {
+  const task = await get<{ project_id: string }>(
+    "SELECT c.project_id FROM tasks t JOIN columns c ON c.id = t.column_id WHERE t.id = ?", taskId,
+  );
+  return task ? guard(task.project_id, write) : null;
+}
