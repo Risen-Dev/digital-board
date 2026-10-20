@@ -22,7 +22,7 @@ Runs on your own machine against your own PostgreSQL — no per-seat billing.
   </tr>
   <tr>
     <td><img src="public/screenshots/github.png" alt="GitHub view"><br><sub><b>GitHub</b> — the repo's PRs, issues, commits and branches</sub></td>
-    <td><img src="public/screenshots/task.png" alt="Task linked to GitHub"><br><sub><b>Task</b> — linked PRs with CI, branch name to copy</sub></td>
+    <td><img src="public/screenshots/task.png" alt="Task linked to GitHub"><br><sub><b>Task</b> — properties on the left; comments, an @agent answer and the @ picker on the right</sub></td>
   </tr>
   <tr>
     <td><img src="public/screenshots/chat.png" alt="Chat"><br><sub><b>Chat</b> — workspace channel and direct messages</sub></td>
@@ -64,12 +64,14 @@ Requires **Node 22+** and **PostgreSQL 14+** (verified on 16). For development,
 
 | Area | |
 |---|---|
-| **Board** | Drag and drop with reordering inside a column and positional drops between columns. Mouse, touch and keyboard. Task details are editable and previewed up to three lines on cards. Click the workspace name in the sidebar or Settings, or the project title in the header or Settings, to rename it. Columns are add / rename / recolour / reorder / delete. |
+| **Board** | Drag and drop with reordering inside a column and positional drops between columns. Mouse, touch and keyboard. Cards show a cover image, the title, icons for details/checklist/comments/images/repeat, assignees and due date (red once overdue), a priority flag and labels. Click the workspace name in the sidebar or Settings, or the project title in the header or Settings, to rename it. Columns are add / rename / recolour / reorder / delete. |
 | **List, Calendar, Analytics** | The same tasks as a table, on a month grid by due date, and as charts — column distribution, priority split, workload per member, 14-day activity. |
+| **Task dialog** | Properties on the left (priority, due date, repeat, labels, assignees), then the description, checklist, images (the first is the card's cover) and GitHub links; comments and activity on the right. Typing `@` in a comment lists the AI agent and the project's members. |
 | **History** | Every move, reorder and field change is logged with its actor. Per task, and board-wide in the Inbox. |
 | **Canvas** | Excalidraw with sheet tabs. Each sheet keeps its own drawing. Live collaboration: other members' cursors (with their names) and edits appear as they happen. |
 | **AI agent** | Prompt the project from the **Agent** button in the header: *"create task Set up CI for Ada in Backlog, priority high"*, *"move WEB-12 to In Review"*, *"draw the negotiation flow"*, *"tell Ben the release moved"*. It creates and updates tasks, adds columns and checklist items, comments on and archives cards, draws flowcharts on a new canvas sheet and sends chat messages as you — through the same permission checks as the UI, and it cannot delete anything. Each canvas sheet also has its own agent that draws flows. Works with Anthropic, Gemini or any OpenAI-compatible endpoint (OpenAI, OpenRouter, Ollama…); a workspace admin sets the provider and key in Settings → AI agent. |
 | **Agent in chat** | Write `@agent` in the workspace channel or a DM and the AI agent answers in place, using the recent messages and only the boards everyone in that conversation can open. Chat → **Agent** is a private thread. It reads; it does not change anything. |
+| **Agent on a card** | Write `@agent` in a card comment and the AI agent answers there, reading the card, the rest of the board, upcoming meetings and the text on the project's canvas sheets. It only reads. |
 | **Meetings** | Daily, weekday, weekly or monthly meetings (or one-offs) with a time, link and attendees. Attendees get a reminder before each one in the bell and as a browser alert, while they have the app open. |
 | **Chat** | Workspace channel plus direct messages, with unread badges, attachments and a 15-minute edit window. |
 | **Notifications** | Bell dropdown combines unread card activity and chat. Card items open Inbox; chat items open their conversation; card items can be marked read. Enable alerts there for browser notifications, an in-app popup, and sound. |

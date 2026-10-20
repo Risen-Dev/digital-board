@@ -83,17 +83,19 @@
   .card:hover { border-color: var(--muted); }
   .card.dragging { opacity: .4; }
   .card .key { font-size: 11px; color: var(--muted); }
-  .card .title { font-weight: 500; margin: 2px 0 4px; }
-  .card .desc { font-size: 12px; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin-bottom: 6px; }
-  .meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 11px; }
-  .tag { border: 1px solid var(--border); border-radius: 4px; padding: 0 6px; color: var(--muted); }
+  .card .title { font-weight: 500; margin: 2px 0 8px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .line { display: flex; align-items: center; gap: 8px; font-size: 12px; margin-top: 6px; }
+  .line > span { display: inline-flex; align-items: center; gap: 4px; }
+  .muted { color: var(--muted); }
+  .ico { width: 14px; height: 14px; flex: none; }
+  .tag { border-radius: 999px; padding: 1px 8px; background: var(--secondary); color: var(--muted); font-size: 10px; font-weight: 500; max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .prio { border-radius: 4px; padding: 0 6px; font-weight: 600; font-size: 10px; text-transform: uppercase; letter-spacing: .02em; }
   .prio-high { color: #ef4444; background: rgba(239,68,68,.1); }
   .prio-medium { color: #f59e0b; background: rgba(245,158,11,.1); }
   .prio-low { color: #6b7280; background: rgba(107,114,128,.12); }
   .due { color: var(--muted); }
-  .due.late { color: #ef4444; }
-  .avatar { margin-left: auto; width: 22px; height: 22px; border-radius: 50%; color: #fff; font-size: 10px; font-weight: 600; display: grid; place-items: center; flex: none; }
+  .due.late { color: #ef4444; font-weight: 500; }
+  .avatar { width: 22px; height: 22px; border-radius: 50%; color: #fff; font-size: 10px; font-weight: 600; display: grid; place-items: center; flex: none; }
   .add { border: 0; background: none; color: var(--muted); font-size: 12px; padding: 8px 4px 0; cursor: pointer; }
   .add:hover { color: var(--fg); }
 
@@ -125,22 +127,58 @@
   .canvas .loading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); }
 
   /* Dialog */
-  dialog { border: 1px solid var(--border); border-radius: 14px; background: var(--card); color: var(--fg); padding: 0; width: min(560px, calc(100vw - 32px)); }
+  dialog { border: 1px solid var(--border); border-radius: 14px; background: var(--card); color: var(--fg); padding: 0; width: min(980px, calc(100vw - 32px)); max-height: calc(100vh - 48px); overflow: hidden; }
+  dialog.new { width: min(620px, calc(100vw - 32px)); }
   dialog::backdrop { background: rgb(0 0 0 / .4); }
-  dialog form { padding: 20px; display: grid; gap: 12px; }
-  dialog h2 { margin: 0; font-size: 16px; }
   label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
-  input, select, textarea { border: 1px solid var(--border); background: var(--bg); border-radius: 8px; padding: 7px 10px; font-size: 14px; }
+  input, select, textarea { border: 1px solid var(--border); background: var(--bg); color: var(--fg); border-radius: 8px; padding: 7px 10px; font-size: 14px; }
   textarea { min-height: 90px; resize: vertical; }
-  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  .actions { display: flex; gap: 8px; justify-content: flex-end; }
-  .actions .danger { margin-right: auto; }
-  .history { font-size: 12px; color: var(--muted); border-top: 1px solid var(--border); padding-top: 10px; max-height: 120px; overflow: auto; }
-  .history div { padding: 2px 0; }
+  .dlg-head { display: flex; align-items: center; gap: 8px; padding: 8px 12px 8px 18px; border-bottom: 1px solid var(--border); font-size: 12px; color: var(--muted); }
+  .dlg-head .icon-btn { margin-left: auto; }
+  .dlg-body { display: flex; height: min(640px, calc(100vh - 100px)); }
+  dialog.new .dlg-body { height: auto; }
+  .dlg-main { flex: 1; min-width: 0; overflow: auto; padding: 20px 28px; display: grid; gap: 16px; align-content: start; }
+  .title-input { border: 0; background: transparent; font-size: 22px; font-weight: 600; padding: 0; min-height: 0; resize: none; field-sizing: content; }
+  .title-input:focus { outline: none; }
+  .props { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 24px; }
+  .prop { display: flex; align-items: center; gap: 10px; }
+  .prop > span { width: 76px; flex: none; }
+  .prop select, .prop input { flex: 1; min-width: 0; border-color: transparent; background: transparent; padding: 4px 8px; font-size: 13px; }
+  .prop select:hover, .prop input:hover, .prop select:focus, .prop input:focus { background: var(--secondary); outline: none; }
+  .section { border-top: 1px solid var(--border); padding-top: 14px; display: grid; gap: 8px; font-size: 12px; font-weight: 600; color: var(--muted); }
+  .section textarea { font-weight: 400; }
+  .checks label { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 400; color: var(--fg); }
+  .checks input[type="checkbox"] { width: 14px; height: 14px; padding: 0; }
+  .section input:not([type]) { font-size: 12px; font-weight: 400; }
+  .actions { display: flex; gap: 8px; border-top: 1px solid var(--border); padding-top: 16px; }
+  .actions .danger { margin-left: auto; }
+  .dlg-side { width: 340px; flex: none; border-left: 1px solid var(--border); background: var(--lane); display: flex; flex-direction: column; min-height: 0; }
+  .side-head { padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: 12px; font-weight: 600; }
+  .feed { flex: 1; overflow: auto; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+  .event { font-size: 11px; color: var(--muted); padding: 0 2px; }
+  .comment { display: flex; gap: 8px; border: 1px solid var(--border); background: var(--card); border-radius: 10px; padding: 8px 10px; font-size: 13px; }
+  .comment b { font-size: 12px; }
+  .comment time { font-size: 11px; color: var(--muted); margin-left: 6px; }
+  .comment p { margin: 2px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .mention { color: var(--c0); font-weight: 600; }
+  .agent-mark { width: 22px; height: 22px; border-radius: 50%; background: var(--secondary); color: var(--c0); display: grid; place-items: center; flex: none; }
+  .composer { position: relative; border-top: 1px solid var(--border); padding: 10px; display: grid; gap: 6px; }
+  .composer textarea { min-height: 56px; font-size: 13px; resize: none; }
+  .composer .bar { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); }
+  .mentions { position: absolute; left: 10px; right: 10px; bottom: 100%; margin: 0 0 4px; padding: 4px; list-style: none; background: var(--card); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px rgb(0 0 0 / .15); }
+  .mentions li { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; font-size: 13px; cursor: pointer; }
+  .mentions li[aria-selected="true"] { background: var(--secondary); }
+  .mentions small { margin-left: auto; color: var(--muted); }
+  @media (max-width: 760px) {
+    .dlg-body { flex-direction: column; height: calc(100vh - 100px); overflow: auto; }
+    .dlg-main { overflow: visible; padding: 16px; }
+    .dlg-side { width: auto; border-left: 0; border-top: 1px solid var(--border); }
+    .feed { max-height: 320px; }
+    .props { grid-template-columns: 1fr; }
+  }
   @media (max-width: 640px) {
     .search { order: 10; width: 100%; }
     .project, .hide-sm { display: none; }
-    .row { grid-template-columns: 1fr; }
   }
 </style>
 </head>
@@ -175,26 +213,41 @@
 </main>
 
 <dialog id="dialog">
-  <form method="dialog" id="form">
-    <h2 id="dialog-title">New task</h2>
-    <label>Title <input name="title" required maxlength="120" autocomplete="off"></label>
-    <label>Description <textarea name="desc" maxlength="2000"></textarea></label>
-    <div class="row">
-      <label>Status <select name="col"></select></label>
-      <label>Priority <select name="prio"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></label>
-    </div>
-    <div class="row">
-      <label>Assignee <select name="who"></select></label>
-      <label>Due date <input name="due" type="date"></label>
-    </div>
-    <label>Label <input name="label" maxlength="24" placeholder="e.g. Bug" autocomplete="off"></label>
-    <div class="history" id="history"></div>
-    <div class="actions">
-      <button type="button" class="btn danger" id="delete">Delete</button>
-      <button type="button" class="btn ghost" id="cancel">Cancel</button>
-      <button class="btn" value="save">Save</button>
-    </div>
-  </form>
+  <div class="dlg-head"><span class="dot" id="dialog-dot"></span><span id="dialog-title">New task</span>
+    <button type="button" class="icon-btn" id="close" aria-label="Close"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+  </div>
+  <div class="dlg-body">
+    <form method="dialog" id="form" class="dlg-main">
+      <textarea name="title" class="title-input" rows="1" required maxlength="120" placeholder="Task name" aria-label="Title"></textarea>
+      <div class="props">
+        <label class="prop"><span>Status</span><select name="col"></select></label>
+        <label class="prop"><span>Priority</span><select name="prio"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></label>
+        <label class="prop"><span>Assignee</span><select name="who"></select></label>
+        <label class="prop"><span>Due date</span><input name="due" type="date"></label>
+        <label class="prop"><span>Labels</span><input name="label" maxlength="60" placeholder="Bug, Frontend" autocomplete="off"></label>
+      </div>
+      <label class="section">Description <textarea name="desc" maxlength="2000" placeholder="Add a description"></textarea></label>
+      <div class="section" id="checklist-box">
+        <span>Checklist <span id="check-count"></span></span>
+        <div class="checks" id="checks"></div>
+        <input id="check-add" placeholder="Add an item and press Enter" autocomplete="off">
+      </div>
+      <div class="actions">
+        <button class="btn" value="save">Save</button>
+        <button type="button" class="btn ghost" id="cancel">Cancel</button>
+        <button type="button" class="btn danger" id="delete">Delete</button>
+      </div>
+    </form>
+    <aside class="dlg-side" id="side">
+      <div class="side-head">Comments &amp; activity</div>
+      <div class="feed" id="feed"></div>
+      <div class="composer">
+        <ul class="mentions" id="mentions" role="listbox" hidden></ul>
+        <textarea id="comment" placeholder="Write a comment. Type @ to mention someone, @agent to ask the AI." aria-label="Comment"></textarea>
+        <div class="bar"><button type="button" class="btn" id="send">Comment</button><span id="comment-hint">Ctrl/⌘ + Enter</span></div>
+      </div>
+    </aside>
+  </div>
 </dialog>
 
 <script>
@@ -210,7 +263,7 @@ const PEOPLE = [
   { id: "ben", name: "Ben Ito", color: "#10b981" },
   { id: "cleo", name: "Cleo Park", color: "#ec4899" },
 ];
-const KEY = "digital-board-demo-v1";
+const KEY = "digital-board-demo-v2";
 
 // Due dates are relative to today, so the calendar always has something on it.
 function day(offset) {
@@ -220,19 +273,23 @@ function day(offset) {
 function iso(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
 
 function sample() {
-  const t = (n, col, title, desc, prio, label, who, due) =>
-    ({ id: n, key: `WEB-${n}`, col, title, desc, prio, label, who, due, history: [`Created by ${PEOPLE[0].name}`] });
+  const t = (n, col, title, desc, prio, label, who, due, checklist = [], comments = []) =>
+    ({ id: n, key: `WEB-${n}`, col, title, desc, prio, label, who, due, checklist, comments, history: [`Created by ${PEOPLE[0].name}`] });
+  const c = (who, text, agent = false) => ({ who, text, agent, at: "Yesterday" });
   return {
     seq: 9,
     tasks: [
-      t(1, "progress", "Set up CI pipeline (lint, test, build)", "Run on every pull request. Block merge when it fails.", "high", "Chore", "ben", day(2)),
-      t(2, "review", "Login page", "Acceptance criteria:\n- Email + password\n- Error on wrong password", "medium", "Feature", "ada", day(5)),
-      t(3, "review", "Fix: session expires too early", "Steps to reproduce:\n1. Log in\n2. Wait 10 minutes", "high", "Bug", "ben", day(-1)),
+      t(1, "progress", "Set up CI pipeline (lint, test, build)", "Run on every pull request. Block merge when it fails.", "high", "Chore, DevOps", "ben", day(2),
+        [{ text: "Lint", done: true }, { text: "Unit tests", done: true }, { text: "Build", done: false }]),
+      t(2, "review", "Login page", "Acceptance criteria:\n- Email + password\n- Error on wrong password", "medium", "Feature, Frontend, Auth", "ada", day(5),
+        [{ text: "Form", done: true }, { text: "Error state", done: false }], [c("cleo", "Looks good on mobile too.")]),
+      t(3, "review", "Fix: session expires too early", "Steps to reproduce:\n1. Log in\n2. Wait 10 minutes", "high", "Bug, Auth", "ben", day(-1), [],
+        [c("ada", "@agent what's left on this?"), c("", "WEB-3 is in In Review, high priority, assigned to Ben Ito and already overdue. The fix is written; it needs a review and a check that sessions now last the configured time.", true)]),
       t(4, "backlog", "Write README setup section", "", "low", "Docs", "", ""),
       t(5, "todo", "Dark mode for the settings page", "Follow the app theme toggle.", "medium", "Feature", "cleo", day(9)),
       t(6, "todo", "Add rate limit to the inbound webhook", "", "high", "Security", "ada", day(4)),
       t(7, "backlog", "Export board as CSV", "One row per task with its column.", "low", "Feature", "", day(14)),
-      t(8, "done", "Project templates", "Six templates with their own columns.", "medium", "Feature", "cleo", day(-6)),
+      t(8, "done", "Project templates", "Six templates with their own columns.", "medium", "Feature", "cleo", day(-6), [{ text: "Six templates", done: true }]),
       t(9, "done", "Invite members by email", "", "low", "Feature", "ada", day(-3)),
     ],
   };
@@ -251,15 +308,36 @@ const fmt = (d) => new Date(d + "T00:00").toLocaleDateString(undefined, { month:
 let query = "";
 const visible = () => state.tasks.filter((t) => !query || `${t.key} ${t.title} ${t.desc} ${t.label}`.toLowerCase().includes(query));
 
-function meta(t) {
-  const p = person(t.who);
-  const late = t.due && t.col !== "done" && t.due < day(0);
-  return `<div class="meta">
-    ${t.label ? `<span class="tag">${esc(t.label)}</span>` : ""}
-    <span class="prio prio-${t.prio}">${t.prio}</span>
-    ${t.due ? `<span class="due${late ? " late" : ""}">${fmt(t.due)}</span>` : ""}
-    ${p ? `<span class="avatar" style="background:${p.color}" title="${esc(p.name)}">${initials(p.name)}</span>` : ""}
-  </div>`;
+const ICON = {
+  desc: '<path d="M15 12H3M17 18H3M21 6H3"/>',
+  check: '<path d="m3 17 2 2 4-4M3 7l2 2 4-4M13 6h8M13 12h8M13 18h8"/>',
+  comment: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+  cal: '<rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+  flag: '<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1zM4 22v-7"/>',
+  tag: '<path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/>',
+  spark: '<path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>',
+};
+const svg = (k, style = "") => `<svg class="ico" style="${style}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[k]}</svg>`;
+const PRIO = { high: "#ef4444", medium: "#f59e0b", low: "#6b7280" };
+const cap = (s) => s[0].toUpperCase() + s.slice(1);
+const labelsOf = (s) => (s || "").split(",").map((l) => l.trim()).filter(Boolean);
+const avatar = (p) => `<span class="avatar" style="background:${p.color}" title="${esc(p.name)}">${initials(p.name)}</span>`;
+const late = (t) => t.due && t.col !== "done" && t.due < day(0);
+
+function card(t) {
+  const p = person(t.who), labels = labelsOf(t.label);
+  const icons = [
+    t.desc && svg("desc"),
+    t.checklist.length && `<span>${svg("check")}${t.checklist.filter((i) => i.done).length}/${t.checklist.length}</span>`,
+    t.comments.length && `<span>${svg("comment")}${t.comments.length}</span>`,
+  ].filter(Boolean);
+  return `<button class="card" data-id="${t.id}">
+    <div class="key">${t.key}</div><div class="title">${esc(t.title)}</div>
+    ${icons.length ? `<div class="line muted">${icons.join("")}</div>` : ""}
+    ${p || t.due ? `<div class="line">${p ? avatar(p) : ""}${t.due ? `<span class="due${late(t) ? " late" : ""}">${svg("cal")}${fmt(t.due)}</span>` : ""}</div>` : ""}
+    <div class="line"><span>${svg("flag", `color:${PRIO[t.prio]};fill:${PRIO[t.prio]}`)}${cap(t.prio)}</span></div>
+    ${labels.length ? `<div class="line">${svg("tag", "color:var(--muted)")}${labels.slice(0, 2).map((l) => `<span class="tag">${esc(l)}</span>`).join("")}${labels.length > 2 ? `<span class="muted" style="font-size:11px" title="${esc(labels.slice(2).join(", "))}">+${labels.length - 2}</span>` : ""}</div>` : ""}
+  </button>`;
 }
 
 // ── Board ─────────────────────────────────────────────────────────────────
@@ -269,9 +347,7 @@ function renderBoard() {
     const mine = tasks.filter((t) => t.col === c.id);
     return `<div class="lane" data-col="${c.id}">
       <div class="lane-head"><span class="dot" style="background:${c.color}"></span>${c.title}<span class="count">${mine.length}</span></div>
-      <div class="cards">${mine.map((t) => `<button class="card" data-id="${t.id}">
-        <div class="key">${t.key}</div><div class="title">${esc(t.title)}</div>
-        ${t.desc ? `<div class="desc">${esc(t.desc)}</div>` : ""}${meta(t)}</button>`).join("")}</div>
+      <div class="cards">${mine.map(card).join("")}</div>
       <button class="add" data-add="${c.id}">+ Add task</button>
     </div>`;
   }).join("");
@@ -409,7 +485,9 @@ let editing = null;
 function openTask(id, col = "todo") {
   const t = state.tasks.find((t) => t.id === id);
   editing = t || null;
-  $("#dialog-title").textContent = t ? t.key : "New task";
+  dialog.classList.toggle("new", !t);
+  $("#dialog-title").textContent = t ? `${column(t.col).title} / ${t.key}` : "New task";
+  $("#dialog-dot").style.background = t ? column(t.col).color : "transparent";
   form.title.value = t?.title ?? "";
   form.desc.value = t?.desc ?? "";
   form.col.value = t?.col ?? col;
@@ -418,30 +496,142 @@ function openTask(id, col = "todo") {
   form.due.value = t?.due ?? "";
   form.label.value = t?.label ?? "";
   $("#delete").hidden = !t;
-  $("#history").hidden = !t;
-  $("#history").innerHTML = t ? `<b>History</b>${t.history.map((h) => `<div>${esc(h)}</div>`).join("")}` : "";
+  $("#side").hidden = !t;
+  $("#checklist-box").hidden = !t;
+  $("#comment").value = "";
+  closeMentions();
+  if (t) { renderChecks(); renderFeed(); }
   dialog.showModal();
-  form.title.focus();
+  if (!t) form.title.focus();
 }
+form.title.addEventListener("keydown", (e) => { if (e.key === "Enter") e.preventDefault(); });
 form.addEventListener("submit", () => {
   const v = Object.fromEntries(new FormData(form));
   if (!editing) {
     const id = ++state.seq;
-    state.tasks.push({ id, key: `WEB-${id}`, ...v, title: v.title.trim(), history: ["Created by you"] });
+    state.tasks.push({ id, key: `WEB-${id}`, ...v, title: v.title.trim(), checklist: [], comments: [], history: ["Created by you"] });
   } else {
     const changed = ["title", "desc", "col", "prio", "who", "due", "label"].filter((k) => editing[k] !== v[k]);
     if (editing.col !== v.col) editing.history.push(`Moved from ${column(editing.col).title} to ${column(v.col).title}`);
     const other = changed.filter((k) => k !== "col");
-    if (other.length) editing.history.push(`Edited ${other.map((k) => ({ desc: "description", prio: "priority", who: "assignee", due: "due date" })[k] || k).join(", ")}`);
+    if (other.length) editing.history.push(`Edited ${other.map((k) => ({ desc: "description", prio: "priority", who: "assignee", due: "due date", label: "labels" })[k] || k).join(", ")}`);
     Object.assign(editing, v, { title: v.title.trim() });
   }
   save(); render();
 });
-$("#cancel").onclick = () => dialog.close();
+$("#cancel").onclick = $("#close").onclick = () => dialog.close();
 $("#delete").onclick = () => {
   state.tasks = state.tasks.filter((t) => t !== editing);
   save(); dialog.close(); render();
 };
+
+// Checklist: ticks and new items save at once, like the app.
+function renderChecks() {
+  const items = editing.checklist;
+  $("#check-count").textContent = items.length ? `${items.filter((i) => i.done).length}/${items.length}` : "";
+  $("#checks").innerHTML = items.map((i, n) => `<label><input type="checkbox" data-n="${n}"${i.done ? " checked" : ""}>${esc(i.text)}</label>`).join("");
+}
+$("#checks").addEventListener("change", (e) => {
+  const item = editing.checklist[+e.target.dataset.n];
+  item.done = e.target.checked;
+  save(); renderChecks(); render();
+});
+$("#check-add").addEventListener("keydown", (e) => {
+  if (e.key !== "Enter") return;
+  e.preventDefault();
+  const text = e.target.value.trim();
+  if (!text) return;
+  editing.checklist.push({ text, done: false });
+  e.target.value = "";
+  save(); renderChecks(); render();
+});
+
+// Comments & activity: events as one muted line each, then comments, oldest first.
+const MENTION_NAMES = ["agent", ...PEOPLE.map((p) => p.name)];
+const highlight = (text) => esc(text).replace(new RegExp(`@(${MENTION_NAMES.join("|")})`, "g"), '<span class="mention">@$1</span>');
+function renderFeed() {
+  const feed = $("#feed");
+  feed.innerHTML = editing.history.map((h) => `<div class="event">${esc(h)}</div>`).join("") + editing.comments.map((c) => {
+    const p = person(c.who);
+    const mark = c.agent ? `<span class="agent-mark">${svg("spark")}</span>` : p ? avatar(p) : `<span class="avatar" style="background:#71717a">Y</span>`;
+    return `<div class="comment">${mark}<div style="min-width:0"><b>${c.agent ? "AI agent" : p?.name ?? "You"}</b><time>${esc(c.at)}</time><p>${highlight(c.text)}</p></div></div>`;
+  }).join("");
+  feed.scrollTop = feed.scrollHeight;
+}
+
+// The demo has no model behind it: the "agent" summarises the card from its own fields.
+function agentAnswer(t) {
+  const p = person(t.who), open = t.checklist.filter((i) => !i.done).map((i) => i.text);
+  return `${t.key} is in ${column(t.col).title}, ${t.prio} priority, ${p ? `assigned to ${p.name}` : "unassigned"}${t.due ? `, due ${fmt(t.due)}${late(t) ? " (overdue)" : ""}` : ""}.`
+    + (t.checklist.length ? ` Checklist ${t.checklist.length - open.length}/${t.checklist.length}${open.length ? `, still open: ${open.join(", ")}` : ""}.` : "")
+    + "\n\n(Demo answer. In the app the AI agent reads this card, the board, meetings and canvas sheets, and answers your actual question.)";
+}
+const comment = $("#comment");
+function postComment() {
+  const text = comment.value.trim();
+  if (!text) return;
+  const task = editing;
+  task.comments.push({ who: "", text, agent: false, at: "Just now" });
+  comment.value = "";
+  closeMentions();
+  save(); renderFeed(); render();
+  if (!/(^|\s)@agent\b/i.test(text)) return;
+  $("#comment-hint").textContent = "AI agent is thinking…";
+  setTimeout(() => {
+    task.comments.push({ who: "", text: agentAnswer(task), agent: true, at: "Just now" });
+    $("#comment-hint").textContent = "Ctrl/⌘ + Enter";
+    save(); render();
+    if (editing === task) renderFeed();
+  }, 900);
+}
+$("#send").onclick = postComment;
+
+// "@" at the caret opens the picker: the agent first, then the people on the project.
+let mention = null, options = [], active = 0;
+function closeMentions() { mention = null; options = []; $("#mentions").hidden = true; }
+function renderMentions() {
+  const q = mention.query.toLowerCase();
+  options = [{ name: "agent", label: "AI agent" }, ...PEOPLE.map((p) => ({ name: p.name, label: p.name, p }))]
+    .filter((o) => o.label.toLowerCase().includes(q) || o.name.toLowerCase().includes(q));
+  active = Math.min(active, Math.max(options.length - 1, 0));
+  $("#mentions").hidden = !options.length;
+  $("#mentions").innerHTML = options.map((o, i) => `<li role="option" data-i="${i}" aria-selected="${i === active}">
+    ${o.p ? avatar(o.p) : `<span class="agent-mark">${svg("spark")}</span>`}${esc(o.label)}${o.p ? "" : "<small>Ask about this card</small>"}</li>`).join("");
+}
+function pick(o) {
+  const caret = comment.selectionStart, insert = `@${o.name} `;
+  comment.value = comment.value.slice(0, mention.start) + insert + comment.value.slice(caret);
+  const at = mention.start + insert.length;
+  closeMentions();
+  comment.focus();
+  comment.setSelectionRange(at, at);
+}
+comment.addEventListener("input", () => {
+  const m = /(^|\s)@([^\s@]*)$/.exec(comment.value.slice(0, comment.selectionStart));
+  if (!m) return closeMentions();
+  mention = { query: m[2], start: comment.selectionStart - m[2].length - 1 };
+  active = 0;
+  renderMentions();
+});
+comment.addEventListener("keydown", (e) => {
+  if (options.length) {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      active = (active + (e.key === "ArrowDown" ? 1 : options.length - 1)) % options.length;
+      return renderMentions();
+    }
+    if (e.key === "Enter" || e.key === "Tab") { e.preventDefault(); return pick(options[active]); }
+    if (e.key === "Escape") { e.preventDefault(); return closeMentions(); }
+  }
+  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) postComment();
+});
+comment.addEventListener("blur", () => setTimeout(closeMentions, 150));
+$("#mentions").addEventListener("mousedown", (e) => {
+  const li = e.target.closest("li");
+  if (!li) return;
+  e.preventDefault();
+  pick(options[+li.dataset.i]);
+});
 
 // ── Shell ─────────────────────────────────────────────────────────────────
 let view = "board";

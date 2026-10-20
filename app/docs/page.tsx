@@ -297,7 +297,7 @@ WantedBy=multi-user.target`}</Code>
           <Table
             head={["Area", "What it does"]}
             rows={[
-              [<strong className="text-foreground">Board</strong>, <>Drag and drop with reordering inside a column and positional drops between columns. Works with a mouse, with touch (long-press to pick a card up, so a normal swipe still scrolls), and with the keyboard. Task details are editable and previewed up to three lines on cards. Click the project title to rename it. Columns are add/rename/recolour/reorder/delete; deleting one takes its tasks and asks first.</>],
+              [<strong className="text-foreground">Board</strong>, <>Drag and drop with reordering inside a column and positional drops between columns. Works with a mouse, with touch (long-press to pick a card up, so a normal swipe still scrolls), and with the keyboard. A card shows its cover image, the title (two lines), icons for details, checklist progress, comments, images and repeat, the assignees and due date (red once overdue, unless it sits in the done column), a priority flag, and its first two labels with a +N for the rest. Click the project title to rename it. Columns are add/rename/recolour/reorder/delete; deleting one takes its tasks and asks first.</>],
               [<strong className="text-foreground">List</strong>, <>Every task as a table — status, label, priority, due date, assignee. Click a row to edit.</>],
               [<strong className="text-foreground">Calendar</strong>, <>Month grid, Monday-first. Dated tasks sit on their due date with a priority-coloured edge. Undated tasks are counted in the header.</>],
               [<strong className="text-foreground">Analytics</strong>, <>Totals, tasks per column, priority split, workload per member, and a 14-day activity chart built from the history log.</>],
@@ -305,7 +305,10 @@ WantedBy=multi-user.target`}</Code>
               [<strong className="text-foreground">Inbox</strong>, <>Every change to every task, newest first, with who did it.</>],
               [<strong className="text-foreground">Notifications</strong>, <>The bell dropdown combines unread card activity and chat. Card items open Inbox; chat items open the right conversation. Mark card activity read to clear it. Enable alerts there for browser notifications, an in-app popup, and sound.</>],
               [<strong className="text-foreground">Task history</strong>, <>Creation, column moves, reorders, and title/details/labels/priority/assignee/due-date edits are all recorded. Open a task to see its timeline.</>],
-              [<strong className="text-foreground">Comments</strong>, <>Comment on a card from its dialog; <C>@Full Name</C> highlights a member. Comments sit in the card&rsquo;s timeline and show up in Inbox and the bell like any other card activity.</>],
+              [<strong className="text-foreground">Task dialog</strong>, <>Click a card to open it: the title and properties (priority, due date, repeat, labels, assignees) on the left with the description, checklist, images and GitHub links below, and the comments and activity on the right, oldest first, with the comment box at the bottom.</>],
+              [<strong className="text-foreground">Images</strong>, <>Add images inside a card (PNG, JPEG, GIF, WebP or AVIF, up to 5 MB each and 20 per card). The first one is the card&rsquo;s cover on the board; click a thumbnail to open it full size.</>],
+              [<strong className="text-foreground">Comments</strong>, <>Comment on a card from its dialog. Typing <C>@</C> lists the AI agent and everyone who can open the project; <C>@Full Name</C> highlights a member. Each comment shows its author&rsquo;s avatar, and comments show up in Inbox and the bell like any other card activity.</>],
+              [<strong className="text-foreground">Agent on a card</strong>, <>Write <C>@agent</C> in a card comment to ask the AI agent about it: &ldquo;what&rsquo;s left on this?&rdquo;, &ldquo;who should I contact?&rdquo;. It reads the card (details, checklist, activity, comments), the rest of the board, upcoming and repeating meetings, and the text on the project&rsquo;s canvas sheets, and answers as an <em>AI agent</em> comment. It only reads.</>],
               [<strong className="text-foreground">Checklist, labels, assignees</strong>, <>A card has a checklist (progress shows on the card), any number of comma-separated labels, and any number of assignees.</>],
               [<strong className="text-foreground">Done column</strong>, <>Open a column&rsquo;s menu and mark it as the done column (the last column until you do). It drives the Completed counts on Home and Analytics, overdue reminders, and repeating cards.</>],
               [<strong className="text-foreground">Mentions &amp; due reminders</strong>, <>A comment that mentions you raises its own alert and carries an <C>@you</C> badge; Inbox → Mentioned me filters to them. The bell also lists your cards due today or overdue that aren&rsquo;t in the done column.</>],
@@ -369,7 +372,7 @@ git push -u origin feat/WEB-42-title`}</Code>
           </p>
 
           <Shot src="/screenshots/github.png" alt="GitHub view — the linked repo's pull requests, issues, commits and branches" />
-          <Shot src="/screenshots/task.png" alt="A task linked to GitHub — its key, Copy branch name, the linked PR with CI status, and GitHub entries in its history" />
+          <Shot src="/screenshots/task.png" alt="A task — properties, description, checklist and images on the left; comments, an @agent answer and the @ mention picker on the right" />
           <Shot src="/screenshots/canvas.png" alt="Canvas — Excalidraw sheets, one drawing per tab, saved as you draw" />
           <Shot src="/screenshots/chat.png" alt="Chat — the workspace channel plus a direct message thread per member" />
           <Shot src="/screenshots/analytics.png" alt="Analytics — tasks per column, priority split, workload per member and 14-day activity" />
@@ -377,7 +380,7 @@ git push -u origin feat/WEB-42-title`}</Code>
 
           <H id="data">Data model</H>
           <p className="text-sm text-muted-foreground">
-            Nineteen tables, defined in <C>lib/schema.sql</C> as plain SQL and applied on first use. Foreign keys
+            Twenty tables, defined in <C>lib/schema.sql</C> as plain SQL and applied on first use. Foreign keys
             cascade, so deleting a parent row cleans up after itself.
           </p>
           <Table
@@ -393,7 +396,8 @@ git push -u origin feat/WEB-42-title`}</Code>
               [<C>tasks</C>, <>Cards: title, details, labels, priority, due date, checklist, repeat rule, archive time, position within a column, and a per-project <C>number</C>.</>],
               [<C>task_assignees</C>, <>Who a card is assigned to, one row per person.</>],
               [<C>task_links</C>, <>Pull requests, commits and branches the GitHub webhook tied to a task, with state and CI.</>],
-              [<C>task_events</C>, <>The history log — one row per change or comment (<C>kind</C>), with the actor.</>],
+              [<C>task_events</C>, <>The history log — one row per change or comment (<C>kind</C>), with the actor. <C>agent</C> marks the AI agent&rsquo;s comments, stored under the member who called it.</>],
+              [<C>task_images</C>, <>Images added inside a card, bytes included; the oldest is the card&rsquo;s cover.</>],
               [<C>canvases</C>, <>Canvas sheets and their Excalidraw scenes.</>],
               [<C>agent_chats</C>, <>The canvas AI agent&rsquo;s conversations, per sheet.</>],
               [<C>messages</C>, <>Chat. A <C>NULL</C> recipient is the workspace channel; a user id is a direct message (your own id is your private agent thread). <C>agent</C> marks the AI agent&rsquo;s replies, stored under the member who called it.</>],
