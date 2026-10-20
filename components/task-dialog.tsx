@@ -2,7 +2,7 @@
 
 import { useActionState, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Archive, CalendarDays, Check, CircleDot, Flag, GitBranch, GitPullRequest, History, Image as ImageIcon, ImagePlus, ListChecks, Repeat, Sparkles, Tag, Trash2, Users, X, type LucideIcon } from "lucide-react";
+import { AlignLeft, Archive, CalendarDays, Check, CircleDot, Flag, GitBranch, GitPullRequest, History, Image as ImageIcon, ImagePlus, ListChecks, Repeat, Sparkles, Tag, Trash2, Users, X, type LucideIcon } from "lucide-react";
 import { addComment, archiveTask, askCardAgent, createGithubIssue, createTask, deleteTask, fetchHistory, setChecklist, updateTask } from "@/lib/actions";
 import { branchNameOf, initials, pullRequestUrlOf, PRIORITIES, PRIORITY_CFG, REPEATS, type CheckItem, type Column, type Entry, type Member, type Task, type TaskImage } from "@/lib/board";
 import { Avatar } from "./avatar";
@@ -145,14 +145,19 @@ export function TaskDialog({ task, columns, members, defaultColumnId, links, rep
                 </Prop>
               </div>
 
-              <textarea
-                name="description"
-                defaultValue={task?.description ?? ""}
-                rows={5}
-                placeholder="Add a description"
-                aria-label="Description"
-                className="field-sizing-content min-h-24 resize-none border-t bg-transparent pt-5 text-sm leading-relaxed outline-none placeholder:text-muted-foreground"
-              />
+              <label className="flex flex-col gap-2 border-t pt-5">
+                <span className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+                  <AlignLeft className="size-3.5" />
+                  Description
+                </span>
+                <textarea
+                  name="description"
+                  defaultValue={task?.description ?? ""}
+                  rows={5}
+                  placeholder="Add a description"
+                  className="field-sizing-content min-h-28 resize-none rounded-md border bg-background px-3 py-2 text-sm leading-relaxed outline-none transition-colors placeholder:text-muted-foreground focus:border-ring"
+                />
+              </label>
 
               <FormError error={state?.error} />
 
