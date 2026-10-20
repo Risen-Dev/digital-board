@@ -49,12 +49,14 @@ function DropZone({ id, children }: { id: string; children: React.ReactNode }) {
 }
 
 export function BoardView({
-  columns, projectId, doneColumnId, links = {}, onOpen, onAdd,
+  columns, projectId, doneColumnId, today, links = {}, onOpen, onAdd,
 }: {
   columns: Column[];
   projectId: string;
   /** The chosen done column; null means the last one. */
   doneColumnId: string | null;
+  /** Server date, so the overdue check matches between server and browser. */
+  today: string;
   /** Task key → linked GitHub items, when the project has a repo. */
   links?: Record<string, TaskLinks>;
   onOpen: (t: Task) => void;
@@ -62,6 +64,7 @@ export function BoardView({
 }) {
   const router = useRouter();
   const doneId = doneColumnId ?? columns.at(-1)?.id;
+  const overdue = (t: Task) => !!t.dueDate && t.dueDate < today && t.columnId !== doneId;
   const [editingColumn, setEditingColumn] = useState<string | null>(null);
   const [addingColumn, setAddingColumn] = useState(false);
   // Optimistic copy so the drag feels instant; the server is the source of truth.
@@ -196,7 +199,7 @@ export function BoardView({
               <div className="flex flex-1 flex-col gap-2 overflow-y-auto px-1 pb-4">
                 <SortableContext items={col.tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
                   {col.tasks.map((task) => (
-                    <SortableTaskCard key={task.id} task={task} links={task.key ? links[task.key] : undefined} onOpen={() => onOpen(task)} />
+                    <SortableTaskCard key={task.id} task={task} links={task.key ? links[task.key] : undefined} overdue={overdue(task)} onOpen={() => onOpen(task)} />
                   ))}
                 </SortableContext>
                 {col.tasks.length === 0 && (
@@ -236,7 +239,7 @@ export function BoardView({
           </div>
         </div>
 
-        <DragOverlay>{activeTask ? <TaskCard task={activeTask} links={activeTask.key ? links[activeTask.key] : undefined} overlay /> : null}</DragOverlay>
+        <DragOverlay>{activeTask ? <TaskCard task={activeTask} links={activeTask.key ? links[activeTask.key] : undefined} overdue={overdue(activeTask)} overlay /> : null}</DragOverlay>
       </DndContext>
     </main>
   );
