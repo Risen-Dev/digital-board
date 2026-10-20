@@ -15,6 +15,8 @@ type Props = {
   task: Task | null;
   columns: Column[];
   members: Member[];
+  /** Who can open this project, offered when typing "@" in a comment. */
+  mentionable: Member[];
   defaultColumnId?: string;
   /** Linked PRs / branches / commits, when the project has a GitHub repo. */
   links?: TaskLinks;
@@ -23,7 +25,7 @@ type Props = {
   onClose: () => void;
 };
 
-export function TaskDialog({ task, columns, members, defaultColumnId, links, repo, onClose }: Props) {
+export function TaskDialog({ task, columns, members, mentionable, defaultColumnId, links, repo, onClose }: Props) {
   const editing = task !== null;
   const [state, action] = useActionState(editing ? updateTask : createTask, null);
   const [history, setHistory] = useState<Entry[]>([]);
@@ -251,7 +253,7 @@ export function TaskDialog({ task, columns, members, defaultColumnId, links, rep
                 {history.length === 0 && <li className="m-auto text-xs text-muted-foreground">No comments yet.</li>}
               </ol>
               <div className="shrink-0 border-t p-3">
-                <CommentBox taskId={task.id} onPosted={loadHistory} />
+                <CommentBox taskId={task.id} members={mentionable} onPosted={loadHistory} />
               </div>
             </aside>
           )}
@@ -406,8 +408,33 @@ function Checklist({ taskId, initial }: { taskId: string; initial: CheckItem[] }
   );
 }
 
-function CommentBox({ taskId, onPosted }: { taskId: string; onPosted: () => void }) {
+/** "@" at the caret opens a member picker; the agent is always the first choice. */
+function CommentBox({ taskId, members, onPosted }: { taskId: string; members: Member[]; onPosted: () => void }) {
   const [body, setBody] = useState("");
+  const input = useRef<HTMLTextAreaElement>(null);
+  const [mention, setMention] = useState<{ query: string; start: number } | null>(null);
+  const [active, setActive] = useState(0);
+  const options = mention
+    ? [{ id: "agent", name: "agent", label: "AI agent" }, ...members.map((m) => ({ id: m.id, name: m.name, label: m.name }))]
+        .filter((o) => o.label.toLowerCase().includes(mention.query.toLowerCase()) || o.name.toLowerCase().includes(mention.query.toLowerCase()))
+    : [];
+  const track = (text: string, caret: number) => {
+    const match = /(^|\s)@([^\s@]*)$/.exec(text.slice(0, caret));
+    setMention(match ? { query: match[2], start: caret - match[2].length - 1 } : null);
+    setActive(0);
+  };
+  const pick = (name: string) => {
+    if (!mention || !input.current) return;
+    const caret = input.current.selectionStart;
+    const insert = `@${name} `;
+    setBody(body.slice(0, mention.start) + insert + body.slice(caret));
+    setMention(null);
+    const at = mention.start + insert.length;
+    requestAnimationFrame(() => {
+      input.current?.focus();
+      input.current?.setSelectionRange(at, at);
+    });
+  };
   const [error, setError] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
   const [thinking, setThinking] = useState(false);
@@ -426,11 +453,58 @@ function CommentBox({ taskId, onPosted }: { taskId: string; onPosted: () => void
     onPosted();
   };
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="relative flex flex-col gap-1.5">
+      {options.length > 0 && (
+        <ul role="listbox" className="absolute inset-x-0 bottom-full z-10 mb-1 max-h-56 overflow-y-auto rounded-md border bg-card p-1 shadow-lg">
+          {options.map((o, i) => (
+            <li
+              key={o.id}
+              role="option"
+              aria-selected={i === active}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                pick(o.name);
+              }}
+              onMouseEnter={() => setActive(i)}
+              className={`flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-xs ${i === active ? "bg-secondary" : ""}`}
+            >
+              {o.id === "agent" ? (
+                <span className="flex size-5 items-center justify-center rounded-full bg-secondary text-[var(--chart-1)]">
+                  <Sparkles className="size-3" />
+                </span>
+              ) : (
+                <Avatar initials={initials(o.name)} color={members.find((m) => m.id === o.id)!.color} size={20} />
+              )}
+              {o.label}
+              {o.id === "agent" && <span className="ml-auto text-[11px] text-muted-foreground">Ask about this card</span>}
+            </li>
+          ))}
+        </ul>
+      )}
       <textarea
+        ref={input}
         value={body}
-        onChange={(e) => setBody(e.target.value)}
+        onChange={(e) => {
+          setBody(e.target.value);
+          track(e.target.value, e.target.selectionStart);
+        }}
+        onBlur={() => setMention(null)}
         onKeyDown={(e) => {
+          if (options.length) {
+            if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+              e.preventDefault();
+              setActive((i) => (i + (e.key === "ArrowDown" ? 1 : options.length - 1)) % options.length);
+              return;
+            }
+            if (e.key === "Enter" || e.key === "Tab") {
+              e.preventDefault();
+              return pick(options[active].name);
+            }
+            if (e.key === "Escape") {
+              e.stopPropagation();
+              return setMention(null);
+            }
+          }
           if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void post();
         }}
         rows={2}

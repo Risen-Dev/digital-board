@@ -623,6 +623,7 @@ export function Workspace({
           task={editing}
           columns={columns}
           members={members}
+          mentionable={members.filter((m) => live.some((p) => p.id === m.id && p.is_admin === 1) || assignments.some((a) => a.user_id === m.id && a.project_id === project?.id))}
           defaultColumnId={creating ?? undefined}
           links={editing?.key ? links[editing.key] : undefined}
           repo={project?.repo}
