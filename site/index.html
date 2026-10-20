@@ -74,6 +74,13 @@
   .card h3 { font-size: 15px; margin: 0 0 6px; font-weight: 600; }
   .card p { font-size: 14px; color: var(--muted); margin: 0; }
   .gallery { display: grid; gap: 24px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 26rem), 1fr)); }
+  .gallery .shot { aspect-ratio: 16 / 10; }
+  .gallery .shot img { height: 100%; object-fit: cover; object-position: top left; }
+  .shot img { cursor: zoom-in; }
+  #zoom { border: 0; padding: 0; background: none; max-width: 96vw; max-height: 96vh; }
+  #zoom::backdrop { background: rgb(0 0 0 / .8); }
+  #zoom img { display: block; max-width: 96vw; max-height: 90vh; border-radius: 8px; cursor: zoom-out; }
+  #zoom p { color: #fff; font-size: 13px; text-align: center; margin: 8px 0 0; }
   figure { margin: 0; }
   figcaption { font-size: 13px; color: var(--muted); margin-top: 10px; }
   figcaption b { color: var(--fg); font-weight: 600; }
@@ -145,7 +152,7 @@
         <figure><div class="shot"><img src="screenshots/analytics.png" alt="Analytics" loading="lazy" width="2880" height="1800"></div><figcaption><b>Analytics</b> · column, priority, workload, 14-day activity</figcaption></figure>
         <figure><div class="shot"><img src="screenshots/github.png" alt="GitHub view" loading="lazy" width="2880" height="1800"></div><figcaption><b>GitHub</b> · the repo's PRs, issues, commits and branches</figcaption></figure>
         <figure><div class="shot"><img src="screenshots/task.png" alt="Task dialog" loading="lazy" width="2880" height="1800"></div><figcaption><b>Task</b> · properties on the left; comments and @agent on the right</figcaption></figure>
-        <figure><div class="shot"><img src="screenshots/chat.png" alt="Chat" loading="lazy" width="2880" height="1800"></div><figcaption><b>Chat</b> · workspace channel and direct messages</figcaption></figure>
+        <figure><div class="shot"><img src="screenshots/chat.png" alt="Chat" loading="lazy" width="1440" height="800"></div><figcaption><b>Chat</b> · workspace channel and direct messages</figcaption></figure>
         <figure><div class="shot"><img src="screenshots/settings.png" alt="Settings" loading="lazy" width="2880" height="1800"></div><figcaption><b>Settings</b> · members, projects, GitHub, AI agent</figcaption></figure>
       </div>
     </div>
@@ -176,7 +183,19 @@ npm start</code></pre>
   </div>
 </footer>
 
+<dialog id="zoom"><img alt=""><p></p></dialog>
+
 <script>
+  // Any screenshot opens full size; a click anywhere or Esc closes it.
+  const zoom = document.getElementById("zoom");
+  document.querySelectorAll(".shot img").forEach((img) => img.onclick = () => {
+    zoom.querySelector("img").src = img.src;
+    zoom.querySelector("img").alt = img.alt;
+    zoom.querySelector("p").innerHTML = img.closest("figure")?.querySelector("figcaption").innerHTML ?? img.alt;
+    zoom.showModal();
+  });
+  zoom.onclick = () => zoom.close();
+
   // Remembers an explicit pick; otherwise the OS theme applies.
   const root = document.documentElement;
   try { const t = localStorage.getItem("theme"); if (t) root.dataset.theme = t; } catch {}
