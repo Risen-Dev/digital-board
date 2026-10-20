@@ -604,7 +604,7 @@ export function Workspace({
         ) : view === VIEWS.length && project.repo ? (
           <GithubView key={project.id} projectId={project.id} repo={project.repo} />
         ) : view === 0 ? (
-          <BoardView columns={filtered} projectId={project.id} doneColumnId={project.doneColumnId} links={links} onOpen={setEditing} onAdd={setCreating} />
+          <BoardView columns={filtered} projectId={project.id} doneColumnId={project.doneColumnId} today={today} links={links} onOpen={setEditing} onAdd={setCreating} />
         ) : view === 1 ? (
           <ListView columns={filtered} members={members} readOnly={readOnly} onOpen={setEditing} />
         ) : view === 2 ? (

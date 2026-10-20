@@ -2,16 +2,17 @@
 
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { CalendarDays, ListChecks, MessageSquare, Repeat } from "lucide-react";
+import { AlignLeft, CalendarDays, Flag, ListChecks, MessageSquare, Paperclip, Repeat, Tag } from "lucide-react";
 import { initials, labelsOf, PRIORITY_CFG, type Task } from "@/lib/board";
 import type { TaskLinks } from "@/lib/github";
 import { Avatar } from "./avatar";
 import { PullBadge, primaryIssue, primaryPull } from "./views/github-view";
 
-export function TaskCard({ task, links, onOpen, overlay = false }: { task: Task; links?: TaskLinks; onOpen?: () => void; overlay?: boolean }) {
+export function TaskCard({ task, links, onOpen, overdue = false, overlay = false }: { task: Task; links?: TaskLinks; onOpen?: () => void; overdue?: boolean; overlay?: boolean }) {
   const priority = PRIORITY_CFG[task.priority];
   const pull = primaryPull(links);
   const issue = pull ? undefined : primaryIssue(links);
+  const labels = labelsOf(task.label);
   return (
     <div
       onClick={onOpen}
@@ -35,56 +36,68 @@ export function TaskCard({ task, links, onOpen, overlay = false }: { task: Task;
           {issue && <PullBadge pull={issue} kind="issues" />}
         </div>
       )}
-      <p className="mb-2.5 text-sm font-medium leading-snug">{task.title}</p>
-      {task.description && (
-        <p className="mb-2.5 overflow-hidden whitespace-pre-line text-xs leading-relaxed text-muted-foreground [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:3]">
-          {task.description}
-        </p>
-      )}
-      <div className="mb-3 flex flex-wrap items-center gap-1.5">
-        {labelsOf(task.label).map((l) => (
-          <span key={l} className="rounded border bg-secondary px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-            {l}
-          </span>
-        ))}
-        <span
-          style={{ color: priority.color, background: priority.bg }}
-          className="rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide"
-        >
-          {priority.label}
-        </span>
-      </div>
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2.5 text-[11px] text-muted-foreground">
-          {task.dueDate && (
-            <span className="flex items-center gap-1">
-              <CalendarDays className="size-3" />
-              {task.dueDate}
-            </span>
-          )}
-          {task.repeat && <Repeat className="size-3" aria-label={`Repeats ${task.repeat}`} />}
+      <p className="mb-2 line-clamp-2 text-sm font-medium leading-snug">{task.title}</p>
+      {(task.description || task.checklist.length > 0 || task.comments > 0 || task.images.length > 0 || task.repeat) && (
+        <div className="mb-2 flex items-center gap-2.5 text-[11px] text-muted-foreground">
+          {task.description && <AlignLeft className="size-3.5" aria-label="Has description" />}
           {task.checklist.length > 0 && (
             <span className="flex items-center gap-1">
-              <ListChecks className="size-3" />
+              <ListChecks className="size-3.5" />
               {task.checklist.filter((i) => i.done).length}/{task.checklist.length}
             </span>
           )}
           {task.comments > 0 && (
             <span className="flex items-center gap-1">
-              <MessageSquare className="size-3" />
+              <MessageSquare className="size-3.5" />
               {task.comments}
             </span>
           )}
+          {task.images.length > 0 && (
+            <span className="flex items-center gap-1">
+              <Paperclip className="size-3.5" />
+              {task.images.length}
+            </span>
+          )}
+          {task.repeat && <Repeat className="size-3.5" aria-label={`Repeats ${task.repeat}`} />}
         </div>
-        <Assignees task={task} />
+      )}
+      {(task.assignees.length > 0 || task.dueDate) && (
+        <div className="mb-2 flex items-center gap-2">
+          <Assignees task={task} />
+          {task.dueDate && (
+            <span className={`flex items-center gap-1 text-xs ${overdue ? "font-medium text-[var(--chart-7)]" : "text-muted-foreground"}`}>
+              <CalendarDays className="size-3.5" />
+              {shortDate(task.dueDate)}
+            </span>
+          )}
+        </div>
+      )}
+      <div className="flex items-center gap-1.5 text-xs">
+        <Flag className="size-3.5" style={{ color: priority.color, fill: priority.color }} />
+        {priority.label}
       </div>
+      {labels.length > 0 && (
+        <div className="mt-2 flex items-center gap-1.5">
+          <Tag className="size-3.5 shrink-0 text-muted-foreground" />
+          {labels.slice(0, 2).map((l) => (
+            <span key={l} className="max-w-24 truncate rounded-full bg-secondary px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+              {l}
+            </span>
+          ))}
+          {labels.length > 2 && <span className="text-[10px] text-muted-foreground" title={labels.slice(2).join(", ")}>+{labels.length - 2}</span>}
+        </div>
+      )}
     </div>
   );
 }
 
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+/** "2026-09-04" → "Sep 4". Split, not `new Date`, so no timezone shifts the day. */
+const shortDate = (d: string) => `${MONTHS[Number(d.slice(5, 7)) - 1]} ${Number(d.slice(8, 10))}`;
+
 export const imageUrl = (taskId: string, imageId: string) => `/api/tasks/${taskId}/images/${imageId}`;
 
-export function SortableTaskCard({ task, links, onOpen }: { task: Task; links?: TaskLinks; onOpen: () => void }) {
+export function SortableTaskCard({ task, links, overdue, onOpen }: { task: Task; links?: TaskLinks; overdue?: boolean; onOpen: () => void }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
   return (
     <div
@@ -94,7 +107,7 @@ export function SortableTaskCard({ task, links, onOpen }: { task: Task; links?: 
       {...attributes}
       {...listeners}
     >
-      <TaskCard task={task} links={links} onOpen={onOpen} />
+      <TaskCard task={task} links={links} overdue={overdue} onOpen={onOpen} />
     </div>
   );
 }
