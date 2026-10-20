@@ -229,6 +229,8 @@ ALTER TABLE projects ADD COLUMN IF NOT EXISTS outgoing JSONB;
 -- Card comments are task_events with kind 'comment', so they share the history,
 -- Inbox and bell feeds. Every other event keeps the default.
 ALTER TABLE task_events ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'event';
+-- Card comments written by the AI agent (called with "@agent"); actor_id is who called it.
+ALTER TABLE task_events ADD COLUMN IF NOT EXISTS agent BOOLEAN NOT NULL DEFAULT false;
 
 -- Checklist: JSON array of {text, done}, saved whole on every change.
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS checklist JSONB NOT NULL DEFAULT '[]';

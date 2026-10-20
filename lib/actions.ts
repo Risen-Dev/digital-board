@@ -9,6 +9,8 @@ import { joinLabels, nextDue, projectKeyOf, PROJECT_KEY_RE, REPEATS, templateOf,
 import { broadcast } from "./canvas/hub";
 import { projectRole } from "./canvas/guard";
 import { notify } from "./outgoing";
+import { AGENT_MENTION } from "./chat";
+import { answerOnCard } from "./card-agent";
 import { nextTaskNumber, relocateTask } from "./tasks";
 import { DONE_COLUMN } from "./queries";
 import { cleanImport, type Imported } from "./trello";
@@ -457,7 +459,18 @@ export async function addComment(taskId: string, body: string) {
   await logEvent(taskId, user.id, text, "comment");
   await notify("task.updated", taskId, `Comment: ${text}`, user.name);
   revalidatePath("/board");
-  return { ok: true };
+  return { ok: true, agent: AGENT_MENTION.test(text) };
+}
+
+/** The dialog calls this after a comment with "@agent", so the comment shows while the model thinks. */
+export async function askCardAgent(taskId: string) {
+  const user = await requireUser();
+  const task = await get<{ project_id: string }>(
+    "SELECT c.project_id FROM tasks t JOIN columns c ON c.id = t.column_id WHERE t.id = ?", taskId,
+  );
+  if (!task || await projectRole(user, task.project_id) === null) return;
+  await answerOnCard(user, taskId);
+  revalidatePath("/board");
 }
 
 /** Saves the whole checklist; the dialog sends it after every tick, add or delete. */
