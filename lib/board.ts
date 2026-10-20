@@ -49,7 +49,7 @@ export const joinLabels = (raw: string) =>
 export type Column = { id: string; title: string; color: string; tasks: Task[] };
 
 /** `atLabel` is formatted on the server — see lib/format.ts for why. */
-export type Entry = { at: string; atLabel: string; text: string; actor: string | null; kind: "event" | "comment" };
+export type Entry = { at: string; atLabel: string; text: string; actor: string | null; kind: "event" | "comment"; agent?: boolean };
 
 export const PRIORITIES: Priority[] = ["low", "medium", "high"];
 

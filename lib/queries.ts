@@ -117,7 +117,7 @@ export const archivedTasks = async (projectId: string) =>
 
 export const taskHistory = async (taskId: string): Promise<Entry[]> =>
   (await all<Omit<Entry, "atLabel">>(
-    `SELECT e.at, e.text, e.kind, u.name AS actor
+    `SELECT e.at, e.text, e.kind, e.agent, CASE WHEN e.agent THEN 'AI agent' ELSE u.name END AS actor
        FROM task_events e LEFT JOIN users u ON u.id = e.actor_id
       WHERE e.task_id = ? ORDER BY e.id DESC`,
     taskId,
@@ -127,7 +127,7 @@ export type FeedItem = Entry & { id: number; taskId: string; taskTitle: string; 
 type FeedRow = Omit<FeedItem, "atLabel" | "dayLabel">;
 
 /** Workspace admins see every project; members only the projects they are assigned to. */
-const FEED_FROM = `SELECT e.id, e.at, e.kind, CASE e.kind WHEN 'comment' THEN 'Commented: ' || e.text ELSE e.text END AS text, u.name AS actor, t.id AS "taskId", t.title AS "taskTitle",
+const FEED_FROM = `SELECT e.id, e.at, e.kind, CASE e.kind WHEN 'comment' THEN 'Commented: ' || e.text ELSE e.text END AS text, CASE WHEN e.agent THEN 'AI agent' ELSE u.name END AS actor, t.id AS "taskId", t.title AS "taskTitle",
             c.title AS "columnTitle", c.color AS "columnColor"
        FROM task_events e
        JOIN tasks t ON t.id = e.task_id
