@@ -87,7 +87,7 @@ export function TaskDialog({ task, columns, members, defaultColumnId, links, rep
 
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto md:flex-row md:overflow-hidden">
           <div className="px-5 pb-6 pt-5 md:min-w-0 md:flex-1 md:overflow-y-auto md:px-8">
-            <form action={action} className="flex flex-col gap-5">
+            <form action={action} className="flex flex-col gap-5 pb-6">
               {editing && <input type="hidden" name="id" value={task.id} />}
               <textarea
                 name="title"
