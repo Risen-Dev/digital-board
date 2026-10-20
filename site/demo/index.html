@@ -53,16 +53,34 @@
   a { color: inherit; }
   .banner { background: var(--primary); color: var(--primary-fg); font-size: 13px; text-align: center; padding: 6px 16px; }
   .banner a { font-weight: 600; }
-  header { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
-  .brand { display: flex; align-items: center; gap: 8px; font-weight: 600; text-decoration: none; }
-  .logo { width: 28px; height: 28px; border-radius: 7px; background: var(--primary); display: grid; place-items: center; }
+  .app { flex: 1; min-height: 0; display: flex; }
+  .side { width: 220px; flex: none; border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 15px; text-decoration: none; padding: 0 12px; height: 54px; border-bottom: 1px solid var(--border); }
+  .logo { width: 28px; height: 28px; border-radius: 7px; background: var(--primary); display: grid; place-items: center; flex: none; }
   .logo rect { fill: var(--primary-fg); }
-  .project { color: var(--muted); }
-  .tabs { display: flex; gap: 2px; background: var(--secondary); border-radius: 8px; padding: 3px; }
-  .tabs button { border: 0; background: none; padding: 4px 10px; border-radius: 6px; color: var(--muted); cursor: pointer; font-size: 13px; }
+  .nav { display: grid; gap: 2px; padding: 12px 8px; }
+  .nav button { display: flex; align-items: center; gap: 10px; border: 0; background: none; border-radius: 8px; padding: 7px 8px; font-size: 14px; color: var(--muted); cursor: pointer; text-align: left; }
+  .nav button:hover { background: var(--secondary); color: var(--fg); }
+  .nav button[aria-current="true"] { background: var(--secondary); color: var(--fg); font-weight: 500; }
+  .nav button[data-soon] { cursor: default; }
+  .nav button[data-soon]:hover { background: none; color: var(--muted); }
+  .nav .ico { width: 16px; height: 16px; }
+  .nav .badge { margin-left: auto; font-size: 11px; min-width: 18px; height: 18px; border-radius: 999px; display: grid; place-items: center; background: var(--secondary); color: var(--muted); padding: 0 5px; }
+  .side-foot { margin-top: auto; border-top: 1px solid var(--border); }
+  .side-label { font-size: 11px; font-weight: 600; letter-spacing: .06em; color: var(--muted); padding: 12px 16px 6px; }
+  .side-project { display: flex; align-items: center; gap: 8px; margin: 0 8px 10px; padding: 5px 8px; border-radius: 8px; background: var(--secondary); font-size: 13px; }
+  .side-user { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-top: 1px solid var(--border); font-size: 13px; }
+  .side-user small { display: block; color: var(--muted); font-size: 11px; }
+  .main-col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  header { display: flex; align-items: center; gap: 12px; padding: 0 16px; min-height: 54px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .ptitle { font-size: 15px; font-weight: 600; margin: 0 4px 0 0; }
+  .tabs { display: flex; max-width: 100%; overflow-x: auto; gap: 2px; background: var(--secondary); border-radius: 8px; padding: 3px; }
+  .tabs button { border: 0; background: none; padding: 4px 10px; border-radius: 6px; color: var(--muted); cursor: pointer; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; }
   .tabs button[aria-selected="true"] { background: var(--card); color: var(--fg); box-shadow: 0 1px 2px rgb(0 0 0 / .08); }
   .spacer { flex: 1; }
-  .search { border: 1px solid var(--border); background: transparent; border-radius: 8px; padding: 5px 10px; width: 180px; font-size: 13px; }
+  .search-wrap { position: relative; display: flex; align-items: center; }
+  .search-wrap .ico { position: absolute; left: 9px; color: var(--muted); pointer-events: none; }
+  .search { border: 1px solid var(--border); background: transparent; border-radius: 8px; padding: 5px 10px 5px 30px; width: 200px; font-size: 13px; }
   .btn { border: 1px solid var(--primary); background: var(--primary); color: var(--primary-fg); border-radius: 8px; padding: 5px 12px; font-size: 13px; font-weight: 500; cursor: pointer; }
   .btn.ghost { background: transparent; color: var(--fg); border-color: var(--border); }
   .btn.danger { background: transparent; color: #ef4444; border-color: var(--border); }
@@ -72,20 +90,23 @@
   [hidden] { display: none !important; }
 
   /* Board */
-  .board { display: flex; gap: 12px; padding: 16px; align-items: flex-start; min-height: 100%; }
-  .lane { flex: 0 0 272px; background: var(--lane); border: 1px solid var(--border); border-radius: 12px; padding: 10px; }
-  .lane.over { outline: 2px dashed var(--muted); outline-offset: -2px; }
-  .lane-head { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 13px; padding: 2px 4px 10px; }
+  .board { display: flex; gap: 16px; padding: 16px 24px; align-items: flex-start; min-height: 100%; width: max-content; }
+  .lane { flex: 0 0 264px; border-radius: 10px; padding: 2px; }
+  .lane.over { outline: 2px dashed var(--muted); outline-offset: 2px; }
+  .lane-head { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; padding: 6px 4px 12px; }
+  .lane-head .plus { margin-left: auto; border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 18px; line-height: 1; padding: 0 4px; border-radius: 4px; }
+  .lane-head .plus:hover { background: var(--secondary); color: var(--fg); }
   .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
-  .count { font-size: 11px; color: var(--muted); background: var(--secondary); border-radius: 999px; padding: 0 7px; font-weight: 500; }
+  .count { font-size: 11px; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; min-width: 20px; height: 20px; display: grid; place-items: center; padding: 0 5px; font-weight: 500; }
   .cards { display: flex; flex-direction: column; gap: 8px; min-height: 40px; }
-  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; cursor: grab; text-align: left; width: 100%; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
-  .card:hover { border-color: var(--muted); }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 12px; overflow: hidden; box-shadow: 0 1px 2px rgb(0 0 0 / .05); transition: transform .15s, box-shadow .15s; cursor: grab; text-align: left; width: 100%; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+  .card:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgb(0 0 0 / .08); }
+  .cover { display: block; margin: -12px -12px 12px; width: calc(100% + 24px); height: auto; background: var(--secondary); border-bottom: 1px solid var(--border); }
   .card.dragging { opacity: .4; }
   .card .key { font-size: 11px; color: var(--muted); }
   .card .title { font-weight: 500; margin: 2px 0 8px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .line { display: flex; align-items: center; gap: 8px; font-size: 12px; margin-top: 6px; }
-  .line > span { display: inline-flex; align-items: center; gap: 4px; }
+  .line > span:not(.avatar) { display: inline-flex; align-items: center; gap: 4px; }
   .muted { color: var(--muted); }
   .ico { width: 14px; height: 14px; flex: none; }
   .tag { border-radius: 999px; padding: 1px 8px; background: var(--secondary); color: var(--muted); font-size: 10px; font-weight: 500; max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -96,7 +117,7 @@
   .due { color: var(--muted); }
   .due.late { color: #ef4444; font-weight: 500; }
   .avatar { width: 22px; height: 22px; border-radius: 50%; color: #fff; font-size: 10px; font-weight: 600; display: grid; place-items: center; flex: none; }
-  .add { border: 0; background: none; color: var(--muted); font-size: 12px; padding: 8px 4px 0; cursor: pointer; }
+  .add { border: 0; background: none; color: var(--muted); font-size: 13px; padding: 10px 4px 0; cursor: pointer; }
   .add:hover { color: var(--fg); }
 
   /* List */
@@ -176,33 +197,45 @@
     .feed { max-height: 320px; }
     .props { grid-template-columns: 1fr; }
   }
+  .sm-only { display: none !important; }
+  @media (max-width: 767px) {
+    .side { display: none; }
+    .sm-only { display: inline-flex !important; }
+    header { padding: 8px 12px; }
+  }
   @media (max-width: 640px) {
-    .search { order: 10; width: 100%; }
-    .project, .hide-sm { display: none; }
+    .search-wrap { order: 10; width: 100%; }
+    .search { width: 100%; }
+    .hide-sm { display: none; }
   }
 </style>
 </head>
 <body>
 <div class="banner">Live demo · changes stay in your browser · <a href="../">Back to Digital Board</a></div>
-<header>
-  <a class="brand" href="../">
+<div class="app">
+<aside class="side">
+  <a class="brand" href="../" title="Back to Digital Board">
     <span class="logo"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><rect x="1" y="1" width="6" height="6" rx="1.2"/><rect x="9" y="1" width="6" height="6" rx="1.2" opacity=".6"/><rect x="1" y="9" width="6" height="6" rx="1.2" opacity=".6"/><rect x="9" y="9" width="6" height="6" rx="1.2" opacity=".3"/></svg></span>
-    <span class="hide-sm">Digital Board</span>
+    Acme
   </a>
-  <span class="project">/ Web App</span>
-  <div class="tabs" role="tablist">
-    <button role="tab" data-view="board" aria-selected="true">Board</button>
-    <button role="tab" data-view="list">List</button>
-    <button role="tab" data-view="calendar">Calendar</button>
-    <button role="tab" data-view="canvas">Canvas</button>
+  <nav class="nav" id="nav"></nav>
+  <div class="side-foot">
+    <div class="side-label">PROJECTS</div>
+    <div class="side-project"><span class="dot" style="background:var(--c0)"></span>Web App</div>
+    <div class="side-user"><span class="avatar" style="background:#6366f1">AL</span><div>Ada Lovelace<small>ada@acme.example</small></div></div>
   </div>
+</aside>
+<div class="main-col">
+<header>
+  <h1 class="ptitle">Web App</h1>
+  <div class="tabs" role="tablist" id="tabs"></div>
   <span class="spacer"></span>
-  <input class="search" id="search" type="search" placeholder="Search tasks…" aria-label="Search tasks">
+  <label class="search-wrap" id="search-wrap"><span id="search-ico"></span><input class="search" id="search" type="search" placeholder="Search tasks…" aria-label="Search tasks"></label>
   <button class="btn ghost" id="reset" title="Put the sample data back">Reset demo</button>
   <button class="icon-btn" id="theme" aria-label="Toggle theme">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
   </button>
-  <button class="btn" id="new">+ New task</button>
+  <button class="btn" id="new">+ New Task</button>
 </header>
 
 <main>
@@ -211,6 +244,8 @@
   <section id="view-calendar" class="cal" hidden></section>
   <section id="view-canvas" class="canvas" hidden><div class="loading">Loading canvas…</div></section>
 </main>
+</div>
+</div>
 
 <dialog id="dialog">
   <div class="dlg-head"><span class="dot" id="dialog-dot"></span><span id="dialog-title">New task</span>
@@ -263,7 +298,7 @@ const PEOPLE = [
   { id: "ben", name: "Ben Ito", color: "#10b981" },
   { id: "cleo", name: "Cleo Park", color: "#ec4899" },
 ];
-const KEY = "digital-board-demo-v2";
+const KEY = "digital-board-demo-v3";
 
 // Due dates are relative to today, so the calendar always has something on it.
 function day(offset) {
@@ -277,7 +312,7 @@ function sample() {
     ({ id: n, key: `WEB-${n}`, col, title, desc, prio, label, who, due, checklist, comments, history: [`Created by ${PEOPLE[0].name}`] });
   const c = (who, text, agent = false) => ({ who, text, agent, at: "Yesterday" });
   return {
-    seq: 9,
+    seq: 10,
     tasks: [
       t(1, "progress", "Set up CI pipeline (lint, test, build)", "Run on every pull request. Block merge when it fails.", "high", "Chore, DevOps", "ben", day(2),
         [{ text: "Lint", done: true }, { text: "Unit tests", done: true }, { text: "Build", done: false }]),
@@ -287,7 +322,9 @@ function sample() {
         [c("ada", "@agent what's left on this?"), c("", "WEB-3 is in In Review, high priority, assigned to Ben Ito and already overdue. The fix is written; it needs a review and a check that sessions now last the configured time.", true)]),
       t(4, "backlog", "Write README setup section", "", "low", "Docs", "", ""),
       t(5, "todo", "Dark mode for the settings page", "Follow the app theme toggle.", "medium", "Feature", "cleo", day(9)),
-      t(6, "todo", "Add rate limit to the inbound webhook", "", "high", "Security", "ada", day(4)),
+      { ...t(6, "review", "Onboarding flow redesign", "New sign-up steps, sketched on the canvas.", "medium", "Design, Frontend", "cleo", day(3),
+        [{ text: "Wireframes", done: true }, { text: "Copy review", done: false }], [c("cleo", "Wireframes are on the canvas, have a look.")]), cover: true },
+      t(10, "todo", "Add rate limit to the inbound webhook", "", "high", "Security", "ada", day(4)),
       t(7, "backlog", "Export board as CSV", "One row per task with its column.", "low", "Feature", "", day(14)),
       t(8, "done", "Project templates", "Six templates with their own columns.", "medium", "Feature", "cleo", day(-6), [{ text: "Six templates", done: true }]),
       t(9, "done", "Invite members by email", "", "low", "Feature", "ada", day(-3)),
@@ -315,6 +352,17 @@ const ICON = {
   cal: '<rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
   flag: '<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1zM4 22v-7"/>',
   tag: '<path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/>',
+  home: '<path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  board: '<rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/>',
+  pen: '<path d="M12 20h9"/><path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z"/>',
+  chat: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+  inbox: '<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
+  mine: '<path d="M21 10.5V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12.5"/><path d="m9 11 3 3L22 4"/>',
+  meet: '<rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><circle cx="12" cy="16" r="2"/>',
+  gear: '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
+  list: '<path d="M3 12h.01M3 18h.01M3 6h.01M8 12h13M8 18h13M8 6h13"/>',
+  chart: '<path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9M13 17V5M8 17v-3"/>',
+  search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
   spark: '<path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>',
 };
 const svg = (k, style = "") => `<svg class="ico" style="${style}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[k]}</svg>`;
@@ -324,6 +372,11 @@ const labelsOf = (s) => (s || "").split(",").map((l) => l.trim()).filter(Boolean
 const avatar = (p) => `<span class="avatar" style="background:${p.color}" title="${esc(p.name)}">${initials(p.name)}</span>`;
 const late = (t) => t.due && t.col !== "done" && t.due < day(0);
 
+const COVER = `<svg class="cover" viewBox="0 0 264 120" aria-hidden="true"><rect width="264" height="120" fill="var(--secondary)"/>
+  <g fill="var(--card)" stroke="var(--muted)" stroke-width="1.2"><rect x="20" y="48" width="44" height="24" rx="12"/><rect x="86" y="48" width="48" height="24" rx="4"/><path d="M178 38l22 22-22 22-22-22z"/><rect x="220" y="20" width="32" height="22" rx="4"/><rect x="220" y="78" width="32" height="22" rx="11"/></g>
+  <g stroke="var(--muted)" stroke-width="1.2" fill="none"><path d="M64 60h22M134 60h22M200 60h8v-29h12M200 60h8v29h12"/></g>
+  <g fill="var(--c1)" opacity=".5"><rect x="26" y="57" width="32" height="6" rx="3"/></g><g fill="var(--c0)" opacity=".45"><rect x="94" y="57" width="32" height="6" rx="3"/></g></svg>`;
+
 function card(t) {
   const p = person(t.who), labels = labelsOf(t.label);
   const icons = [
@@ -331,7 +384,7 @@ function card(t) {
     t.checklist.length && `<span>${svg("check")}${t.checklist.filter((i) => i.done).length}/${t.checklist.length}</span>`,
     t.comments.length && `<span>${svg("comment")}${t.comments.length}</span>`,
   ].filter(Boolean);
-  return `<button class="card" data-id="${t.id}">
+  return `<button class="card" data-id="${t.id}">${t.cover ? COVER : ""}
     <div class="key">${t.key}</div><div class="title">${esc(t.title)}</div>
     ${icons.length ? `<div class="line muted">${icons.join("")}</div>` : ""}
     ${p || t.due ? `<div class="line">${p ? avatar(p) : ""}${t.due ? `<span class="due${late(t) ? " late" : ""}">${svg("cal")}${fmt(t.due)}</span>` : ""}</div>` : ""}
@@ -346,7 +399,7 @@ function renderBoard() {
   $("#view-board").innerHTML = COLUMNS.map((c) => {
     const mine = tasks.filter((t) => t.col === c.id);
     return `<div class="lane" data-col="${c.id}">
-      <div class="lane-head"><span class="dot" style="background:${c.color}"></span>${c.title}<span class="count">${mine.length}</span></div>
+      <div class="lane-head"><span class="dot" style="background:${c.color}"></span>${c.title}<span class="count">${mine.length}</span><button class="plus" data-add="${c.id}" aria-label="Add task to ${c.title}">+</button></div>
       <div class="cards">${mine.map(card).join("")}</div>
       <button class="add" data-add="${c.id}">+ Add task</button>
     </div>`;
@@ -634,20 +687,32 @@ $("#mentions").addEventListener("mousedown", (e) => {
 });
 
 // ── Shell ─────────────────────────────────────────────────────────────────
+// The sidebar mirrors the app's; only Board and Canvas exist in the demo.
+const NAV = [["home", "Home"], ["board", "Board", "board"], ["pen", "Canvas", "canvas"], ["chat", "Chat"], ["inbox", "Inbox"], ["mine", "My Tasks"], ["meet", "Meetings"], ["gear", "Settings"]];
+$("#nav").innerHTML = NAV.map(([icon, label, v]) =>
+  `<button ${v ? `data-view="${v}"` : `data-soon title="In the full app"`}>${svg(icon)}${label}${label === "My Tasks" ? `<span class="badge">${state.tasks.filter((t) => t.who === "ada" && t.col !== "done").length}</span>` : ""}</button>`).join("");
+$("#tabs").innerHTML = [["board", "Board", "board"], ["list", "List", "list"], ["calendar", "Calendar", "meet"], ["canvas", "Canvas", "pen", "sm-only"]]
+  .map(([v, label, icon, cls]) => `<button role="tab" data-view="${v}"${cls ? ` class="${cls}"` : ""}>${svg(icon)}${label}</button>`).join("")
+  + `<button role="tab" data-soon title="In the full app" style="cursor:default">${svg("chart")}Analytics</button>`;
+$("#search-ico").outerHTML = svg("search");
 let view = "board";
 function render() {
   ({ board: renderBoard, list: renderList, calendar: renderCalendar, canvas: () => {} })[view]();
 }
-document.querySelector(".tabs").addEventListener("click", (e) => {
-  const tab = e.target.closest("[data-view]");
-  if (!tab) return;
-  view = tab.dataset.view;
-  document.querySelectorAll(".tabs button").forEach((b) => b.setAttribute("aria-selected", b === tab));
-  document.querySelectorAll("main > section").forEach((s) => (s.hidden = s.id !== `view-${view}`));
-  $("#search").hidden = view === "canvas";
-  if (view === "canvas") window.loadCanvas?.();
+function setView(v) {
+  view = v;
+  document.querySelectorAll("#tabs [data-view]").forEach((b) => b.setAttribute("aria-selected", b.dataset.view === v));
+  document.querySelectorAll("#nav [data-view]").forEach((b) => b.setAttribute("aria-current", (b.dataset.view === "canvas") === (v === "canvas")));
+  document.querySelectorAll("main > section").forEach((s) => (s.hidden = s.id !== `view-${v}`));
+  $("#search-wrap").hidden = v === "canvas";
+  if (v === "canvas") window.loadCanvas?.();
   render();
+}
+document.addEventListener("click", (e) => {
+  const target = e.target.closest("#tabs [data-view], #nav [data-view]");
+  if (target) setView(target.dataset.view);
 });
+setView("board");
 $("#search").addEventListener("input", (e) => { query = e.target.value.trim().toLowerCase(); render(); });
 $("#new").onclick = () => openTask(null);
 $("#reset").onclick = () => {
