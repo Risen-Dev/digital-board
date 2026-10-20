@@ -1,15 +1,15 @@
 "use client";
 
-import { useActionState, useCallback, useEffect, useState } from "react";
+import { useActionState, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Archive, Check, CircleDot, GitBranch, GitPullRequest, History, Image as ImageIcon, ImagePlus, ListChecks, Sparkles, Trash2, X } from "lucide-react";
+import { Archive, CalendarDays, Check, CircleDot, Flag, GitBranch, GitPullRequest, History, Image as ImageIcon, ImagePlus, ListChecks, Repeat, Sparkles, Tag, Trash2, Users, X, type LucideIcon } from "lucide-react";
 import { addComment, archiveTask, askCardAgent, createGithubIssue, createTask, deleteTask, fetchHistory, setChecklist, updateTask } from "@/lib/actions";
 import { branchNameOf, initials, pullRequestUrlOf, PRIORITIES, PRIORITY_CFG, REPEATS, type CheckItem, type Column, type Entry, type Member, type Task, type TaskImage } from "@/lib/board";
 import { Avatar } from "./avatar";
 import { imageUrl } from "./task-card";
 import type { TaskLinks } from "@/lib/github";
 import { TaskGithubLinks } from "./views/github-view";
-import { Field, FormError, Select, SubmitButton } from "./form-bits";
+import { FormError, SubmitButton } from "./form-bits";
 
 type Props = {
   task: Task | null;
@@ -29,6 +29,7 @@ export function TaskDialog({ task, columns, members, defaultColumnId, links, rep
   const [history, setHistory] = useState<Entry[]>([]);
   const [copied, setCopied] = useState(false);
   const linked = links ? links.pulls.length + links.issues.length + links.branches.length + links.commits.length : 0;
+  const column = columns.find((c) => c.id === task?.columnId);
 
   useEffect(() => {
     if (state?.ok) onClose();
@@ -38,16 +39,27 @@ export function TaskDialog({ task, columns, members, defaultColumnId, links, rep
     if (task) fetchHistory(task.id).then(setHistory);
   }, [task]);
   useEffect(loadHistory, [loadHistory]);
+  // Oldest at the top, like a chat: keep the newest comment in view.
+  const feed = useRef<HTMLOListElement>(null);
+  useEffect(() => {
+    feed.current?.scrollTo({ top: feed.current.scrollHeight });
+  }, [history]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-6 animate-in fade-in duration-150" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 animate-in fade-in duration-150 sm:p-6" onClick={onClose}>
       <div
         onClick={(e) => e.stopPropagation()}
-        className="mt-10 flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-xl border bg-card shadow-lg animate-in fade-in zoom-in-95 slide-in-from-top-2 duration-200"
+        className={`flex max-h-[90vh] w-full flex-col overflow-hidden rounded-xl border bg-card shadow-lg animate-in fade-in zoom-in-95 slide-in-from-top-2 duration-200 sm:mt-6 ${editing ? "max-w-5xl md:h-[90vh]" : "max-w-2xl"}`}
       >
-        <div className="flex shrink-0 items-center gap-2 border-b px-5 py-3">
-          <h2 className="text-sm font-semibold">{editing ? "Edit task" : "New task"}</h2>
-          {task?.key && <span className="font-mono text-xs text-muted-foreground">{task.key}</span>}
+        <div className="flex shrink-0 items-center gap-2 border-b px-5 py-2.5 text-xs text-muted-foreground">
+          {column && (
+            <span className="flex items-center gap-1.5">
+              <span className="size-2 rounded-full" style={{ background: column.color }} />
+              {column.title}
+            </span>
+          )}
+          {task?.key && <span className="font-mono">{column ? "/ " : ""}{task.key}</span>}
+          {!editing && <span className="font-medium text-foreground">New task</span>}
           {task?.key && (
             <button
               type="button"
@@ -58,7 +70,7 @@ export function TaskDialog({ task, columns, members, defaultColumnId, links, rep
                 });
               }}
               title={branchNameOf(task)}
-              className="ml-auto flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+              className="ml-auto flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] transition-colors hover:bg-secondary hover:text-foreground"
             >
               {copied ? <Check className="size-3" /> : <GitBranch className="size-3" />}
               {copied ? "Copied" : "Copy branch name"}
@@ -66,165 +78,195 @@ export function TaskDialog({ task, columns, members, defaultColumnId, links, rep
           )}
           <button
             onClick={onClose}
-            className={`${task?.key ? "" : "ml-auto "}rounded p-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground`}
+            aria-label="Close"
+            className={`${task?.key ? "" : "ml-auto "}rounded p-1 transition-colors hover:bg-secondary hover:text-foreground`}
           >
             <X className="size-4" />
           </button>
         </div>
 
-        <form action={action} className="flex flex-col gap-4 overflow-y-auto p-5">
-          {editing && <input type="hidden" name="id" value={task.id} />}
-          <Field label="Title" name="title" required defaultValue={task?.title ?? ""} autoFocus />
-          <label className="flex flex-col gap-1.5">
-            <span className="text-xs font-medium">Details</span>
-            <textarea
-              name="description"
-              defaultValue={task?.description ?? ""}
-              rows={4}
-              placeholder="Add task details"
-              className="resize-y rounded-md border bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-ring"
-            />
-          </label>
-
-          {!editing && (
-            <Select label="Column" name="columnId" defaultValue={defaultColumnId ?? columns[0]?.id}>
-              {columns.map((c) => (
-                <option key={c.id} value={c.id}>{c.title}</option>
-              ))}
-            </Select>
-          )}
-
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Labels" name="label" defaultValue={task?.label ?? ""} placeholder="Design, QA" />
-            <Select label="Priority" name="priority" defaultValue={task?.priority ?? "medium"}>
-              {PRIORITIES.map((p) => (
-                <option key={p} value={p}>{PRIORITY_CFG[p].label}</option>
-              ))}
-            </Select>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Due date" name="dueDate" type="date" defaultValue={task?.dueDate ?? ""} />
-            <Select label="Repeat" name="repeat" defaultValue={task?.repeat ?? ""}>
-              <option value="">Never</option>
-              {REPEATS.map((r) => (
-                <option key={r} value={r}>{r[0].toUpperCase() + r.slice(1)}</option>
-              ))}
-            </Select>
-          </div>
-
-          <fieldset className="flex flex-col gap-1.5">
-            <legend className="mb-1.5 text-xs font-medium">Assignees</legend>
-            <div className="flex flex-wrap gap-1.5">
-              {members.map((m) => (
-                <label key={m.id} className="flex cursor-pointer items-center gap-1.5 rounded-full border py-0.5 pl-0.5 pr-2.5 text-xs transition-colors has-[:checked]:border-primary has-[:checked]:bg-secondary">
-                  <input type="checkbox" name="assigneeIds" value={m.id} defaultChecked={task?.assignees.some((a) => a.id === m.id)} className="sr-only" />
-                  <Avatar initials={initials(m.name)} color={m.color} size={20} />
-                  {m.name}
-                </label>
-              ))}
-            </div>
-            <p className="text-[11px] text-muted-foreground">Repeating cards get their next copy when moved to the done column.</p>
-          </fieldset>
-
-          <FormError error={state?.error} />
-
-          <div className="flex items-center gap-2">
-            <SubmitButton>{editing ? "Save" : "Create task"}</SubmitButton>
-            {editing && (
-              <button
-                type="button"
-                onClick={async () => {
-                  await archiveTask(task.id, true);
-                  onClose();
-                }}
-                className="ml-auto flex items-center gap-1.5 rounded-md border px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-              >
-                <Archive className="size-3.5" />
-                Archive
-              </button>
-            )}
-            {editing && (
-              <button
-                type="button"
-                onClick={async () => {
-                  if (!confirm(`Delete "${task.title}" and its history? Archive keeps it restorable.`)) return;
-                  await deleteTask(task.id);
-                  onClose();
-                }}
-                className="flex items-center gap-1.5 rounded-md border px-3 py-2 text-xs text-[#ef4444] transition-colors hover:bg-[rgba(239,68,68,0.08)]"
-              >
-                <Trash2 className="size-3.5" />
-                Delete
-              </button>
-            )}
-          </div>
-        </form>
-
-        {(linked > 0 || (repo && task?.key)) && (
-          <div className="shrink-0 border-t px-5 py-4">
-            <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
-              <GitPullRequest className="size-3.5" />
-              GitHub
-            </h3>
-            {repo && task?.key && (
-              <GithubActions
-                taskId={task.id}
-                repo={repo}
-                task={task}
-                closes={links?.issues.filter((i) => i.state === "open").map((i) => i.ref) ?? []}
-                onDone={loadHistory}
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto md:flex-row md:overflow-hidden">
+          <div className="px-5 pb-6 pt-5 md:min-w-0 md:flex-1 md:overflow-y-auto md:px-8">
+            <form action={action} className="flex flex-col gap-5">
+              {editing && <input type="hidden" name="id" value={task.id} />}
+              <textarea
+                name="title"
+                required
+                defaultValue={task?.title ?? ""}
+                autoFocus={!editing}
+                rows={1}
+                placeholder="Task name"
+                aria-label="Title"
+                onKeyDown={(e) => e.key === "Enter" && e.preventDefault()}
+                className="field-sizing-content resize-none bg-transparent text-2xl font-semibold leading-tight outline-none placeholder:text-muted-foreground"
               />
-            )}
-            {links && linked > 0 && (
-              <div className="mt-2 max-h-40 overflow-y-auto">
-                <TaskGithubLinks links={links} />
+
+              <div className="grid gap-x-8 gap-y-2.5 sm:grid-cols-2">
+                {!editing && (
+                  <Prop icon={CircleDot} label="Column">
+                    <select name="columnId" defaultValue={defaultColumnId ?? columns[0]?.id} className={bare}>
+                      {columns.map((c) => (
+                        <option key={c.id} value={c.id}>{c.title}</option>
+                      ))}
+                    </select>
+                  </Prop>
+                )}
+                <Prop icon={Flag} label="Priority">
+                  <select name="priority" defaultValue={task?.priority ?? "medium"} className={bare}>
+                    {PRIORITIES.map((p) => (
+                      <option key={p} value={p}>{PRIORITY_CFG[p].label}</option>
+                    ))}
+                  </select>
+                </Prop>
+                <Prop icon={CalendarDays} label="Due date">
+                  <input type="date" name="dueDate" defaultValue={task?.dueDate ?? ""} className={bare} />
+                </Prop>
+                <Prop icon={Repeat} label="Repeat" title="Repeating cards get their next copy when moved to the done column.">
+                  <select name="repeat" defaultValue={task?.repeat ?? ""} className={bare}>
+                    <option value="">Never</option>
+                    {REPEATS.map((r) => (
+                      <option key={r} value={r}>{r[0].toUpperCase() + r.slice(1)}</option>
+                    ))}
+                  </select>
+                </Prop>
+                <Prop icon={Tag} label="Labels">
+                  <input name="label" defaultValue={task?.label ?? ""} placeholder="Design, QA" className={bare} />
+                </Prop>
+                <Prop icon={Users} label="Assignees" wide>
+                  <div className="flex flex-wrap gap-1.5">
+                    {members.map((m) => (
+                      <label key={m.id} className="flex cursor-pointer items-center gap-1.5 rounded-full border py-0.5 pl-0.5 pr-2.5 text-xs transition-colors has-[:checked]:border-primary has-[:checked]:bg-secondary">
+                        <input type="checkbox" name="assigneeIds" value={m.id} defaultChecked={task?.assignees.some((a) => a.id === m.id)} className="sr-only" />
+                        <Avatar initials={initials(m.name)} color={m.color} size={20} />
+                        {m.name}
+                      </label>
+                    ))}
+                  </div>
+                </Prop>
+              </div>
+
+              <textarea
+                name="description"
+                defaultValue={task?.description ?? ""}
+                rows={5}
+                placeholder="Add a description"
+                aria-label="Description"
+                className="field-sizing-content min-h-24 resize-none border-t bg-transparent pt-5 text-sm leading-relaxed outline-none placeholder:text-muted-foreground"
+              />
+
+              <FormError error={state?.error} />
+
+              <div className="flex items-center gap-2">
+                <SubmitButton>{editing ? "Save" : "Create task"}</SubmitButton>
+                {editing && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await archiveTask(task.id, true);
+                      onClose();
+                    }}
+                    className="ml-auto flex items-center gap-1.5 rounded-md border px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                  >
+                    <Archive className="size-3.5" />
+                    Archive
+                  </button>
+                )}
+                {editing && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!confirm(`Delete "${task.title}" and its history? Archive keeps it restorable.`)) return;
+                      await deleteTask(task.id);
+                      onClose();
+                    }}
+                    className="flex items-center gap-1.5 rounded-md border px-3 py-2 text-xs text-[#ef4444] transition-colors hover:bg-[rgba(239,68,68,0.08)]"
+                  >
+                    <Trash2 className="size-3.5" />
+                    Delete
+                  </button>
+                )}
+              </div>
+            </form>
+
+            {editing && <Checklist key={task.id} taskId={task.id} initial={task.checklist} />}
+
+            {editing && <Images key={`images-${task.id}`} task={task} />}
+
+            {(linked > 0 || (repo && task?.key)) && (
+              <div className="border-t py-4">
+                <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+                  <GitPullRequest className="size-3.5" />
+                  GitHub
+                </h3>
+                {repo && task?.key && (
+                  <GithubActions
+                    taskId={task.id}
+                    repo={repo}
+                    task={task}
+                    closes={links?.issues.filter((i) => i.state === "open").map((i) => i.ref) ?? []}
+                    onDone={loadHistory}
+                  />
+                )}
+                {links && linked > 0 && (
+                  <div className="mt-2 max-h-40 overflow-y-auto">
+                    <TaskGithubLinks links={links} />
+                  </div>
+                )}
               </div>
             )}
           </div>
-        )}
 
-        {editing && <Images key={`images-${task.id}`} task={task} />}
-
-        {editing && <Checklist key={task.id} taskId={task.id} initial={task.checklist} />}
-
-        {editing && (
-          <div className="shrink-0 border-t px-5 py-4">
-            <h3 className="mb-3 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
-              <History className="size-3.5" />
-              Comments &amp; history
-            </h3>
-            <CommentBox taskId={task.id} onPosted={loadHistory} />
-            <ol className="flex max-h-56 flex-col overflow-y-auto pr-1">
-              {history.map((e, i) => (
-                e.kind === "comment" ? (
-                  <li key={i} className="mb-3 flex gap-2.5 rounded-lg border p-2.5">
-                    <CommentAvatar entry={e} members={members} />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs">
-                        <span className="font-semibold">{e.actor ?? "Someone"}</span>
-                        <span className="ml-1.5 text-[11px] text-muted-foreground">{e.atLabel}</span>
-                      </p>
-                      <p className="mt-0.5 whitespace-pre-wrap text-xs leading-snug">
-                        <Mentions text={e.text} members={members} />
-                      </p>
-                    </div>
-                  </li>
-                ) : (
-                  <li key={i} className="relative border-l pb-3 pl-4 last:pb-0">
-                    <span className="absolute -left-[3.5px] top-1.5 size-1.5 rounded-full bg-muted-foreground" />
-                    <p className="text-xs leading-snug">{e.text}</p>
-                    <p className="mt-0.5 text-[11px] text-muted-foreground">
-                      {e.atLabel} {e.actor ? `· ${e.actor}` : ""}
-                    </p>
-                  </li>
-                )
-              ))}
-              {history.length === 0 && <li className="text-xs text-muted-foreground">No history yet.</li>}
-            </ol>
-          </div>
-        )}
+          {editing && (
+            <aside className="flex shrink-0 flex-col border-t bg-secondary/30 md:w-[380px] md:border-l md:border-t-0">
+              <h3 className="flex shrink-0 items-center gap-1.5 border-b px-4 py-3 text-xs font-semibold">
+                <History className="size-3.5 text-muted-foreground" />
+                Comments &amp; activity
+              </h3>
+              <ol ref={feed} className="flex max-h-80 flex-col gap-3 overflow-y-auto px-4 py-4 md:max-h-none md:flex-1">
+                {history.toReversed().map((e, i) =>
+                  e.kind === "comment" ? (
+                    <li key={i} className="flex gap-2.5 rounded-lg border bg-card p-2.5">
+                      <CommentAvatar entry={e} members={members} />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs">
+                          <span className="font-semibold">{e.actor ?? "Someone"}</span>
+                          <span className="ml-1.5 text-[11px] text-muted-foreground">{e.atLabel}</span>
+                        </p>
+                        <p className="mt-0.5 whitespace-pre-wrap text-xs leading-snug">
+                          <Mentions text={e.text} members={members} />
+                        </p>
+                      </div>
+                    </li>
+                  ) : (
+                    <li key={i} className="px-1 text-[11px] text-muted-foreground">
+                      <span className="text-foreground/80">{e.actor ?? "Someone"}</span> · {e.text} · {e.atLabel}
+                    </li>
+                  ),
+                )}
+                {history.length === 0 && <li className="m-auto text-xs text-muted-foreground">No comments yet.</li>}
+              </ol>
+              <div className="shrink-0 border-t p-3">
+                <CommentBox taskId={task.id} onPosted={loadHistory} />
+              </div>
+            </aside>
+          )}
+        </div>
       </div>
+    </div>
+  );
+}
+
+const bare = "w-full rounded-md bg-transparent px-2 py-1 text-sm outline-none transition-colors hover:bg-secondary focus:bg-secondary";
+
+/** One property row: icon + label on the left, its control on the right. */
+function Prop({ icon: Icon, label, title, wide, children }: { icon: LucideIcon; label: string; title?: string; wide?: boolean; children: React.ReactNode }) {
+  return (
+    <div className={`flex items-start gap-3 ${wide ? "sm:col-span-2" : ""}`} title={title}>
+      <span className="flex w-28 shrink-0 items-center gap-2 py-1.5 text-xs text-muted-foreground">
+        <Icon className="size-3.5" />
+        {label}
+      </span>
+      <div className="min-w-0 flex-1">{children}</div>
     </div>
   );
 }
@@ -259,7 +301,7 @@ function Images({ task }: { task: Task }) {
   }
 
   return (
-    <div className="shrink-0 border-t px-5 py-4">
+    <div className="border-t py-4">
       <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
         <ImageIcon className="size-3.5" />
         Images {images.length > 0 && images.length}
@@ -314,7 +356,7 @@ function Checklist({ taskId, initial }: { taskId: string; initial: CheckItem[] }
   };
   const done = items.filter((i) => i.done).length;
   return (
-    <div className="shrink-0 border-t px-5 py-4">
+    <div className="border-t py-4">
       <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
         <ListChecks className="size-3.5" />
         Checklist {items.length > 0 && `${done}/${items.length}`}
@@ -379,7 +421,7 @@ function CommentBox({ taskId, onPosted }: { taskId: string; onPosted: () => void
     onPosted();
   };
   return (
-    <div className="mb-4 flex flex-col gap-1.5">
+    <div className="flex flex-col gap-1.5">
       <textarea
         value={body}
         onChange={(e) => setBody(e.target.value)}
