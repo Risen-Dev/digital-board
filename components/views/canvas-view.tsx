@@ -4,6 +4,7 @@ import {
   Component,
   useEffect,
   useMemo,
+  useRef,
   useState,
   useSyncExternalStore,
   type ReactNode,
@@ -15,6 +16,7 @@ import {
   Pencil,
   Plus,
   Sparkles,
+  Tag,
   Trash2,
 } from "lucide-react";
 
@@ -33,7 +35,7 @@ import { claimCanvasSeed, loadCanvasSnapshot } from "@/lib/canvas/api";
 import { useCanvasPersistence } from "@/hooks/use-canvas-persistence";
 import { useCanvasLive } from "@/hooks/use-canvas-live";
 
-import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
+import type { ExcalidrawImperativeAPI, ExcalidrawProps } from "@excalidraw/excalidraw/types";
 import type { ExcalidrawElementSkeleton } from "@excalidraw/excalidraw/data/transform";
 
 import { layoutFlow, parseFlow, type Flow } from "@/lib/canvas/flow";
@@ -135,6 +137,67 @@ async function drawFlow(api: ExcalidrawImperativeAPI, flow: Flow, by: string) {
   return added.length;
 }
 
+/** What a typed tag becomes: the `@tag` form cards and chat mention it by. */
+const tagName = (raw: string) => raw.trim().replace(/[^\w-]+/g, "-").replace(/^-+|-+$/g, "");
+
+type SceneChange = Parameters<NonNullable<ExcalidrawProps["onChange"]>>;
+type Box = { tag: string; left: number; top: number; width: number; height: number };
+
+/**
+ * A dashed frame and an @name label around each tagged group, drawn over the canvas
+ * in screen space. Fed straight from onChange so scrolling re-renders only this.
+ * ponytail: unrotated bounds; rotated shapes get a slightly off frame.
+ */
+function TagHighlights({ feedRef }: { feedRef: { current: ((...change: SceneChange) => void) | null } }) {
+  const [boxes, setBoxes] = useState<Box[]>([]);
+  useEffect(() => {
+    let last = "";
+    feedRef.current = (elements, appState) => {
+      const bounds = new Map<string, [number, number, number, number]>();
+      for (const e of elements) {
+        const tag = e.customData?.tag;
+        if (!tag || e.isDeleted) continue;
+        const xs = "points" in e ? e.points.map(([x]) => e.x + x) : [e.x, e.x + e.width];
+        const ys = "points" in e ? e.points.map(([, y]) => e.y + y) : [e.y, e.y + e.height];
+        const b = bounds.get(tag) ?? [Infinity, Infinity, -Infinity, -Infinity];
+        bounds.set(tag, [Math.min(b[0], ...xs), Math.min(b[1], ...ys), Math.max(b[2], ...xs), Math.max(b[3], ...ys)]);
+      }
+      const { scrollX, scrollY, zoom } = appState;
+      const pad = 12;
+      const next = [...bounds].map(([tag, [x1, y1, x2, y2]]) => ({
+        tag,
+        left: (x1 + scrollX) * zoom.value - pad,
+        top: (y1 + scrollY) * zoom.value - pad,
+        width: (x2 - x1) * zoom.value + pad * 2,
+        height: (y2 - y1) * zoom.value + pad * 2,
+      }));
+      const key = JSON.stringify(next);
+      if (key !== last) {
+        last = key;
+        setBoxes(next);
+      }
+    };
+    return () => { feedRef.current = null; };
+  }, [feedRef]);
+
+  return (
+    // Above the drawing, below Excalidraw's toolbars (z-index 4); clicks pass through.
+    <div className="pointer-events-none absolute inset-0 z-[3] overflow-hidden">
+      {boxes.map((b) => (
+        <div
+          key={b.tag}
+          className="absolute rounded-lg border-2 border-dashed border-[var(--chart-1)] bg-[var(--chart-1)]/5"
+          style={{ left: b.left, top: b.top, width: b.width, height: b.height }}
+        >
+          <span className="absolute -top-2.5 left-2 rounded bg-[var(--chart-1)] px-1.5 py-0.5 text-[10px] font-medium leading-none text-white">
+            @{b.tag}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // The theme toggle only flips the <html> class; the `dark` prop (from the cookie)
 // is stale until the next request, so follow the class live.
 function subscribeTheme(onChange: () => void) {
@@ -150,6 +213,8 @@ type CanvasViewProps = {
   readOnly: boolean;
   aiEnabled: boolean;
   onChanged: () => void;
+  /** An @tag clicked in a card or chat: open its sheet and select its shapes. */
+  focus?: { sheetId: string; tag: string } | null;
 };
 
 export function CanvasView({
@@ -159,6 +224,7 @@ export function CanvasView({
   readOnly,
   aiEnabled,
   onChanged,
+  focus,
 }: CanvasViewProps) {
   const [agentOpen, setAgentOpen] = useState(false);
   const isDark = useSyncExternalStore(
@@ -169,7 +235,7 @@ export function CanvasView({
 
   const [selected, setSelected] = useState<
     string | null
-  >(null);
+  >(focus?.sheetId ?? null);
 
   const [renaming, setRenaming] = useState<
     string | null
@@ -273,6 +339,62 @@ export function CanvasView({
     });
     return () => { cancelled = true; unregister(); };
   }, [api, activeId, initialData, readOnly]);
+
+  const highlight = useRef<((...change: SceneChange) => void) | null>(null);
+
+  // Once per focus request, after the sheet's scene has loaded (and scrolled to content).
+  const focused = useRef<typeof focus>(null);
+  useEffect(() => {
+    if (!api || !focus || focus.sheetId !== activeId || focused.current === focus) return;
+    focused.current = focus;
+    void Promise.resolve(initialData).then(() => requestAnimationFrame(() => {
+      const shapes = api.getSceneElements().filter((e) => e.customData?.tag === focus.tag);
+      if (!shapes.length) return;
+      const group = shapes[0].groupIds.at(-1);
+      api.updateScene({
+        appState: {
+          selectedElementIds: Object.fromEntries(shapes.map((e) => [e.id, true as const])),
+          selectedGroupIds: group ? { [group]: true } : {},
+        },
+      });
+      api.scrollToContent(shapes, { fitToContent: true, animate: true });
+    }));
+  }, [api, activeId, initialData, focus]);
+
+  async function tagSelection() {
+    if (!api) return;
+    const ids = api.getAppState().selectedElementIds;
+    // A shape's label is a separate text element that selection doesn't list.
+    const chosen = (e: { id: string; containerId?: string | null }) => ids[e.id] || (!!e.containerId && ids[e.containerId]);
+    const picked = api.getSceneElements().filter(chosen);
+    if (!picked.length) return window.alert("Select the shapes to tag first.");
+    const raw = window.prompt(
+      "Name the selected shapes. They become one group that cards and chat can mention as @name. Leave blank to remove the name.",
+      picked[0].customData?.tag ?? "",
+    );
+    if (raw === null) return;
+    const tag = tagName(raw);
+    // Group them like Ctrl+G, unless they already are one group.
+    const outer = picked[0].groupIds.at(-1);
+    const group = outer && picked.every((e) => e.groupIds.at(-1) === outer) ? null : crypto.randomUUID();
+    const { newElementWith, CaptureUpdateAction } = await import("@excalidraw/excalidraw");
+    api.updateScene({
+      elements: api.getSceneElementsIncludingDeleted().map((e) =>
+        !e.isDeleted && chosen(e)
+          ? newElementWith(e, {
+              // An undefined tag drops out when the scene is saved as JSON.
+              customData: { ...e.customData, tag: tag || undefined },
+              ...(tag && group ? { groupIds: [...e.groupIds, group] } : {}),
+            })
+          : e,
+      ),
+      captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+    });
+    // Save now and refetch the sheet list, so cards can mention the tag straight away.
+    await new Promise(requestAnimationFrame);
+    await flush();
+    onChanged();
+  }
 
   async function addSheet() {
     /**
@@ -454,9 +576,21 @@ export function CanvasView({
         {!readOnly && activeId && (
           <button
             type="button"
+            onClick={() => void tagSelection()}
+            title="Group and name the selected shapes so cards and chat can mention them as @name"
+            className="ml-auto flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+          >
+            <Tag className="size-3" />
+            Tag
+          </button>
+        )}
+
+        {!readOnly && activeId && (
+          <button
+            type="button"
             onClick={() => setAgentOpen((open) => !open)}
             className={[
-              "ml-auto flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors",
+              "flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors",
               agentOpen ? "bg-secondary text-foreground" : "text-muted-foreground hover:bg-secondary hover:text-foreground",
             ].join(" ")}
           >
@@ -496,11 +630,13 @@ export function CanvasView({
               onChange={(elements, appState, files) => {
                 onChange(elements, appState, files);
                 live.onChange();
+                highlight.current?.(elements, appState, files);
               }}
               onPointerUpdate={live.onPointerUpdate}
               theme={isDark ? "dark" : "light"}
               viewModeEnabled={readOnly}
             />
+            <TagHighlights feedRef={highlight} />
           </CanvasBoundary>
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-3 text-center">

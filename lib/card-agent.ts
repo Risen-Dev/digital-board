@@ -25,19 +25,28 @@ const cardBrief = (t: Task, column: string) =>
     t.checklist.length ? `Checklist:\n${t.checklist.map((i) => `- [${i.done ? "x" : " "}] ${i.text}`).join("\n")}` : "No checklist.",
   ].join("\n");
 
-/** The words on each sheet: Excalidraw text elements, in drawing order. */
-async function sheetsBrief(projectId: string) {
+type SheetElement = { isDeleted?: boolean; text?: string; customData?: { tag?: string } };
+
+/**
+ * The words on each sheet (Excalidraw text elements, in drawing order) and on each of its
+ * named groups, which people mention as "@name". Shared by the card and project agents.
+ */
+export async function sheetsBrief(projectId: string) {
   const rows = await all<{ name: string; snapshot: string | null }>(
     "SELECT name, snapshot FROM canvases WHERE project_id = ? ORDER BY position", projectId,
   );
-  return rows.map((r) => {
-    let words = "";
+  const wordsOf = (elements: SheetElement[]) => elements.filter((e) => e.text).map((e) => e.text).join(" · ");
+  const lines = rows.map((r) => {
+    let elements: SheetElement[] = [];
     try {
-      const elements = JSON.parse(r.snapshot ?? "null")?.elements ?? [];
-      words = elements.filter((e: { isDeleted?: boolean; text?: string }) => !e.isDeleted && e.text).map((e: { text: string }) => e.text).join(" · ");
+      elements = (JSON.parse(r.snapshot ?? "null")?.elements ?? []).filter((e: SheetElement) => !e.isDeleted);
     } catch {}
-    return `- Sheet "${r.name}": ${words.slice(0, SHEET_CHARS) || "(no text)"}`;
-  }).join("\n");
+    const tags = [...new Set(elements.map((e) => e.customData?.tag).filter(Boolean))];
+    const groups = tags.map((tag) => `\n  - Named group @${tag}: ${wordsOf(elements.filter((e) => e.customData?.tag === tag)).slice(0, SHEET_CHARS) || "(shapes, no text)"}`);
+    return `- Sheet "${r.name}": ${wordsOf(elements).slice(0, SHEET_CHARS) || "(no text)"}${groups.join("")}`;
+  });
+  if (!lines.length) return "";
+  return `${lines.join("\n")}\n"@name" in a message means the named group of that name on a sheet above.`;
 }
 
 /**

@@ -10,6 +10,8 @@ import { imageUrl } from "./task-card";
 import type { TaskLinks } from "@/lib/github";
 import { TaskGithubLinks } from "./views/github-view";
 import { FormError, SubmitButton } from "./form-bits";
+import { MentionText, TagLinks, tagOptions, useMentionPicker } from "./mentions";
+import type { CanvasTag } from "@/lib/queries";
 
 type Props = {
   task: Task | null;
@@ -22,16 +24,22 @@ type Props = {
   links?: TaskLinks;
   /** The project's GitHub repo ("owner/name"), for the create issue / PR buttons. */
   repo?: string | null;
+  /** Named canvas shapes, offered when typing "@" (the open project's first). */
+  tags: CanvasTag[];
+  /** An @tag was clicked: show it on the canvas. */
+  onTag: (tag: CanvasTag) => void;
   onClose: () => void;
 };
 
-export function TaskDialog({ task, columns, members, mentionable, defaultColumnId, links, repo, onClose }: Props) {
+export function TaskDialog({ task, columns, members, mentionable, defaultColumnId, links, repo, tags, onTag, onClose }: Props) {
   const editing = task !== null;
   const [state, action] = useActionState(editing ? updateTask : createTask, null);
   const [history, setHistory] = useState<Entry[]>([]);
   const [copied, setCopied] = useState(false);
   const linked = links ? links.pulls.length + links.issues.length + links.branches.length + links.commits.length : 0;
   const column = columns.find((c) => c.id === task?.columnId);
+  const [description, setDescription] = useState(task?.description ?? "");
+  const describe = useMentionPicker(description, setDescription, tagOptions(tags), true);
 
   useEffect(() => {
     if (state?.ok) onClose();
@@ -147,19 +155,24 @@ export function TaskDialog({ task, columns, members, mentionable, defaultColumnI
                 </Prop>
               </div>
 
-              <label className="flex flex-col gap-2 border-t pt-5">
-                <span className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+              <div className="flex flex-col gap-2 border-t pt-5">
+                <label htmlFor="task-description" className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
                   <AlignLeft className="size-3.5" />
                   Description
-                </span>
-                <textarea
-                  name="description"
-                  defaultValue={task?.description ?? ""}
-                  rows={5}
-                  placeholder="Add a description"
-                  className="field-sizing-content min-h-28 resize-none rounded-md border bg-background px-3 py-2 text-sm leading-relaxed outline-none transition-colors placeholder:text-muted-foreground focus:border-ring"
-                />
-              </label>
+                </label>
+                <div className="relative">
+                  <textarea
+                    id="task-description"
+                    name="description"
+                    {...describe.bind}
+                    onKeyDown={(e) => describe.onKeyDown(e)}
+                    rows={5}
+                    placeholder="Add a description. @tag links shapes on the canvas."
+                    className="field-sizing-content min-h-28 w-full resize-none rounded-md border bg-background px-3 py-2 text-sm leading-relaxed outline-none transition-colors placeholder:text-muted-foreground focus:border-ring"
+                  />
+                  {describe.menu}
+                </div>
+              </div>
 
               <FormError error={state?.error} />
 
@@ -198,6 +211,9 @@ export function TaskDialog({ task, columns, members, mentionable, defaultColumnI
             {editing && <Checklist key={task.id} taskId={task.id} initial={task.checklist} />}
 
             {editing && <Images key={`images-${task.id}`} task={task} />}
+
+            {/* Every canvas group the card mentions, in the description or a comment. */}
+            <TagLinks text={[description, ...history.filter((e) => e.kind === "comment").map((e) => e.text)].join("\n")} tags={tags} onTag={onTag} />
 
             {(linked > 0 || (repo && task?.key)) && (
               <div className="border-t py-4">
@@ -240,7 +256,7 @@ export function TaskDialog({ task, columns, members, mentionable, defaultColumnI
                           <span className="ml-1.5 text-[11px] text-muted-foreground">{e.atLabel}</span>
                         </p>
                         <p className="mt-0.5 whitespace-pre-wrap text-xs leading-snug">
-                          <Mentions text={e.text} members={members} />
+                          <MentionText text={e.text} names={members.map((m) => m.name)} tags={tags} onTag={onTag} />
                         </p>
                       </div>
                     </li>
@@ -253,7 +269,7 @@ export function TaskDialog({ task, columns, members, mentionable, defaultColumnI
                 {history.length === 0 && <li className="m-auto text-xs text-muted-foreground">No comments yet.</li>}
               </ol>
               <div className="shrink-0 border-t p-3">
-                <CommentBox taskId={task.id} members={mentionable} onPosted={loadHistory} />
+                <CommentBox taskId={task.id} members={mentionable} tags={tags} onPosted={loadHistory} />
               </div>
             </aside>
           )}
@@ -408,33 +424,24 @@ function Checklist({ taskId, initial }: { taskId: string; initial: CheckItem[] }
   );
 }
 
-/** "@" at the caret opens a member picker; the agent is always the first choice. */
-function CommentBox({ taskId, members, onPosted }: { taskId: string; members: Member[]; onPosted: () => void }) {
+/** "@" at the caret opens a member and canvas-tag picker; the agent is always the first choice. */
+function CommentBox({ taskId, members, tags, onPosted }: { taskId: string; members: Member[]; tags: CanvasTag[]; onPosted: () => void }) {
   const [body, setBody] = useState("");
-  const input = useRef<HTMLTextAreaElement>(null);
-  const [mention, setMention] = useState<{ query: string; start: number } | null>(null);
-  const [active, setActive] = useState(0);
-  const options = mention
-    ? [{ id: "agent", name: "agent", label: "AI agent" }, ...members.map((m) => ({ id: m.id, name: m.name, label: m.name }))]
-        .filter((o) => o.label.toLowerCase().includes(mention.query.toLowerCase()) || o.name.toLowerCase().includes(mention.query.toLowerCase()))
-    : [];
-  const track = (text: string, caret: number) => {
-    const match = /(^|\s)@([^\s@]*)$/.exec(text.slice(0, caret));
-    setMention(match ? { query: match[2], start: caret - match[2].length - 1 } : null);
-    setActive(0);
-  };
-  const pick = (name: string) => {
-    if (!mention || !input.current) return;
-    const caret = input.current.selectionStart;
-    const insert = `@${name} `;
-    setBody(body.slice(0, mention.start) + insert + body.slice(caret));
-    setMention(null);
-    const at = mention.start + insert.length;
-    requestAnimationFrame(() => {
-      input.current?.focus();
-      input.current?.setSelectionRange(at, at);
-    });
-  };
+  const picker = useMentionPicker(body, setBody, [
+    {
+      id: "agent",
+      name: "agent",
+      label: "AI agent",
+      hint: "Ask about this card",
+      icon: (
+        <span className="flex size-5 items-center justify-center rounded-full bg-secondary text-[var(--chart-1)]">
+          <Sparkles className="size-3" />
+        </span>
+      ),
+    },
+    ...members.map((m) => ({ id: m.id, name: m.name, label: m.name, icon: <Avatar initials={initials(m.name)} color={m.color} size={20} /> })),
+    ...tagOptions(tags),
+  ]);
   const [error, setError] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
   const [thinking, setThinking] = useState(false);
@@ -454,61 +461,15 @@ function CommentBox({ taskId, members, onPosted }: { taskId: string; members: Me
   };
   return (
     <div className="relative flex flex-col gap-1.5">
-      {options.length > 0 && (
-        <ul role="listbox" className="absolute inset-x-0 bottom-full z-10 mb-1 max-h-56 overflow-y-auto rounded-md border bg-card p-1 shadow-lg">
-          {options.map((o, i) => (
-            <li
-              key={o.id}
-              role="option"
-              aria-selected={i === active}
-              onMouseDown={(e) => {
-                e.preventDefault();
-                pick(o.name);
-              }}
-              onMouseEnter={() => setActive(i)}
-              className={`flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-xs ${i === active ? "bg-secondary" : ""}`}
-            >
-              {o.id === "agent" ? (
-                <span className="flex size-5 items-center justify-center rounded-full bg-secondary text-[var(--chart-1)]">
-                  <Sparkles className="size-3" />
-                </span>
-              ) : (
-                <Avatar initials={initials(o.name)} color={members.find((m) => m.id === o.id)!.color} size={20} />
-              )}
-              {o.label}
-              {o.id === "agent" && <span className="ml-auto text-[11px] text-muted-foreground">Ask about this card</span>}
-            </li>
-          ))}
-        </ul>
-      )}
+      {picker.menu}
       <textarea
-        ref={input}
-        value={body}
-        onChange={(e) => {
-          setBody(e.target.value);
-          track(e.target.value, e.target.selectionStart);
-        }}
-        onBlur={() => setMention(null)}
+        {...picker.bind}
         onKeyDown={(e) => {
-          if (options.length) {
-            if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-              e.preventDefault();
-              setActive((i) => (i + (e.key === "ArrowDown" ? 1 : options.length - 1)) % options.length);
-              return;
-            }
-            if (e.key === "Enter" || e.key === "Tab") {
-              e.preventDefault();
-              return pick(options[active].name);
-            }
-            if (e.key === "Escape") {
-              e.stopPropagation();
-              return setMention(null);
-            }
-          }
+          if (picker.onKeyDown(e)) return;
           if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void post();
         }}
         rows={2}
-        placeholder="Write a comment. @Name mentions a member, @agent asks the AI about this card."
+        placeholder="Write a comment. @Name mentions a member or a canvas tag, @agent asks the AI."
         className="resize-y rounded-md border bg-background px-3 py-2 text-xs outline-none transition-colors focus:border-ring"
       />
       <div className="flex items-center gap-2">
@@ -537,16 +498,6 @@ function CommentAvatar({ entry, members }: { entry: Entry; members: Member[] }) 
     );
   const member = members.find((m) => m.name === entry.actor);
   return <Avatar initials={initials(entry.actor ?? "?")} color={member?.color ?? "var(--muted-foreground)"} size={28} />;
-}
-
-/** Highlights `@Full Name` for members; longest names first so "@Ada Lovelace" beats "@Ada". */
-function Mentions({ text, members }: { text: string; members: Member[] }) {
-  const names = members.map((m) => m.name).sort((a, b) => b.length - a.length);
-  if (!names.length) return text;
-  const re = new RegExp(`(@(?:${names.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")}))`, "g");
-  return text.split(re).map((part, i) =>
-    i % 2 ? <span key={i} className="font-semibold text-primary">{part}</span> : part,
-  );
 }
 
 /** Create a GitHub issue from the card, or open GitHub's new-PR page for its branch. */
