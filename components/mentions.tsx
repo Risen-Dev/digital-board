@@ -137,18 +137,20 @@ function TagPreview({ tag, onClick }: { tag: CanvasTag; onClick: () => void }) {
     let cancelled = false;
     let url = "";
     void Promise.all([loadCanvasSnapshot(tag.sheetId), import("@excalidraw/excalidraw")])
-      .then(async ([scene, { exportToSvg }]) => {
+      .then(async ([scene, { exportToBlob }]) => {
         const elements = ((scene?.elements ?? []) as { isDeleted?: boolean; customData?: { tag?: string } }[])
           .filter((e) => !e.isDeleted && e.customData?.tag === tag.tag);
         if (!elements.length) return setSrc(null);
-        const svg = await exportToSvg({
+        // PNG, not SVG: SVG export subsets fonts in a Web Worker that Turbopack can't load
+        // ("Failed to construct 'Worker'"), and a PNG can't carry script either.
+        const png = await exportToBlob({
           elements: elements as never,
-          appState: { exportBackground: false, exportWithDarkMode: document.documentElement.classList.contains("dark") },
+          appState: { exportBackground: false, exportScale: 2, exportWithDarkMode: document.documentElement.classList.contains("dark") },
           files: (scene?.files ?? null) as never,
           exportPadding: 8,
+          mimeType: "image/png",
         });
-        // An <img>, not inline SVG: nothing in a drawing can run script or restyle the page.
-        url = URL.createObjectURL(new Blob([svg.outerHTML], { type: "image/svg+xml" }));
+        url = URL.createObjectURL(png);
         if (cancelled) URL.revokeObjectURL(url);
         else setSrc(url);
       })
