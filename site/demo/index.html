@@ -146,6 +146,20 @@
   /* Canvas */
   .canvas { height: 100%; min-height: 480px; position: relative; }
   .canvas .loading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); }
+  /* Canvas tags: a dashed frame with an @name label around each named group. */
+  .tag-layer { position: absolute; inset: 0; z-index: 3; pointer-events: none; overflow: hidden; }
+  .tag-frame { position: absolute; border: 2px dashed var(--c0); border-radius: 8px; background: color-mix(in oklch, var(--c0) 6%, transparent); }
+  .tag-frame span { position: absolute; top: -10px; left: 8px; padding: 2px 6px; border-radius: 4px; background: var(--c0); color: #fff; font-size: 10px; font-weight: 500; line-height: 1.2; }
+  .tag-btn { position: absolute; top: 64px; right: 16px; z-index: 4; display: flex; align-items: center; gap: 6px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--fg); font-size: 12px; cursor: pointer; box-shadow: 0 1px 3px rgb(0 0 0 / .1); }
+  .tag-btn:hover { background: var(--secondary); }
+  .tag-btn svg, .tag-preview svg { width: 13px; height: 13px; }
+  .tag-link { border: 0; padding: 0; background: none; font: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+  .tag-previews { display: flex; flex-wrap: wrap; gap: 8px; }
+  .tag-preview { width: 224px; display: flex; flex-direction: column; padding: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 8px; background: none; color: var(--fg); text-align: left; cursor: pointer; }
+  .tag-preview:hover { border-color: var(--muted); }
+  .tag-preview .pic { height: 160px; display: grid; place-items: center; padding: 8px; background: var(--secondary); color: var(--muted); font-size: 11px; font-weight: 400; }
+  .tag-preview img { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .tag-preview .name { display: flex; align-items: center; gap: 4px; padding: 5px 8px; border-top: 1px solid var(--border); font-size: 11px; font-weight: 400; }
 
   /* Dialog */
   dialog { border: 1px solid var(--border); border-radius: 14px; background: var(--card); color: var(--fg); padding: 0; width: min(980px, calc(100vw - 32px)); max-height: calc(100vh - 48px); overflow: hidden; }
@@ -267,6 +281,10 @@
         <div class="checks" id="checks"></div>
         <input id="check-add" placeholder="Add an item and press Enter" autocomplete="off">
       </div>
+      <div class="section" id="canvas-box" hidden>
+        <span>Canvas <span id="canvas-count"></span></span>
+        <div class="tag-previews" id="tag-previews"></div>
+      </div>
       <div class="actions">
         <button class="btn" value="save">Save</button>
         <button type="button" class="btn ghost" id="cancel">Cancel</button>
@@ -278,7 +296,7 @@
       <div class="feed" id="feed"></div>
       <div class="composer">
         <ul class="mentions" id="mentions" role="listbox" hidden></ul>
-        <textarea id="comment" placeholder="Write a comment. Type @ to mention someone, @agent to ask the AI." aria-label="Comment"></textarea>
+        <textarea id="comment" placeholder="Write a comment. Type @ to mention someone or a canvas group, @agent to ask the AI." aria-label="Comment"></textarea>
         <div class="bar"><button type="button" class="btn" id="send">Comment</button><span id="comment-hint">Ctrl/⌘ + Enter</span></div>
       </div>
     </aside>
@@ -298,7 +316,8 @@ const PEOPLE = [
   { id: "ben", name: "Ben Ito", color: "#10b981" },
   { id: "cleo", name: "Cleo Park", color: "#ec4899" },
 ];
-const KEY = "digital-board-demo-v3";
+const KEY = "digital-board-demo-v4";
+const CANVAS_KEY = KEY + "-canvas";
 
 // Due dates are relative to today, so the calendar always has something on it.
 function day(offset) {
@@ -314,8 +333,9 @@ function sample() {
   return {
     seq: 10,
     tasks: [
-      t(1, "progress", "Set up CI pipeline (lint, test, build)", "Run on every pull request. Block merge when it fails.", "high", "Chore, DevOps", "ben", day(2),
-        [{ text: "Lint", done: true }, { text: "Unit tests", done: true }, { text: "Build", done: false }]),
+      t(1, "progress", "Set up CI pipeline (lint, test, build)", "Run on every pull request. Block merge when it fails.\nThe flow: @ReleaseFlow", "high", "Chore, DevOps", "ben", day(2),
+        [{ text: "Lint", done: true }, { text: "Unit tests", done: true }, { text: "Build", done: false }],
+        [c("ada", "The fix-and-push loop in @ReleaseFlow is the part CI must catch.")]),
       t(2, "review", "Login page", "Acceptance criteria:\n- Email + password\n- Error on wrong password", "medium", "Feature, Frontend, Auth", "ada", day(5),
         [{ text: "Form", done: true }, { text: "Error state", done: false }], [c("cleo", "Looks good on mobile too.")]),
       t(3, "review", "Fix: session expires too early", "Steps to reproduce:\n1. Log in\n2. Wait 10 minutes", "high", "Bug, Auth", "ben", day(-1), [],
@@ -554,6 +574,7 @@ function openTask(id, col = "todo") {
   $("#comment").value = "";
   closeMentions();
   if (t) { renderChecks(); renderFeed(); }
+  renderTagPreviews();
   dialog.showModal();
   if (!t) form.title.focus();
 }
@@ -601,7 +622,41 @@ $("#check-add").addEventListener("keydown", (e) => {
 
 // Comments & activity: events as one muted line each, then comments, oldest first.
 const MENTION_NAMES = ["agent", ...PEOPLE.map((p) => p.name)];
-const highlight = (text) => esc(text).replace(new RegExp(`@(${MENTION_NAMES.join("|")})`, "g"), '<span class="mention">@$1</span>');
+// Canvas tags are the names on groups of shapes (customData.tag); "@name" links to them.
+function canvasTags() {
+  let els = null;
+  try { els = JSON.parse(localStorage.getItem(CANVAS_KEY)); } catch {}
+  if (!els) return ["ReleaseFlow"]; // the seed's group, before the canvas was first opened
+  return [...new Set(els.filter((e) => !e.isDeleted).map((e) => e.customData?.tag).filter(Boolean))];
+}
+const highlight = (text) => {
+  const tags = canvasTags();
+  const words = [...MENTION_NAMES, ...tags].sort((a, b) => b.length - a.length);
+  return esc(text).replace(new RegExp(`@(${words.join("|")})(?![\\w-])`, "g"), (_, w) =>
+    tags.includes(w) ? `<button type="button" class="mention tag-link" data-tag="${w}">@${w}</button>` : `<span class="mention">@${w}</span>`);
+};
+const tagsIn = (text) => canvasTags().filter((tag) => new RegExp(`(^|\\s)@${tag}(?![\\w-])`).test(text));
+function renderTagPreviews() {
+  const found = editing ? tagsIn([form.desc.value, ...editing.comments.map((c) => c.text)].join("\n")) : [];
+  $("#canvas-box").hidden = !found.length;
+  $("#canvas-count").textContent = found.length || "";
+  $("#tag-previews").innerHTML = found.map((tag) =>
+    `<button type="button" class="tag-preview" data-tag="${tag}"><span class="pic">Loading…</span><span class="name">${svg("tag")}@${tag}</span></button>`).join("");
+  for (const tag of found) {
+    window.tagPreview?.(tag).then((url) => {
+      const pic = document.querySelector(`.tag-preview[data-tag="${tag}"] .pic`);
+      if (pic) pic.innerHTML = url ? `<img src="${url}" alt="@${tag}">` : "Nothing drawn";
+    });
+  }
+}
+// A clicked @name opens the canvas with that group selected.
+document.addEventListener("click", (e) => {
+  const link = e.target.closest("[data-tag]");
+  if (!link) return;
+  dialog.close();
+  setView("canvas");
+  window.focusTag?.(link.dataset.tag);
+});
 function renderFeed() {
   const feed = $("#feed");
   feed.innerHTML = editing.history.map((h) => `<div class="event">${esc(h)}</div>`).join("") + editing.comments.map((c) => {
@@ -627,7 +682,7 @@ function postComment() {
   task.comments.push({ who: "", text, agent: false, at: "Just now" });
   comment.value = "";
   closeMentions();
-  save(); renderFeed(); render();
+  save(); renderFeed(); renderTagPreviews(); render();
   if (!/(^|\s)@agent\b/i.test(text)) return;
   $("#comment-hint").textContent = "AI agent is thinking…";
   setTimeout(() => {
@@ -644,12 +699,12 @@ let mention = null, options = [], active = 0;
 function closeMentions() { mention = null; options = []; $("#mentions").hidden = true; }
 function renderMentions() {
   const q = mention.query.toLowerCase();
-  options = [{ name: "agent", label: "AI agent" }, ...PEOPLE.map((p) => ({ name: p.name, label: p.name, p }))]
+  options = [{ name: "agent", label: "AI agent" }, ...PEOPLE.map((p) => ({ name: p.name, label: p.name, p })), ...canvasTags().map((tag) => ({ name: tag, label: `@${tag}`, tag: true }))]
     .filter((o) => o.label.toLowerCase().includes(q) || o.name.toLowerCase().includes(q));
   active = Math.min(active, Math.max(options.length - 1, 0));
   $("#mentions").hidden = !options.length;
   $("#mentions").innerHTML = options.map((o, i) => `<li role="option" data-i="${i}" aria-selected="${i === active}">
-    ${o.p ? avatar(o.p) : `<span class="agent-mark">${svg("spark")}</span>`}${esc(o.label)}${o.p ? "" : "<small>Ask about this card</small>"}</li>`).join("");
+    ${o.p ? avatar(o.p) : o.tag ? `<span class="agent-mark">${svg("tag")}</span>` : `<span class="agent-mark">${svg("spark")}</span>`}${esc(o.label)}${o.p ? "" : o.tag ? "<small>Canvas</small>" : "<small>Ask about this card</small>"}</li>`).join("");
 }
 function pick(o) {
   const caret = comment.selectionStart, insert = `@${o.name} `;
@@ -717,7 +772,7 @@ $("#search").addEventListener("input", (e) => { query = e.target.value.trim().to
 $("#new").onclick = () => openTask(null);
 $("#reset").onclick = () => {
   state = sample(); save();
-  try { localStorage.removeItem(KEY + "-canvas"); } catch {}
+  try { localStorage.removeItem(CANVAS_KEY); } catch {}
   location.reload();
 };
 
@@ -733,30 +788,115 @@ render();
 </script>
 
 <script type="module">
-// Excalidraw (the same editor the app uses) is loaded only when the Canvas tab opens.
+// Excalidraw (the same editor the app uses) is loaded only when the Canvas tab opens
+// or a card shows a canvas preview.
 window.EXCALIDRAW_ASSET_PATH = "https://unpkg.com/@excalidraw/excalidraw@0.18.1/dist/prod/";
-const CANVAS_KEY = "digital-board-demo-v1-canvas";
-let started = false;
+let started = false, libPromise, api = null, pendingTag = null, feedHighlights = null;
+const lib = () => (libPromise ||= Promise.all([
+  import("react"),
+  import("react-dom/client"),
+  import("https://esm.sh/@excalidraw/excalidraw@0.18.1?external=react,react-dom"),
+]));
+const dark = () => {
+  const t = document.documentElement.dataset.theme;
+  return t ? t === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+};
+// The seed's flow is one group named ReleaseFlow; the caption above it stays out.
+const sceneElements = (ex) => {
+  let els = null;
+  try { els = JSON.parse(localStorage.getItem(CANVAS_KEY)); } catch {}
+  return els || ex.convertToExcalidrawElements(seed()).map((e) =>
+    e.type === "text" && !e.containerId ? e : { ...e, groupIds: ["release-flow"], customData: { tag: "ReleaseFlow" } });
+};
+
+// A PNG of one named group, for the card's Canvas section.
+window.tagPreview = async (tag) => {
+  try {
+    const [, , ex] = await lib();
+    const elements = (api ? api.getSceneElements() : sceneElements(ex)).filter((e) => !e.isDeleted && e.customData?.tag === tag);
+    if (!elements.length) return null;
+    const png = await ex.exportToBlob({
+      elements,
+      appState: { exportBackground: false, exportScale: 2, exportWithDarkMode: dark() },
+      files: null,
+      exportPadding: 8,
+      mimeType: "image/png",
+    });
+    return URL.createObjectURL(png);
+  } catch { return null; }
+};
+
+function applyFocus() {
+  if (!api || !pendingTag) return;
+  const shapes = api.getSceneElements().filter((e) => e.customData?.tag === pendingTag);
+  pendingTag = null;
+  if (!shapes.length) return;
+  const group = shapes[0].groupIds.at(-1);
+  api.updateScene({ appState: { selectedElementIds: Object.fromEntries(shapes.map((e) => [e.id, true])), selectedGroupIds: group ? { [group]: true } : {} } });
+  api.scrollToContent(shapes, { fitToContent: true, animate: true });
+}
+window.focusTag = (tag) => {
+  pendingTag = tag;
+  setTimeout(applyFocus, 50);
+};
 
 window.loadCanvas = async () => {
   if (started) return;
   started = true;
   const host = document.getElementById("view-canvas");
   try {
-    const [{ createElement, useEffect, useState }, { createRoot }, ex] = await Promise.all([
-      import("react"),
-      import("react-dom/client"),
-      import("https://esm.sh/@excalidraw/excalidraw@0.18.1?external=react,react-dom"),
-    ]);
+    const [{ createElement, useEffect, useState }, { createRoot }, ex] = await lib();
+    const elements = sceneElements(ex);
 
-    let elements;
-    try { elements = JSON.parse(localStorage.getItem(CANVAS_KEY)); } catch {}
-    elements ||= ex.convertToExcalidrawElements(seed());
+    // Select shapes, click Tag, name them: they become one group with customData.tag.
+    async function tagSelection() {
+      if (!api) return;
+      const ids = api.getAppState().selectedElementIds;
+      const chosen = (e) => ids[e.id] || (e.containerId && ids[e.containerId]);
+      const picked = api.getSceneElements().filter(chosen);
+      if (!picked.length) return alert("Select the shapes to tag first.");
+      const raw = prompt("Name the selected shapes. Cards can then mention them as @name. Leave blank to remove the name.", picked[0].customData?.tag ?? "");
+      if (raw === null) return;
+      const tag = raw.trim().replace(/[^\w-]+/g, "-").replace(/^-+|-+$/g, "");
+      const outer = picked[0].groupIds.at(-1);
+      const group = outer && picked.every((e) => e.groupIds.at(-1) === outer) ? null : crypto.randomUUID();
+      api.updateScene({
+        elements: api.getSceneElementsIncludingDeleted().map((e) => !e.isDeleted && chosen(e)
+          ? ex.newElementWith(e, { customData: { ...e.customData, tag: tag || undefined }, ...(tag && group ? { groupIds: [...e.groupIds, group] } : {}) })
+          : e),
+        captureUpdate: ex.CaptureUpdateAction.IMMEDIATELY,
+      });
+    }
 
-    const dark = () => {
-      const t = document.documentElement.dataset.theme;
-      return t ? t === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
-    };
+    function Highlights() {
+      const [boxes, setBoxes] = useState([]);
+      useEffect(() => {
+        let last = "";
+        feedHighlights = (els, { scrollX, scrollY, zoom }) => {
+          const bounds = new Map();
+          for (const e of els) {
+            const tag = e.customData?.tag;
+            if (!tag || e.isDeleted) continue;
+            const xs = e.points ? e.points.map(([x]) => e.x + x) : [e.x, e.x + e.width];
+            const ys = e.points ? e.points.map(([, y]) => e.y + y) : [e.y, e.y + e.height];
+            const b = bounds.get(tag) ?? [Infinity, Infinity, -Infinity, -Infinity];
+            bounds.set(tag, [Math.min(b[0], ...xs), Math.min(b[1], ...ys), Math.max(b[2], ...xs), Math.max(b[3], ...ys)]);
+          }
+          const pad = 12;
+          const next = [...bounds].map(([tag, [x1, y1, x2, y2]]) => ({
+            tag, left: (x1 + scrollX) * zoom.value - pad, top: (y1 + scrollY) * zoom.value - pad,
+            width: (x2 - x1) * zoom.value + pad * 2, height: (y2 - y1) * zoom.value + pad * 2,
+          }));
+          const key = JSON.stringify(next);
+          if (key !== last) { last = key; setBoxes(next); }
+        };
+        return () => { feedHighlights = null; };
+      }, []);
+      return createElement("div", { className: "tag-layer" }, boxes.map((b) =>
+        createElement("div", { key: b.tag, className: "tag-frame", style: { left: b.left, top: b.top, width: b.width, height: b.height } },
+          createElement("span", null, `@${b.tag}`))));
+    }
+
     let timer;
     function Canvas() {
       const [theme, setTheme] = useState(dark() ? "dark" : "light");
@@ -765,14 +905,20 @@ window.loadCanvas = async () => {
         window.addEventListener("themechange", sync);
         return () => window.removeEventListener("themechange", sync);
       }, []);
-      return createElement(ex.Excalidraw, {
-        theme,
-        initialData: { elements, scrollToContent: true },
-        onChange: (els) => {
-          clearTimeout(timer);
-          timer = setTimeout(() => { try { localStorage.setItem(CANVAS_KEY, JSON.stringify(els.filter((e) => !e.isDeleted))); } catch {} }, 400);
-        },
-      });
+      return createElement("div", { style: { position: "absolute", inset: 0 } },
+        createElement(ex.Excalidraw, {
+          theme,
+          initialData: { elements, scrollToContent: true },
+          excalidrawAPI: (a) => { api = a; setTimeout(applyFocus, 300); },
+          onChange: (els, appState) => {
+            feedHighlights?.(els, appState);
+            clearTimeout(timer);
+            timer = setTimeout(() => { try { localStorage.setItem(CANVAS_KEY, JSON.stringify(els.filter((e) => !e.isDeleted))); } catch {} }, 400);
+          },
+        }),
+        createElement(Highlights),
+        createElement("button", { type: "button", className: "tag-btn", title: "Group and name the selected shapes", onClick: () => void tagSelection(),
+          dangerouslySetInnerHTML: { __html: `${svg("tag")}Tag` } }));
     }
     host.innerHTML = "";
     createRoot(host).render(createElement(Canvas));
