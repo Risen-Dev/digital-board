@@ -4,7 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, Hash, Paperclip, Pencil, Send, Sparkles, X } from "lucide-react";
 import { initials } from "@/lib/board";
 import { AGENT_MENTION, cursorOf, mergeMessages } from "@/lib/chat";
-import type { Attachment, ChatMessage, MemberPresence, Presence, Unread } from "@/lib/queries";
+import type { Attachment, CanvasTag, ChatMessage, MemberPresence, Presence, Unread } from "@/lib/queries";
+import { MentionText, tagOptions, useMentionPicker } from "@/components/mentions";
 import { Avatar } from "../avatar";
 
 const POLL_MS = 3000;
@@ -68,7 +69,7 @@ function Attachments({ files }: { files: Attachment[] }) {
   );
 }
 
-export function ChatView({ meId, initialMembers, initialChannel = "all" }: { meId: string; initialMembers: MemberPresence[]; initialChannel?: string }) {
+export function ChatView({ meId, initialMembers, initialChannel = "all", tags, onTag }: { meId: string; initialMembers: MemberPresence[]; initialChannel?: string; tags: CanvasTag[]; onTag: (tag: CanvasTag) => void }) {
   const [members, setMembers] = useState(initialMembers);
   const [unread, setUnread] = useState<Unread[]>([]);
   const [active, setActive] = useState(initialChannel);
@@ -143,22 +144,27 @@ export function ChatView({ meId, initialMembers, initialChannel = "all" }: { meI
         member={activeMember}
         onMembers={setMembers}
         onUnread={setUnread}
+        tags={tags}
+        onTag={onTag}
       />
     </div>
   );
 }
 
 function Thread({
-  meId, active, member, onMembers, onUnread,
+  meId, active, member, onMembers, onUnread, tags, onTag,
 }: {
   meId: string;
   active: string;
   member: MemberPresence | undefined;
   onMembers: (m: MemberPresence[]) => void;
   onUnread: (u: Unread[]) => void;
+  tags: CanvasTag[];
+  onTag: (tag: CanvasTag) => void;
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
+  const mention = useMentionPicker(draft, setDraft, tagOptions(tags));
   const [files, setFiles] = useState<File[]>([]);
   const [sending, setSending] = useState(false);
   const [editing, setEditing] = useState<number | null>(null);
@@ -364,7 +370,7 @@ function Thread({
                               mine ? "bg-primary text-primary-foreground" : "border bg-card"
                             }`}
                           >
-                            {m.body}
+                            <MentionText text={m.body} names={[]} tags={tags} onTag={onTag} />
                           </p>
                         )}
                         <Attachments files={m.attachments} />
@@ -423,10 +429,12 @@ function Thread({
           >
             <Paperclip className="size-4" />
           </button>
+          <div className="relative flex-1">
+          {mention.menu}
           <textarea
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
+            {...mention.bind}
             onKeyDown={(e) => {
+              if (mention.onKeyDown(e)) return;
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
                 void send();
@@ -434,8 +442,9 @@ function Thread({
             }}
             rows={1}
             placeholder={agentThread ? "Ask the agent…" : member ? `Message ${member.name}… (@agent asks the AI)` : "Message the workspace… (@agent asks the AI)"}
-            className="max-h-32 min-h-9 flex-1 resize-y rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-ring"
+            className="block max-h-32 min-h-9 w-full resize-y rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-ring"
           />
+          </div>
           <button
             onClick={() => void send()}
             disabled={(!draft.trim() && files.length === 0) || sending}

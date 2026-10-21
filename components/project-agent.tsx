@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { MessageSquarePlus, Send, Sparkles, X } from "lucide-react";
+import { MentionText, tagOptions, useMentionPicker } from "./mentions";
+import type { CanvasTag } from "@/lib/queries";
 
 type Turn = { role: "user" | "assistant"; content: string; shown?: string; done?: string[]; errors?: string[] };
 
@@ -11,10 +13,19 @@ type Turn = { role: "user" | "assistant"; content: string; shown?: string; done?
  * The server runs what the model proposes through the normal task actions.
  * ponytail: the chat lives in this component only — lost on reload; store it like agent_chats if people want it back.
  */
-export function ProjectAgent({ projectId, enabled, open, onClose }: { projectId: string; enabled: boolean; open: boolean; onClose: () => void }) {
+export function ProjectAgent({ projectId, enabled, open, tags, onTag, onClose }: {
+  projectId: string;
+  enabled: boolean;
+  open: boolean;
+  /** This project's named canvas groups; the agent reads their text. */
+  tags: CanvasTag[];
+  onTag: (tag: CanvasTag) => void;
+  onClose: () => void;
+}) {
   const router = useRouter();
   const [turns, setTurns] = useState<Turn[]>([]);
   const [input, setInput] = useState("");
+  const mention = useMentionPicker(input, setInput, tagOptions(tags));
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -134,7 +145,7 @@ export function ProjectAgent({ projectId, enabled, open, onClose }: { projectId:
         ) : null}
         {turns.map((t, i) => (
           <div key={i} className={t.role === "user" ? "ml-8 rounded-lg bg-primary px-3 py-2 text-primary-foreground" : "mr-8 rounded-lg bg-secondary px-3 py-2"}>
-            <p className="whitespace-pre-wrap">{t.shown ?? t.content}</p>
+            <p className="whitespace-pre-wrap"><MentionText text={t.shown ?? t.content} names={[]} tags={tags} onTag={onTag} /></p>
             {t.done?.map((d) => <p key={d} className="mt-1 text-[11px] text-muted-foreground">✓ {d}</p>)}
             {t.errors?.map((e) => <p key={e} className="mt-1 text-[11px] text-[var(--chart-7)]">✗ {e}</p>)}
           </div>
@@ -145,17 +156,20 @@ export function ProjectAgent({ projectId, enabled, open, onClose }: { projectId:
       </div>
 
       <form onSubmit={(e) => { e.preventDefault(); void send(); }} className="flex items-end gap-2 border-t p-2">
+        <div className="relative flex-1">
+        {mention.menu}
         <textarea
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
+          {...mention.bind}
           onKeyDown={(e) => {
+            if (mention.onKeyDown(e)) return;
             if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send(); }
           }}
           disabled={!enabled}
           rows={2}
-          placeholder={enabled ? "Tasks, canvas flows, chat messages…" : "Not configured"}
-          className="flex-1 resize-none rounded-md border bg-background px-2.5 py-1.5 text-sm outline-none focus:border-ring disabled:opacity-50"
+          placeholder={enabled ? "Tasks, canvas flows, chat messages… @name for a canvas group" : "Not configured"}
+          className="block w-full resize-none rounded-md border bg-background px-2.5 py-1.5 text-sm outline-none focus:border-ring disabled:opacity-50"
         />
+        </div>
         <button type="submit" disabled={!enabled || busy || !input.trim()} title="Send" className="rounded-md bg-primary p-2 text-primary-foreground disabled:opacity-40">
           <Send className="size-4" />
         </button>

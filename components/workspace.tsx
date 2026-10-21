@@ -10,7 +10,7 @@ import {
 import { applyFilters, initials, labelsOf, type Column, type Filters, type Member, type Task } from "@/lib/board";
 import { archiveTask, fetchArchived, logoutAction, renameProject, renameWorkspace } from "@/lib/actions";
 import { Modal } from "./modal";
-import type { CanvasMeta, FeedItem, MemberPresence, Project, ProjectMember, Unread } from "@/lib/queries";
+import type { CanvasMeta, CanvasTag, FeedItem, MemberPresence, Project, ProjectMember, Unread } from "@/lib/queries";
 import type { User } from "@/lib/auth";
 import { Avatar } from "./avatar";
 import { LogoMark } from "./logo-mark";
@@ -58,7 +58,7 @@ const SECTIONS: { key: SectionKey; Icon: typeof Home; label: string }[] = [
 type Alert = { title: string; body: string };
 
 export function Workspace({
-  user, workspace, projects, project, columns, members, assignments, presence, feed, notifications: initialNotifications, unread: initialUnread, mine, meetings: initialMeetings, stats, sheets, today, dark, aiEnabled, ai,
+  user, workspace, projects, project, columns, members, assignments, presence, feed, notifications: initialNotifications, unread: initialUnread, mine, meetings: initialMeetings, stats, sheets, tags: allTags, focus, today, dark, aiEnabled, ai,
 }: {
   user: User;
   workspace: string;
@@ -74,6 +74,9 @@ export function Workspace({
   meetings: Meeting[];
   stats: Stats | null;
   sheets: CanvasMeta[];
+  tags: CanvasTag[];
+  /** From `?sheet=&tag=`: an @tag clicked in another project lands here. */
+  focus: { sheetId: string; tag: string } | null;
   presence: MemberPresence[];
   today: string;
   dark: boolean;
@@ -99,6 +102,20 @@ export function Workspace({
   const [chatChannel, setChatChannel] = useState("all");
   const [alert, setAlert] = useState<Alert | null>(null);
   const [agentOpen, setAgentOpen] = useState(false);
+  const [canvasFocus, setCanvasFocus] = useState<{ sheetId: string; tag: string } | null>(null);
+  const focusKey = focus ? `${focus.sheetId}:${focus.tag}` : undefined;
+  const [prevFocusKey, setPrevFocusKey] = useState<string>();
+  if (focusKey !== prevFocusKey) {
+    setPrevFocusKey(focusKey);
+    if (focus) {
+      setCanvasFocus(focus);
+      setSection("canvas");
+    }
+  }
+  // The open project's tags first, so a name used in two projects resolves here.
+  const tags = useMemo(() => [...allTags.filter((t) => t.projectId === project?.id), ...allTags.filter((t) => t.projectId !== project?.id)], [allTags, project?.id]);
+  // A tag is focused once: leaving the canvas forgets it, so reopening starts as usual.
+  if (canvasFocus && section !== "canvas") setCanvasFocus(null);
   const seenCards = useRef(new Set(initialNotifications.map((item) => item.id)));
   const seenChats = useRef(new Map(initialUnread.map((item) => [item.channel, item.n])));
   const audio = useRef<AudioContext | null>(null);
@@ -255,6 +272,17 @@ export function Workspace({
     setEditing(null);
     setCreating(null);
     router.refresh();
+  };
+
+  const showTag = ({ tag, sheetId, projectId }: CanvasTag) => {
+    if (projectId !== project?.id) {
+      setEditing(null);
+      setCreating(null);
+      return router.push(`/board?${new URLSearchParams({ project: projectId, sheet: sheetId, tag })}`);
+    }
+    setCanvasFocus({ sheetId, tag });
+    close();
+    setSection("canvas");
   };
 
   return (
@@ -580,7 +608,7 @@ export function Workspace({
             onGo={setSection}
           />
         ) : section === "chat" ? (
-          <ChatView key={chatChannel} meId={user.id} initialMembers={live} initialChannel={chatChannel} />
+          <ChatView key={chatChannel} meId={user.id} initialMembers={live} initialChannel={chatChannel} tags={tags} onTag={showTag} />
         ) : section === "settings" ? (
           <MembersPanel workspace={workspace} memberId={user.id} presence={live} isAdmin={user.is_admin === 1} projects={projects} assignments={assignments} activeProjectId={project?.id ?? null} ai={ai} />
         ) : section === "meetings" ? (
@@ -589,6 +617,8 @@ export function Workspace({
           <EmptyProject />
         ) : section === "canvas" ? (
           <CanvasView
+            // A fresh sheet list per project, so an @tag's sheet is the one that opens.
+            key={project.id}
             projectId={project.id}
             sheets={sheets}
             dark={dark}
@@ -596,6 +626,7 @@ export function Workspace({
             // Viewers can watch live but every save would be refused, so don't let them draw.
             readOnly={readOnly}
             onChanged={() => router.refresh()}
+            focus={canvasFocus}
           />
         ) : section === "inbox" ? (
           <FeedView feed={notifications} mentionsMe={mentionsMe} onMarkRead={markNotificationItemsRead} onMarkAll={markCardNotificationsRead} />
@@ -616,7 +647,15 @@ export function Workspace({
       </div>
 
       {project && !readOnly && (
-        <ProjectAgent key={project.id} projectId={project.id} enabled={aiEnabled} open={agentOpen && section !== "canvas"} onClose={() => setAgentOpen(false)} />
+        <ProjectAgent
+          key={project.id}
+          projectId={project.id}
+          enabled={aiEnabled}
+          open={agentOpen && section !== "canvas"}
+          tags={tags.filter((t) => t.projectId === project.id)}
+          onTag={showTag}
+          onClose={() => setAgentOpen(false)}
+        />
       )}
       {(editing || creating !== null) && (
         <TaskDialog
@@ -627,6 +666,8 @@ export function Workspace({
           defaultColumnId={creating ?? undefined}
           links={editing?.key ? links[editing.key] : undefined}
           repo={project?.repo}
+          tags={tags}
+          onTag={showTag}
           onClose={close}
         />
       )}

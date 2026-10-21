@@ -228,6 +228,23 @@ export const listCanvases = (projectId: string) =>
     projectId,
   );
 
+export type CanvasTag = { tag: string; sheetId: string; projectId: string; project: string };
+
+/**
+ * Named groups of canvas shapes (`customData.tag`, set by the canvas "Tag" button),
+ * which cards and chat mention as @tag.
+ * ponytail: parses every snapshot per page load; store tags in a column if sheets get heavy.
+ */
+export const listCanvasTags = (projectIds: string[]) =>
+  all<CanvasTag>(
+    `SELECT DISTINCT e->'customData'->>'tag' AS tag, c.id AS "sheetId", p.id AS "projectId", p.name AS project
+     FROM canvases c JOIN projects p ON p.id = c.project_id,
+       jsonb_array_elements(COALESCE(c.snapshot::jsonb->'elements', '[]'::jsonb)) e
+     WHERE c.project_id = ANY(?) AND e->'customData'->>'tag' IS NOT NULL AND e->>'isDeleted' IS DISTINCT FROM 'true'
+     ORDER BY tag`,
+    projectIds,
+  );
+
 // ── Presence & chat ─────────────────────────────────────────────────────────
 
 export type Presence = "online" | "away" | "offline";

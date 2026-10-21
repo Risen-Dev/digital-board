@@ -6,6 +6,7 @@ import { getBoard, listMembers } from "@/lib/queries";
 import { addColumn, addComment, archiveTask, createCanvas, createTask, moveTask, setChecklist, updateTask } from "@/lib/actions";
 import { PROJECT_SYSTEM, boardBrief, resolveActions, type AgentOp, type TaskFields } from "@/lib/board-agent";
 import { parseFlow } from "@/lib/canvas/flow";
+import { sheetsBrief } from "@/lib/card-agent";
 import { PALETTE } from "@/lib/board";
 
 const HISTORY_TURNS = 20;
@@ -45,7 +46,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const project = (await get<{ name: string }>("SELECT name FROM projects WHERE id = ?", projectId))!;
   const columns = await getBoard(projectId);
   const members = await listMembers(user.workspace_id);
-  const system = `${PROJECT_SYSTEM}\n\n${boardBrief(project.name, new Date().toISOString().slice(0, 10), columns, members)}`;
+  const system = [
+    PROJECT_SYSTEM,
+    boardBrief(project.name, new Date().toISOString().slice(0, 10), columns, members),
+    `Canvas sheets:\n${(await sheetsBrief(projectId)) || "none"}`,
+  ].join("\n\n");
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
