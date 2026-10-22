@@ -197,6 +197,9 @@ npm start`}</Code>
               [<C>PORT</C>, <>3000</>, <>Port the server listens on.</>],
               [<C>REGISTRATION_CLOSED</C>, <>unset</>, <>Set to <C>1</C> to stop new workspaces being registered. Existing ones keep working; admins still add members.</>],
               [<C>TZ</C>, <>system</>, <>Timezone used to render timestamps. They are formatted on the server, so this decides what every user sees.</>],
+              [<C>SMTP_URL</C>, <>unset</>, <>SMTP server for emailed password-reset links, e.g. <C>smtps://user:pass@smtp.example.com</C>.</>],
+              [<C>APP_URL</C>, <>unset</>, <>Public address the reset link points at. Reset by email is on only when this and <C>SMTP_URL</C> are both set.</>],
+              [<C>MAIL_FROM</C>, <><C>Digital Board &lt;no-reply@localhost&gt;</C></>, <>Sender of those emails.</>],
               [<C>NODE_ENV</C>, <><C>production</C> via <C>npm start</C></>, <>Session cookies are marked <C>secure</C> in production, which means they require HTTPS.</>],
             ]}
           />
@@ -207,6 +210,12 @@ npm start`}</Code>
             Docker or anything else you already run is equally fine.
           </p>
 
+          <h3 className="pt-4 text-sm font-semibold">With Docker</h3>
+          <p className="text-sm text-muted-foreground">
+            <C>docker-compose.yml</C> runs the app and Postgres 16 together. Change the database password in both
+            places first, then <C>docker compose up -d</C> and open port 3000. The <C>Dockerfile</C> alone works with
+            your own Postgres: pass <C>-e DATABASE_URL=…</C>.
+          </p>
           <h3 className="pt-4 text-sm font-semibold">With pm2</h3>
           <p className="text-sm text-muted-foreground">
             Put an <C>ecosystem.config.js</C> next to <C>package.json</C>. Everything the service needs is in it, so a
@@ -437,6 +446,9 @@ git push -u origin feat/WEB-42-title`}</Code>
             <li>
               <strong className="text-foreground">Auth</strong> is <C>scrypt</C> from <C>node:crypto</C> — no bcrypt
               dependency. A session is a random 32-byte token in an <C>httpOnly</C> cookie plus a row, valid 30 days.
+              Sign-in locks for 15 minutes after 5 wrong passwords for one email or 20 from one IP. With{" "}
+              <C>SMTP_URL</C> and <C>APP_URL</C> set, <C>/forgot</C> emails a one-hour reset link; only its sha256 is
+              stored.
             </li>
             <li>
               <strong className="text-foreground">Presence is derived, not stored.</strong> Every authenticated request
@@ -444,8 +456,10 @@ git push -u origin feat/WEB-42-title`}</Code>
               15, offline beyond.
             </li>
             <li>
-              <strong className="text-foreground">Chat polls every 3 seconds.</strong> No WebSocket: one instance does
-              not justify a socket server, and the poll doubles as the presence heartbeat.
+              <strong className="text-foreground">Chat is pushed over SSE.</strong> Each open Chat tab holds a stream on{" "}
+              <C>/api/chat/live</C> that gets a content-free nudge on every new or edited message, then refetches
+              through the normal access-checked GET. No WebSocket server; a 30-second poll covers dropped streams and
+              messages stored by another app instance.
             </li>
             <li>
               <strong className="text-foreground">Timestamps are formatted on the server</strong> and shipped as
@@ -506,7 +520,7 @@ pm2 restart digital-board        # or: systemctl restart digital-board`}</Code>
           <H id="limits">Known limits</H>
           <ul className="flex list-disc flex-col gap-1.5 pl-5 text-sm text-muted-foreground">
             <li>No self-service password reset. An admin creates a replacement account.</li>
-            <li>Chat has no deletion, reactions, threads or typing indicators, and polling means near-real-time, not instant.</li>
+            <li>Chat has no deletion, reactions, threads or typing indicators. With several app instances, a message stored by another one arrives on the 30-second poll, not instantly.</li>
             <li>Columns move one step at a time from the editor; there is no drag-to-reorder for columns themselves.</li>
             <li>The project agent&rsquo;s conversation lives in the browser tab and is gone after a reload. It sees up to 100 tasks per column. Each flow it draws goes on a new sheet, drawn when an editor first opens it.</li>
             <li>Project roles gate tasks, canvases and project structure. Chat is workspace-wide — it has no per-project scoping.</li>

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { currentUser } from "@/lib/auth";
+import { mailEnabled } from "@/lib/mail";
 import { LogoMark } from "@/components/logo-mark";
 import { LoginForm } from "@/components/login-form";
 
@@ -26,7 +27,11 @@ export default async function LoginPage() {
           </p>
         )}
         <p className="mt-2 text-center text-xs text-muted-foreground">
-          Forgotten your password? A workspace admin can set a new one from Settings.
+          {mailEnabled() ? (
+            <Link href="/forgot" className="underline underline-offset-2">Forgotten your password?</Link>
+          ) : (
+            "Forgotten your password? A workspace admin can set a new one from Settings."
+          )}
         </p>
       </div>
     </main>

@@ -53,6 +53,12 @@ Sales, Marketing, Support or Recruiting — each sets the columns, optionally wi
 example tasks and a canvas sheet) and the admin account.
 Anyone can register a workspace of their own; set `REGISTRATION_CLOSED=1` to stop that.
 
+Or with Docker — app plus Postgres, nothing else to install:
+
+```bash
+docker compose up -d      # edit the passwords in docker-compose.yml first
+```
+
 ![Create a workspace, with the template picker](public/screenshots/setup.png)
  Tables create themselves on first use; there is no migration
 command.
@@ -246,9 +252,13 @@ Each delivery is a `POST` with `Content-Type: application/json`:
 | `REGISTRATION_CLOSED` | unset | `1` stops new workspaces being registered; admins still add members. |
 | `PORT` | `3000` | Listen port. |
 | `TZ` | system | Timezone for rendered timestamps — they are formatted server-side. |
+| `SMTP_URL` | unset | SMTP server for emailed password-reset links, e.g. `smtps://user:pass@smtp.example.com`. |
+| `APP_URL` | unset | Public address the reset link points at, e.g. `https://board.example.com`. Reset by email is on only when both are set. |
+| `MAIL_FROM` | `Digital Board <no-reply@localhost>` | Sender of those emails. |
 
 Session cookies are `secure` in production, so serve it over HTTPS or reach it on
-`localhost`.
+`localhost`. Sign-in locks for 15 minutes after 5 wrong passwords for one email or
+20 from one IP (taken from `X-Forwarded-For`, so put it behind a proxy that sets it).
 
 ## Documentation
 
@@ -306,16 +316,19 @@ Runnable checks, no test framework:
 ```bash
 node --experimental-strip-types lib/board.check.ts   # board helpers
 node --experimental-strip-types lib/chat.check.ts    # chat poll merge
+node --experimental-strip-types lib/canvas/merge.check.ts  # canvas save merge
 DATABASE_URL=... node lib/postgres.check.mjs         # every app query, against real Postgres
 ```
 
 `postgres.check.mjs` is safe to point at your own server: it runs inside a
-transaction and rolls back.
+transaction and rolls back. GitHub Actions (`.github/workflows/ci.yml`) runs all of
+these, plus lint, type-check and build, on every push and pull request.
 
 ## Known limits
 
-No self-service password reset. Chat polls every 3 seconds rather than using a
-socket, and has no deletion, reactions or threads. The project agent's chat is
+Self-service password reset needs SMTP. Chat pushes new messages over SSE from the
+process that stored them, so with several app instances a message from another one
+arrives on the 30-second fallback poll. Chat has no deletion, reactions or threads. The project agent's chat is
 not saved — it is gone after a reload. The inbound webhook only creates cards,
 the outgoing webhook does not retry failed deliveries, email-to-ticket sends
 no replies, and calendar apps refresh the iCal feed on

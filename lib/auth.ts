@@ -1,6 +1,6 @@
 import "server-only";
 import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { get, run } from "./db";
 import { PALETTE } from "./board";
 
@@ -102,12 +102,35 @@ async function touch(userId: string, lastSeen: string | null) {
   await run("UPDATE users SET last_seen_at = ? WHERE id = ?", new Date().toISOString(), userId);
 }
 
-export async function login(email: string, password: string) {
-  const row = await get<{ id: string; password_hash: string }>(
-    "SELECT id, password_hash FROM users WHERE email = ?",
-    email.toLowerCase().trim(),
-  );
+// ponytail: in-process counters, so the limit is per Node instance and resets on restart.
+// Fine for one self-hosted server; several instances behind a balancer would need a table.
+const WINDOW_MS = 15 * 60_000;
+const MAX_PER_EMAIL = 5;
+const MAX_PER_IP = 20;
+const failures: Map<string, number[]> = ((globalThis as unknown as { loginFailures?: Map<string, number[]> }).loginFailures ??= new Map());
+
+const recent = (key: string) => (failures.get(key) ?? []).filter((t) => Date.now() - t < WINDOW_MS);
+
+async function clientIp() {
+  const h = await headers();
+  return h.get("x-forwarded-for")?.split(",")[0].trim() || h.get("x-real-ip") || "unknown";
+}
+
+/** User id, null on a wrong email/password, or "locked" after too many recent failures. */
+export async function login(email: string, password: string): Promise<string | null | "locked"> {
+  email = email.toLowerCase().trim();
+  const keys = [`e:${email}`, `ip:${await clientIp()}`];
+  if (recent(keys[0]).length >= MAX_PER_EMAIL || recent(keys[1]).length >= MAX_PER_IP) return "locked";
+
+  const row = await get<{ id: string; password_hash: string }>("SELECT id, password_hash FROM users WHERE email = ?", email);
   // Hash anyway on a miss so a bad email and a bad password take the same time.
   const ok = row ? verifyPassword(password, row.password_hash) : verifyPassword(password, hashPassword("decoy"));
-  return ok && row ? row.id : null;
+  if (ok && row) {
+    failures.delete(keys[0]);
+    return row.id;
+  }
+  for (const key of keys) failures.set(key, [...recent(key), Date.now()]);
+  // Stale keys are only pruned on reuse; sweep once a spray of addresses piles them up.
+  if (failures.size > 10_000) for (const key of failures.keys()) if (!recent(key).length) failures.delete(key);
+  return null;
 }
