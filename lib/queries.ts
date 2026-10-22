@@ -47,7 +47,7 @@ const TASK_COLS = `t.id, t.column_id, t.title, t.description, t.label, t.priorit
             COALESCE((SELECT json_agg(json_build_object('id', u.id, 'name', u.name, 'color', u.color) ORDER BY u.name)
                         FROM task_assignees ta JOIN users u ON u.id = ta.user_id WHERE ta.task_id = t.id), '[]') AS assignees,
             (SELECT COUNT(*) FROM task_events e WHERE e.task_id = t.id AND e.kind = 'comment') AS comments,
-            COALESCE((SELECT json_agg(json_build_object('id', ti.id, 'name', ti.name) ORDER BY ti.created_at, ti.id)
+            COALESCE((SELECT json_agg(json_build_object('id', ti.id, 'name', ti.name) ORDER BY ti.cover DESC, ti.created_at, ti.id)
                         FROM task_images ti WHERE ti.task_id = t.id), '[]') AS images,
             COALESCE((SELECT json_agg(json_build_object('id', bt.id, 'done', bt.column_id = ${DONE_COLUMN}) ORDER BY bt.number)
                         FROM task_blockers tb JOIN tasks bt ON bt.id = tb.blocker_id

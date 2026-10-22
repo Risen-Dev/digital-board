@@ -309,7 +309,7 @@ function Prop({ icon: Icon, label, title, wide, children }: { icon: LucideIcon; 
   );
 }
 
-/** Images inside the card; the first is its cover on the board. Saves on pick, like the checklist. */
+/** Images inside the card; the first is its cover on the board ("Make cover" moves one there). Saves on pick, like the checklist. */
 function Images({ task }: { task: Task }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -338,6 +338,13 @@ function Images({ task }: { task: Task }) {
     router.refresh();
   }
 
+  async function makeCover(image: TaskImage) {
+    const res = await fetch(`/api/tasks/${task.id}/images/${image.id}`, { method: "PATCH" });
+    if (!res.ok) return setError(await res.text());
+    setImages((all) => [image, ...all.filter((i) => i.id !== image.id)]);
+    router.refresh();
+  }
+
   return (
     <div className="border-t py-4">
       <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
@@ -352,7 +359,17 @@ function Images({ task }: { task: Task }) {
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={imageUrl(task.id, image.id)} alt={image.name} className="aspect-video w-full rounded-md border bg-secondary object-cover" />
               </a>
-              {i === 0 && <span className="absolute left-1 top-1 rounded bg-black/60 px-1 text-[10px] text-white">Cover</span>}
+              {i === 0 ? (
+                <span className="absolute left-1 top-1 rounded bg-black/60 px-1 text-[10px] text-white">Cover</span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => void makeCover(image)}
+                  className="absolute left-1 top-1 rounded bg-black/60 px-1 text-[10px] text-white opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
+                >
+                  Make cover
+                </button>
+              )}
               <button
                 type="button"
                 aria-label={`Delete ${image.name}`}

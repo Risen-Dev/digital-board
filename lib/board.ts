@@ -19,7 +19,7 @@ export type Task = {
   checklist: CheckItem[];
   repeat: Repeat | null;
   comments: number;
-  /** Oldest first; the first is the card's cover. Served at /api/tasks/:id/images/:imageId. */
+  /** The chosen cover first, then oldest first; the first is the card's cover. Served at /api/tasks/:id/images/:imageId. */
   images: TaskImage[];
   /** Cards in the same project this one waits on; `done` = that card sits in the done column. */
   blockedBy: Blocker[];
