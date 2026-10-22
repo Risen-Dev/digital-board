@@ -659,6 +659,7 @@ export function Workspace({
       )}
       {(editing || creating !== null) && (
         <TaskDialog
+          key={editing?.id ?? "new"}
           task={editing}
           columns={columns}
           members={members}
@@ -668,6 +669,8 @@ export function Workspace({
           repo={project?.repo}
           tags={tags}
           onTag={showTag}
+          doneColumnId={project?.doneColumnId ?? null}
+          onOpenTask={setEditing}
           onClose={close}
         />
       )}

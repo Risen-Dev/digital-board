@@ -2,8 +2,8 @@
 
 import { useActionState, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlignLeft, Archive, CalendarDays, Check, CircleDot, Flag, GitBranch, GitPullRequest, History, Image as ImageIcon, ImagePlus, ListChecks, Repeat, Sparkles, Tag, Trash2, Users, X, type LucideIcon } from "lucide-react";
-import { addComment, archiveTask, askCardAgent, createGithubIssue, createTask, deleteTask, fetchHistory, setChecklist, updateTask } from "@/lib/actions";
+import { AlignLeft, Archive, CalendarDays, Check, CircleDot, Flag, GitBranch, GitPullRequest, History, Image as ImageIcon, ImagePlus, ListChecks, Ban, Repeat, Sparkles, Tag, Trash2, Users, X, type LucideIcon } from "lucide-react";
+import { addComment, archiveTask, askCardAgent, createGithubIssue, createTask, deleteTask, fetchHistory, setBlocker, setChecklist, updateTask } from "@/lib/actions";
 import { branchNameOf, initials, pullRequestUrlOf, PRIORITIES, PRIORITY_CFG, REPEATS, type CheckItem, type Column, type Entry, type Member, type Task, type TaskImage } from "@/lib/board";
 import { Avatar } from "./avatar";
 import { imageUrl } from "./task-card";
@@ -28,10 +28,14 @@ type Props = {
   tags: CanvasTag[];
   /** An @tag was clicked: show it on the canvas. */
   onTag: (tag: CanvasTag) => void;
+  /** The project's done column; null = its last column. Decides whether a blocker is finished. */
+  doneColumnId: string | null;
+  /** A card in the Dependencies list was clicked. */
+  onOpenTask: (task: Task) => void;
   onClose: () => void;
 };
 
-export function TaskDialog({ task, columns, members, mentionable, defaultColumnId, links, repo, tags, onTag, onClose }: Props) {
+export function TaskDialog({ task, columns, members, mentionable, defaultColumnId, links, repo, tags, onTag, doneColumnId, onOpenTask, onClose }: Props) {
   const editing = task !== null;
   const [state, action] = useActionState(editing ? updateTask : createTask, null);
   const [history, setHistory] = useState<Entry[]>([]);
@@ -212,6 +216,17 @@ export function TaskDialog({ task, columns, members, mentionable, defaultColumnI
 
             {editing && <Images key={`images-${task.id}`} task={task} />}
 
+            {editing && (
+              <Dependencies
+                key={`deps-${task.id}`}
+                task={task}
+                columns={columns}
+                doneColumnId={doneColumnId ?? columns.at(-1)?.id ?? null}
+                onOpen={onOpenTask}
+                onChange={loadHistory}
+              />
+            )}
+
             {/* Every canvas group the card mentions, in the description or a comment. */}
             <TagLinks text={[description, ...history.filter((e) => e.kind === "comment").map((e) => e.text)].join("\n")} tags={tags} onTag={onTag} />
 
@@ -365,6 +380,101 @@ function Images({ task }: { task: Task }) {
         />
       </label>
       {error && <p className="mt-1.5 text-[11px] text-[#ef4444]">{error}</p>}
+    </div>
+  );
+}
+
+/**
+ * "Waiting on" (this card's blockers) and "Blocking" (cards waiting on it), both from
+ * this project's board. Adding or removing saves at once, like the checklist.
+ */
+function Dependencies({ task, columns, doneColumnId, onOpen, onChange }: {
+  task: Task; columns: Column[]; doneColumnId: string | null; onOpen: (task: Task) => void; onChange: () => void;
+}) {
+  const [ids, setIds] = useState(task.blockedBy.map((b) => b.id));
+  const [query, setQuery] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const cards = columns.flatMap((c) => c.tasks);
+  const waitingOn = ids.flatMap((id) => cards.filter((t) => t.id === id));
+  const blocking = cards.filter((t) => t.blockedBy.some((b) => b.id === task.id));
+  const needle = query.trim().toLowerCase();
+  const matches = needle
+    ? cards.filter((t) => t.id !== task.id && !ids.includes(t.id) && `${t.key ?? ""} ${t.title}`.toLowerCase().includes(needle)).slice(0, 6)
+    : [];
+
+  async function toggle(blocker: Task, on: boolean) {
+    setError(null);
+    const result = await setBlocker(task.id, blocker.id, on);
+    if ("error" in result) return setError(result.error ?? "Could not save.");
+    setIds((all) => (on ? [...all, blocker.id] : all.filter((id) => id !== blocker.id)));
+    setQuery("");
+    onChange();
+  }
+
+  const row = (t: Task, remove?: () => void) => {
+    const done = t.columnId === doneColumnId;
+    return (
+      <li key={t.id} className="group flex items-center gap-2 text-xs">
+        <button type="button" onClick={() => onOpen(t)} className="flex min-w-0 flex-1 items-center gap-2 text-left hover:underline">
+          <span className="shrink-0 font-mono text-muted-foreground">{t.key}</span>
+          <span className={`truncate ${done ? "text-muted-foreground line-through" : ""}`}>{t.title}</span>
+        </button>
+        {done && <Check className="size-3.5 shrink-0 text-[var(--chart-2)]" aria-label="Done" />}
+        {remove && (
+          <button
+            type="button"
+            aria-label={`Remove ${t.key}`}
+            onClick={remove}
+            className="rounded p-0.5 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100 focus:opacity-100"
+          >
+            <X className="size-3" />
+          </button>
+        )}
+      </li>
+    );
+  };
+
+  return (
+    <div className="border-t py-4">
+      <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+        <Ban className="size-3.5" />
+        Dependencies
+      </h3>
+      {waitingOn.length > 0 && (
+        <>
+          <p className="mb-1 text-[11px] text-muted-foreground">Waiting on</p>
+          <ul className="mb-3 flex flex-col gap-1">{waitingOn.map((t) => row(t, () => void toggle(t, false)))}</ul>
+        </>
+      )}
+      {blocking.length > 0 && (
+        <>
+          <p className="mb-1 text-[11px] text-muted-foreground">Blocking</p>
+          <ul className="mb-3 flex flex-col gap-1">{blocking.map((t) => row(t))}</ul>
+        </>
+      )}
+      <input
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Blocked by… type a key or title"
+        className="w-full rounded-md border bg-background px-2.5 py-1.5 text-xs outline-none transition-colors focus:border-ring"
+      />
+      {matches.length > 0 && (
+        <ul className="mt-1 flex flex-col rounded-md border bg-background p-1">
+          {matches.map((t) => (
+            <li key={t.id}>
+              <button
+                type="button"
+                onClick={() => void toggle(t, true)}
+                className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs hover:bg-secondary"
+              >
+                <span className="shrink-0 font-mono text-muted-foreground">{t.key}</span>
+                <span className="truncate">{t.title}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {error && <p className="mt-1 text-[11px] text-[#ef4444]">{error}</p>}
     </div>
   );
 }

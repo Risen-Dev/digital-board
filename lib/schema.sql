@@ -308,3 +308,13 @@ CREATE TABLE IF NOT EXISTS password_resets (
   expires_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS password_resets_user ON password_resets(user_id);
+
+-- "Blocked by": task_id waits on blocker_id, both in the same project (setBlocker
+-- in lib/actions.ts checks that and refuses cycles).
+CREATE TABLE IF NOT EXISTS task_blockers (
+  task_id    TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  blocker_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  PRIMARY KEY (task_id, blocker_id),
+  CHECK (task_id <> blocker_id)
+);
+CREATE INDEX IF NOT EXISTS task_blockers_blocker ON task_blockers(blocker_id);

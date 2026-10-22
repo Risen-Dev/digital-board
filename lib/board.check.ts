@@ -15,7 +15,7 @@ import examples from "./template-examples.json" with { type: "json" };
 const mk = (id: string, title: string, n: number): Column["tasks"][number] => ({
   id, columnId: title, title: `task ${n}`, description: n % 2 ? "Detail" : null, label: n % 2 ? "Design, Web" : "QA",
   priority: n % 2 ? "high" : "low", assignees: n === 1 ? [{ id: "u1", name: "Ada L", color: "#000" }] : [], dueDate: null, key: null,
-  checklist: [], repeat: null, comments: 0, images: [],
+  checklist: [], repeat: null, comments: 0, images: [], blockedBy: [],
 });
 
 const board: Column[] = [
