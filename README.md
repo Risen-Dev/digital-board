@@ -287,6 +287,12 @@ Back up the database:
 pg_dump --no-owner --format=custom "$DATABASE_URL" > board.dump
 ```
 
+No shell access? A workspace admin can download the workspace as JSON from
+**Settings → General → Export workspace**: projects, cards, comments, history,
+images (base64), canvases, meetings and channel messages, one array per table
+with the original ids. Passwords, sessions, tokens, API keys and direct messages
+are left out. There is no importer for it yet; restore from `pg_dump`.
+
 ## Upgrading
 
 ```bash

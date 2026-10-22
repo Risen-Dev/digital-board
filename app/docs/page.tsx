@@ -487,6 +487,14 @@ pg_dump --no-owner --format=custom "$DATABASE_URL" > /backups/board-$(date +%F).
             start again. For legacy file attachments, run <C>node scripts/files-to-postgres.mjs /path/to/uploads</C>
             before deleting that directory.
           </p>
+          <p className="text-sm text-muted-foreground">
+            Without shell access, a workspace admin can use <em>Settings → General → Export workspace</em>{" "}
+            (<C>GET /api/export</C>): one JSON file with an array per table and the original ids — projects, columns,
+            cards, assignees, dependencies, history and comments, GitHub links, images (base64), canvases, meetings and
+            channel messages with attachments. Password hashes, sessions, push subscriptions, every token and API key,
+            and direct messages are left out. There is no importer yet, so treat it as a readable copy; restore from{" "}
+            <C>pg_dump</C>.
+          </p>
 
           <H id="upgrade">Upgrading</H>
           <Code>{`git pull
