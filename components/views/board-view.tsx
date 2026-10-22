@@ -14,6 +14,7 @@ import { addColumn, deleteColumn, moveColumn, moveTask, setDoneColumn, updateCol
 import type { TaskLinks } from "@/lib/github";
 import { SortableTaskCard, TaskCard } from "../task-card";
 import { ColumnEditor } from "../column-editor";
+import { useT } from "@/components/i18n";
 
 /**
  * Pointer-first collision detection. closestCorners alone compares the dragged
@@ -62,6 +63,7 @@ export function BoardView({
   onOpen: (t: Task) => void;
   onAdd: (columnId: string) => void;
 }) {
+  const tr = useT();
   const router = useRouter();
   const doneId = doneColumnId ?? columns.at(-1)?.id;
   const overdue = (t: Task) => !!t.dueDate && t.dueDate < today && t.columnId !== doneId;
@@ -156,11 +158,11 @@ export function BoardView({
                   <div className="size-2 shrink-0 rounded-full" style={{ background: col.color }} />
                   <button
                     onClick={() => setEditingColumn(col.id)}
-                    title="Rename column"
+                    title={tr("Rename column")}
                     className="group/col flex min-w-0 items-center gap-1"
                   >
                     <span className="truncate text-sm font-semibold">{col.title}</span>
-                    {col.id === doneId && <CircleCheck className="size-3 shrink-0 text-muted-foreground" aria-label="Done column" />}
+                    {col.id === doneId && <CircleCheck className="size-3 shrink-0 text-muted-foreground" aria-label={tr("Done column")} />}
                     <Pencil className="size-3 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover/col:opacity-100" />
                   </button>
                   <span className="shrink-0 rounded-full border bg-secondary px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
@@ -169,7 +171,7 @@ export function BoardView({
                 </div>
                 <button
                   onClick={() => onAdd(col.id)}
-                  title="Add task"
+                  title={tr("Add task")}
                   className="rounded p-0.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
                 >
                   <Plus className="size-3" />
@@ -177,14 +179,14 @@ export function BoardView({
 
                 {editingColumn === col.id && (
                   <ColumnEditor
-                    heading="Edit column"
-                    submitLabel="Save"
+                    heading={tr("Edit column")}
+                    submitLabel={tr("Save")}
                     title={col.title}
                     color={col.color}
                     onSubmit={(t, c) => updateColumn(col.id, t, c).then((r) => { router.refresh(); return r; })}
                     onDelete={async () => {
                       const count = col.tasks.length;
-                      if (count > 0 && !confirm(`Delete "${col.title}"? Its ${count} task(s) will be deleted too.`)) return;
+                      if (count > 0 && !confirm(tr("Delete \"{name}\"? Its {n} task(s) will be deleted too.", { name: col.title, n: count }))) return;
                       const r = await deleteColumn(col.id);
                       router.refresh();
                       return r;
@@ -204,7 +206,7 @@ export function BoardView({
                 </SortableContext>
                 {col.tasks.length === 0 && (
                   <p className="rounded-lg border border-dashed px-3 py-6 text-center text-[11px] text-muted-foreground">
-                    Empty — drag a task here
+                    {tr("Empty — drag a task here")}
                   </p>
                 )}
                 <button
@@ -212,7 +214,7 @@ export function BoardView({
                   className="flex items-center gap-1.5 rounded-md px-1 py-2 text-xs text-muted-foreground transition-all hover:bg-secondary hover:text-foreground"
                 >
                   <Plus className="size-3" />
-                  <span>Add task</span>
+                  <span>{tr("Add task")}</span>
                 </button>
               </div>
             </DropZone>
@@ -225,12 +227,12 @@ export function BoardView({
               className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed px-3 py-2.5 text-xs text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
             >
               <Plus className="size-3.5" />
-              Add column
+              {tr("Add column")}
             </button>
             {addingColumn && (
               <ColumnEditor
-                heading="New column"
-                submitLabel="Add column"
+                heading={tr("New column")}
+                submitLabel={tr("Add column")}
                 color={PALETTE[columns.length % PALETTE.length]}
                 onSubmit={(t, c) => addColumn(projectId, t, c).then((r) => { router.refresh(); return r; })}
                 onClose={() => setAddingColumn(false)}

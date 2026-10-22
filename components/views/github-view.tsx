@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { CircleCheck, CircleDot, ExternalLink, GitBranch, GitCommitHorizontal, GitMerge, GitPullRequest, RefreshCw } from "lucide-react";
 import type { CiState } from "@/lib/board";
 import type { GithubItem, GithubKind, TaskLinks } from "@/lib/github";
+import { useT } from "@/components/i18n";
 
 const TABS: { kind: GithubKind; label: string }[] = [
   { kind: "pulls", label: "Pull requests" },
@@ -39,6 +40,7 @@ function StateIcon({ kind, state, size = "size-4" }: { kind: GithubKind; state: 
 type Loaded = { kind: GithubKind; repo: string; items: GithubItem[] } | { kind: GithubKind; error: string };
 
 export function GithubView({ projectId, repo }: { projectId: string; repo: string }) {
+  const tr = useT();
   const [kind, setKind] = useState<GithubKind>("pulls");
   const [data, setData] = useState<Loaded | null>(null);
   const [fresh, setFresh] = useState(0);
@@ -50,9 +52,9 @@ export function GithubView({ projectId, repo }: { projectId: string; repo: strin
         const body = await res.json().catch(() => ({ error: `Request failed (${res.status}).` }));
         if (alive) setData(body.error ? { kind, error: body.error } : { kind, ...body });
       })
-      .catch(() => alive && setData({ kind, error: "Could not reach the server." }));
+      .catch(() => alive && setData({ kind, error: tr("Could not reach the server.") }));
     return () => { alive = false; };
-  }, [projectId, kind, fresh]);
+  }, [projectId, kind, fresh, tr]);
 
   // Stale rows from the previous tab never show under the new one.
   const current = data?.kind === kind ? data : null;
@@ -73,8 +75,8 @@ export function GithubView({ projectId, repo }: { projectId: string; repo: strin
           </a>
           <button
             onClick={() => { setData(null); setFresh((n) => n + 1); }}
-            title="Refresh from GitHub"
-            aria-label="Refresh from GitHub"
+            title={tr("Refresh from GitHub")}
+            aria-label={tr("Refresh from GitHub")}
             className="ml-auto rounded-md p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground"
           >
             <RefreshCw className={`size-4 ${!current ? "animate-spin" : ""}`} />
@@ -92,17 +94,17 @@ export function GithubView({ projectId, repo }: { projectId: string; repo: strin
                 kind === t.kind ? "border-primary font-medium text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"
               }`}
             >
-              {t.label}
+              {tr(t.label)}
             </button>
           ))}
         </div>
 
         {!current ? (
-          <p className="py-10 text-center text-xs text-muted-foreground">Loading from GitHub…</p>
+          <p className="py-10 text-center text-xs text-muted-foreground">{tr("Loading from GitHub…")}</p>
         ) : "error" in current ? (
           <p role="alert" className="rounded-md bg-[rgba(239,68,68,0.08)] px-3 py-2 text-xs text-[#ef4444]">{current.error}</p>
         ) : current.items.length === 0 ? (
-          <p className="rounded-lg border border-dashed py-10 text-center text-xs text-muted-foreground">Nothing here yet.</p>
+          <p className="rounded-lg border border-dashed py-10 text-center text-xs text-muted-foreground">{tr("Nothing here yet.")}</p>
         ) : (
           <ul className="divide-y rounded-lg border bg-card">
             {current.items.map((item) => (
@@ -128,7 +130,7 @@ export function GithubView({ projectId, repo }: { projectId: string; repo: strin
         )}
         {current && !("error" in current) && current.items.length >= 30 && kind !== "branches" && (
           <a href={`https://github.com/${repo}/${kind === "commits" ? "commits" : kind}`} target="_blank" rel="noreferrer" className="text-center text-xs text-muted-foreground underline">
-            See more on GitHub
+            {tr("See more on GitHub")}
           </a>
         )}
       </div>
@@ -149,9 +151,10 @@ const CI_STYLE: Record<NonNullable<CiState>, { label: string; color: string }> =
 };
 
 function CiDot({ ci }: { ci: CiState | undefined }) {
+  const tr = useT();
   if (!ci) return null;
   const s = CI_STYLE[ci];
-  return <span title={s.label} aria-label={s.label} className="size-1.5 shrink-0 rounded-full" style={{ background: s.color }} />;
+  return <span title={tr(s.label)} aria-label={tr(s.label)} className="size-1.5 shrink-0 rounded-full" style={{ background: s.color }} />;
 }
 
 /** The issue a card shows when it has no PR: an open one first. */

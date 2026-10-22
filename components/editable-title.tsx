@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Pencil } from "lucide-react";
+import { useT } from "@/components/i18n";
 
 /** Click-to-rename text. Used for the board name in the header and on Home. */
 export function EditableTitle({
@@ -15,6 +16,7 @@ export function EditableTitle({
   className?: string;
   inputClassName?: string;
 }) {
+  const tr = useT();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
   const [error, setError] = useState<string | null>(null);
@@ -55,12 +57,12 @@ export function EditableTitle({
         setError(null);
         setEditing(true);
       }}
-      title="Rename"
+      title={tr("Rename")}
       className={`group/title flex items-center gap-1.5 ${className}`}
     >
       <span className="truncate">{value}</span>
       <Pencil className="size-3 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover/title:opacity-100" />
-      {error && <span className="text-[11px] font-normal text-[var(--chart-7)]">{error}</span>}
+      {error && <span className="text-[11px] font-normal text-[var(--chart-7)]">{tr(error)}</span>}
     </button>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { PRIORITY_CFG, type Priority } from "@/lib/board";
+import { useT } from "@/components/i18n";
 
 export type Stats = {
   byColumn: { title: string; color: string; n: number }[];
@@ -39,6 +40,7 @@ function Tile({ label, value, hint }: { label: string; value: string | number; h
 }
 
 export function AnalyticsView({ stats }: { stats: Stats }) {
+  const tr = useT();
   const { done } = stats;
   const maxCol = Math.max(1, ...stats.byColumn.map((c) => c.n));
   const maxPerson = Math.max(1, ...stats.byAssignee.map((a) => a.n));
@@ -54,7 +56,7 @@ export function AnalyticsView({ stats }: { stats: Stats }) {
   if (stats.total === 0) {
     return (
       <div className="flex flex-1 items-center justify-center p-10 text-center text-sm text-muted-foreground">
-        No tasks yet. Analytics fills in as the board gets used.
+        {tr("No tasks yet. Analytics fills in as the board gets used.")}
       </div>
     );
   }
@@ -63,21 +65,21 @@ export function AnalyticsView({ stats }: { stats: Stats }) {
     <div className="flex-1 overflow-y-auto p-5">
       <div className="mx-auto flex max-w-4xl flex-col gap-5">
         <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-          <Tile label="Total tasks" value={stats.total} />
-          <Tile label="Completed" value={done} hint={`${Math.round((done / stats.total) * 100)}% of total`} />
-          <Tile label="Outstanding" value={stats.total - done} />
-          <Tile label="14-day activity" value={days.reduce((s, d) => s + d.n, 0)} hint="changes logged" />
+          <Tile label={tr("Total tasks")} value={stats.total} />
+          <Tile label={tr("Completed")} value={done} hint={tr("{pct}% of total", { pct: Math.round((done / stats.total) * 100) })} />
+          <Tile label={tr("Outstanding")} value={stats.total - done} />
+          <Tile label={tr("14-day activity")} value={days.reduce((s, d) => s + d.n, 0)} hint={tr("changes logged")} />
         </div>
 
         <section className="rounded-xl border bg-card p-5">
-          <h2 className="mb-3 text-sm font-semibold">Tasks per column</h2>
+          <h2 className="mb-3 text-sm font-semibold">{tr("Tasks per column")}</h2>
           {stats.byColumn.map((c) => (
             <BarRow key={c.title} label={c.title} value={c.n} max={maxCol} color={c.color} />
           ))}
         </section>
 
         <section className="rounded-xl border bg-card p-5">
-          <h2 className="mb-3 text-sm font-semibold">Priority</h2>
+          <h2 className="mb-3 text-sm font-semibold">{tr("Priority")}</h2>
           <div className="flex flex-wrap gap-2">
             {(["high", "medium", "low"] as Priority[]).map((p) => {
               const n = stats.byPriority.find((x) => x.priority === p)?.n ?? 0;
@@ -94,11 +96,11 @@ export function AnalyticsView({ stats }: { stats: Stats }) {
         </section>
 
         <section className="rounded-xl border bg-card p-5">
-          <h2 className="mb-3 text-sm font-semibold">Workload per member</h2>
+          <h2 className="mb-3 text-sm font-semibold">{tr("Workload per member")}</h2>
           {stats.byAssignee.map((a, i) => (
             <BarRow
               key={a.name ?? `none-${i}`}
-              label={a.name ?? "Unassigned"}
+              label={a.name ?? tr("Unassigned")}
               value={a.n}
               max={maxPerson}
               color={a.color ?? "var(--muted-foreground)"}
@@ -107,8 +109,8 @@ export function AnalyticsView({ stats }: { stats: Stats }) {
         </section>
 
         <section className="rounded-xl border bg-card p-5">
-          <h2 className="mb-1 text-sm font-semibold">Last 14 days</h2>
-          <p className="mb-4 text-[11px] text-muted-foreground">Task changes per day.</p>
+          <h2 className="mb-1 text-sm font-semibold">{tr("Last 14 days")}</h2>
+          <p className="mb-4 text-[11px] text-muted-foreground">{tr("Task changes per day.")}</p>
           <div className="flex h-28 items-end gap-1.5">
             {days.map((d) => (
               <div key={d.key} className="flex flex-1 flex-col items-center gap-1.5" title={`${d.key}: ${d.n}`}>

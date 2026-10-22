@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { cookies } from "next/headers";
 import "./globals.css";
+import { getLocale } from "@/lib/i18n/server";
+import { I18nProvider } from "@/components/i18n";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 
@@ -18,11 +20,12 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   // byte. No pre-paint inline script, so no flash and nothing for React to
   // warn about. See components/theme-toggle.tsx for the write side.
   const dark = (await cookies()).get("theme")?.value === "dark";
+  const locale = await getLocale();
 
   return (
-    <html lang="en" className={`h-full antialiased ${inter.variable} ${dark ? "dark" : ""}`}>
+    <html lang={locale} className={`h-full antialiased ${inter.variable} ${dark ? "dark" : ""}`}>
       <body className="flex min-h-full flex-col bg-background font-sans text-foreground">
-        {children}
+        <I18nProvider locale={locale}>{children}</I18nProvider>
       </body>
     </html>
   );

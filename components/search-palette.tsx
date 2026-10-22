@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { CalendarClock, FolderKanban, MessageSquare, Search, SquareCheckBig } from "lucide-react";
 import type { Project, SearchCard, SearchMessage } from "@/lib/queries";
 import type { Meeting } from "@/lib/meetings";
+import { useT } from "@/components/i18n";
 
 type Hit = { key: string; group: string; Icon: typeof Search; title: string; sub: string; pick: () => void };
 
@@ -21,6 +22,7 @@ export function SearchPalette({ projects, meetings, channelName, onClose, onCard
   onMessage: (channel: string) => void;
   onMeeting: () => void;
 }) {
+  const tr = useT();
   const [q, setQ] = useState("");
   const [found, setFound] = useState<{ q: string; cards: SearchCard[]; messages: SearchMessage[] }>({ q: "", cards: [], messages: [] });
   const [active, setActive] = useState(0);
@@ -80,7 +82,7 @@ export function SearchPalette({ projects, meetings, channelName, onClose, onCard
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-[12vh] animate-in fade-in duration-150" onClick={onClose}>
       <div
         role="dialog"
-        aria-label="Search"
+        aria-label={tr("Search")}
         onClick={(e) => e.stopPropagation()}
         className="flex max-h-[70vh] w-full max-w-xl flex-col overflow-hidden rounded-xl border bg-card shadow-lg animate-in fade-in zoom-in-95 duration-150"
       >
@@ -94,14 +96,14 @@ export function SearchPalette({ projects, meetings, channelName, onClose, onCard
               setActive(0);
             }}
             onKeyDown={onKeyDown}
-            placeholder="Search cards, projects, messages, meetings…"
+            placeholder={tr("Search cards, projects, messages, meetings…")}
             className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           />
-          <kbd className="rounded border px-1.5 py-0.5 text-[10px] text-muted-foreground">Esc</kbd>
+          <kbd className="rounded border px-1.5 py-0.5 text-[10px] text-muted-foreground">{tr("Esc")}</kbd>
         </label>
         <div className="overflow-y-auto p-2">
-          {!needle && <p className="px-2 py-6 text-center text-xs text-muted-foreground">Type to search everything you can open.</p>}
-          {needle && hits.length === 0 && <p className="px-2 py-6 text-center text-xs text-muted-foreground">No results.</p>}
+          {!needle && <p className="px-2 py-6 text-center text-xs text-muted-foreground">{tr("Type to search everything you can open.")}</p>}
+          {needle && hits.length === 0 && <p className="px-2 py-6 text-center text-xs text-muted-foreground">{tr("No results.")}</p>}
           {hits.map((h, i) => (
             <div key={h.key}>
               {h.group !== hits[i - 1]?.group && (

@@ -6,8 +6,10 @@ import { registerAction } from "@/lib/actions";
 import { TEMPLATES, templateOf } from "@/lib/board";
 import { Field, FormError, SubmitButton } from "./form-bits";
 import { TemplatePicker } from "./template-picker";
+import { useT } from "@/components/i18n";
 
 export function RegisterForm() {
+  const tr = useT();
   const [state, action] = useActionState(registerAction, null);
   const [templateId, setTemplateId] = useState(TEMPLATES[0].id);
   const template = templateOf(templateId);
@@ -31,13 +33,13 @@ export function RegisterForm() {
   return (
     <form action={action} className="flex flex-col gap-6 rounded-xl border bg-card p-6">
       <section className="flex flex-col gap-4">
-        <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Workspace</h2>
-        <Field label="Workspace name" name="workspace" required placeholder="Tim Produk" />
-        <Field label="First project" name="project" required placeholder="Product v1" />
+        <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{tr("Workspace")}</h2>
+        <Field label={tr("Workspace name")} name="workspace" required placeholder={tr("Tim Produk")} />
+        <Field label={tr("First project")} name="project" required placeholder={tr("Product v1")} />
       </section>
 
       <section className="flex flex-col gap-2">
-        <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Template</h2>
+        <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{tr("Template")}</h2>
         <TemplatePicker
           value={templateId}
           withExamples={withExamples}
@@ -48,9 +50,9 @@ export function RegisterForm() {
         />
         <label className="flex items-center gap-2 text-xs">
           <input type="checkbox" name="examples" checked={withExamples} onChange={(e) => setWithExamples(e.target.checked)} className="accent-primary" />
-          Add example tasks and a canvas sheet
+          {tr("Add example tasks and a canvas sheet")}
         </label>
-        <p className="mt-2 text-xs font-medium">Columns</p>
+        <p className="mt-2 text-xs font-medium">{tr("Columns")}</p>
         <div className="flex flex-wrap gap-2">
           {defaultColumns.map((c) => {
             const on = picked.includes(c.title);
@@ -95,7 +97,7 @@ export function RegisterForm() {
                 addCustom();
               }
             }}
-            placeholder="Your own column name"
+            placeholder={tr("Your own column name")}
             className="flex-1 rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-ring"
           />
           <button
@@ -104,33 +106,33 @@ export function RegisterForm() {
             className="flex items-center gap-1.5 rounded-md border px-3 text-xs text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
           >
             <Plus className="size-3.5" />
-            Add
+            {tr("Add")}
           </button>
         </div>
 
         {picked.map((t) => (
           <input key={t} type="hidden" name="columns" value={t} />
         ))}
-        <p className="text-[11px] text-muted-foreground">Columns can be added, renamed, recoloured or reordered later from the board.</p>
+        <p className="text-[11px] text-muted-foreground">{tr("Columns can be added, renamed, recoloured or reordered later from the board.")}</p>
       </section>
 
       <section className="flex flex-col gap-4">
-        <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Admin account</h2>
-        <Field label="Name" name="name" required placeholder="Your name" autoComplete="name" />
-        <Field label="Email" name="email" type="email" required autoComplete="email" />
+        <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{tr("Admin account")}</h2>
+        <Field label={tr("Name")} name="name" required placeholder={tr("Your name")} autoComplete="name" />
+        <Field label={tr("Email")} name="email" type="email" required autoComplete="email" />
         <Field
-          label="Password"
+          label={tr("Password")}
           name="password"
           type="password"
           required
           minLength={8}
           autoComplete="new-password"
-          hint="At least 8 characters."
+          hint={tr("At least 8 characters.")}
         />
       </section>
 
       <FormError error={state?.error} />
-      <SubmitButton>Create workspace</SubmitButton>
+      <SubmitButton>{tr("Create workspace")}</SubmitButton>
     </form>
   );
 }

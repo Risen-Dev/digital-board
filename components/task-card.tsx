@@ -7,8 +7,10 @@ import { initials, labelsOf, PRIORITY_CFG, type Task } from "@/lib/board";
 import type { TaskLinks } from "@/lib/github";
 import { Avatar } from "./avatar";
 import { PullBadge, primaryIssue, primaryPull } from "./views/github-view";
+import { useT } from "@/components/i18n";
 
 export function TaskCard({ task, links, onOpen, overdue = false, overlay = false }: { task: Task; links?: TaskLinks; onOpen?: () => void; overdue?: boolean; overlay?: boolean }) {
+  const tr = useT();
   const priority = PRIORITY_CFG[task.priority];
   const pull = primaryPull(links);
   const issue = pull ? undefined : primaryIssue(links);
@@ -41,12 +43,12 @@ export function TaskCard({ task, links, onOpen, overdue = false, overlay = false
       {(waiting > 0 || task.description || task.checklist.length > 0 || task.comments > 0 || task.images.length > 0 || task.repeat) && (
         <div className="mb-2 flex items-center gap-2.5 text-[11px] text-muted-foreground">
           {waiting > 0 && (
-            <span className="flex items-center gap-1 font-medium text-[var(--chart-7)]" title={`Waiting on ${waiting} card${waiting === 1 ? "" : "s"}`}>
+            <span className="flex items-center gap-1 font-medium text-[var(--chart-7)]" title={tr(waiting === 1 ? "Waiting on {n} card" : "Waiting on {n} cards", { n: waiting })}>
               <Ban className="size-3.5" />
-              Blocked
+              {tr("Blocked")}
             </span>
           )}
-          {task.description && <AlignLeft className="size-3.5" aria-label="Has description" />}
+          {task.description && <AlignLeft className="size-3.5" aria-label={tr("Has description")} />}
           {task.checklist.length > 0 && (
             <span className="flex items-center gap-1">
               <ListChecks className="size-3.5" />
@@ -81,7 +83,7 @@ export function TaskCard({ task, links, onOpen, overdue = false, overlay = false
       )}
       <div className="flex items-center gap-1.5 text-xs">
         <Flag className="size-3.5" style={{ color: priority.color, fill: priority.color }} />
-        {priority.label}
+        {tr(priority.label)}
       </div>
       {labels.length > 0 && (
         <div className="mt-2 flex items-center gap-1.5">

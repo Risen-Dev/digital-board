@@ -2,6 +2,7 @@
 
 import { TEMPLATES } from "@/lib/board";
 import examples from "@/lib/template-examples.json";
+import { useT } from "@/components/i18n";
 
 /** Example tasks per column title, per template — only what the previews draw. */
 const exampleCounts = Object.fromEntries(
@@ -22,8 +23,9 @@ export function TemplatePicker({
   onChange: (id: string) => void;
   withExamples: boolean;
 }) {
+  const tr = useT();
   return (
-    <div role="radiogroup" aria-label="Template" className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+    <div role="radiogroup" aria-label={tr("Template")} className="grid grid-cols-1 gap-2 sm:grid-cols-2">
       {TEMPLATES.map((t) => {
         const on = t.id === value;
         return (
@@ -46,9 +48,9 @@ export function TemplatePicker({
               ))}
             </div>
             <div>
-              <p className="text-xs font-medium">{t.name}</p>
-              <p className="text-[11px] leading-snug text-muted-foreground">{t.description}</p>
-              <p className="mt-0.5 text-[10px] text-muted-foreground">{t.columns.length} columns</p>
+              <p className="text-xs font-medium">{tr(t.name)}</p>
+              <p className="text-[11px] leading-snug text-muted-foreground">{tr(t.description)}</p>
+              <p className="mt-0.5 text-[10px] text-muted-foreground">{t.columns.length} {tr("columns")}</p>
             </div>
           </label>
         );

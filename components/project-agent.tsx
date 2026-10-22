@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { MessageSquarePlus, Send, Sparkles, X } from "lucide-react";
 import { MentionText, tagOptions, useMentionPicker } from "./mentions";
 import type { CanvasTag } from "@/lib/queries";
+import { useT } from "@/components/i18n";
 
 type Turn = { role: "user" | "assistant"; content: string; shown?: string; done?: string[]; errors?: string[] };
 
@@ -22,6 +23,7 @@ export function ProjectAgent({ projectId, enabled, open, tags, onTag, onClose }:
   onTag: (tag: CanvasTag) => void;
   onClose: () => void;
 }) {
+  const tr = useT();
   const router = useRouter();
   const [turns, setTurns] = useState<Turn[]>([]);
   const [input, setInput] = useState("");
@@ -126,21 +128,21 @@ export function ProjectAgent({ projectId, enabled, open, tags, onTag, onClose }:
     >
       <header onPointerDown={startDrag} className="flex cursor-move touch-none select-none items-center gap-2 border-b px-3 py-2">
         <Sparkles className="size-4 shrink-0 text-[var(--chart-1)]" />
-        <p className="flex-1 text-sm font-medium">Project agent</p>
-        <button type="button" onClick={() => { setTurns([]); setError(null); }} disabled={busy} title="New chat" className="rounded p-1 text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-40">
+        <p className="flex-1 text-sm font-medium">{tr("Project agent")}</p>
+        <button type="button" onClick={() => { setTurns([]); setError(null); }} disabled={busy} title={tr("New chat")} className="rounded p-1 text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-40">
           <MessageSquarePlus className="size-4" />
         </button>
-        <button type="button" onClick={onClose} title="Close" className="rounded p-1 text-muted-foreground hover:bg-secondary hover:text-foreground">
+        <button type="button" onClick={onClose} title={tr("Close")} className="rounded p-1 text-muted-foreground hover:bg-secondary hover:text-foreground">
           <X className="size-4" />
         </button>
       </header>
 
       <div className="flex-1 space-y-3 overflow-y-auto p-3 text-sm">
         {!enabled ? (
-          <p className="text-xs text-muted-foreground">The AI agent isn&apos;t set up. A workspace admin can configure a provider in Settings → AI agent.</p>
+          <p className="text-xs text-muted-foreground">{tr("The AI agent isn't set up. A workspace admin can configure a provider in Settings → AI agent.")}</p>
         ) : turns.length === 0 ? (
           <p className="text-xs text-muted-foreground">
-            Ask about this project or act on it: tasks, columns, canvas flows, chat messages. Try: &ldquo;Buatin task setup CI untuk Ada, masukin ke Backlog dengan priority high&rdquo; or &ldquo;Buatin canvas flow negosiasi&rdquo;.
+            {tr("Ask about this project or act on it: tasks, columns, canvas flows, chat messages. Try: “Buatin task setup CI untuk Ada, masukin ke Backlog dengan priority high” or “Buatin canvas flow negosiasi”.")}
           </p>
         ) : null}
         {turns.map((t, i) => (
@@ -150,8 +152,8 @@ export function ProjectAgent({ projectId, enabled, open, tags, onTag, onClose }:
             {t.errors?.map((e) => <p key={e} className="mt-1 text-[11px] text-[var(--chart-7)]">✗ {e}</p>)}
           </div>
         ))}
-        {busy && <p className="text-xs text-muted-foreground">{status ?? "Thinking…"}</p>}
-        {error && <p className="rounded-md bg-[rgba(239,68,68,0.08)] px-3 py-2 text-xs text-[var(--chart-7)]">{error}</p>}
+        {busy && <p className="text-xs text-muted-foreground">{status ?? tr("Thinking…")}</p>}
+        {error && <p className="rounded-md bg-[rgba(239,68,68,0.08)] px-3 py-2 text-xs text-[var(--chart-7)]">{tr(error)}</p>}
         <div ref={end} />
       </div>
 
@@ -166,11 +168,11 @@ export function ProjectAgent({ projectId, enabled, open, tags, onTag, onClose }:
           }}
           disabled={!enabled}
           rows={2}
-          placeholder={enabled ? "Tasks, canvas flows, chat messages… @name for a canvas group" : "Not configured"}
+          placeholder={enabled ? tr("Tasks, canvas flows, chat messages… @name for a canvas group") : tr("Not configured")}
           className="block w-full resize-none rounded-md border bg-background px-2.5 py-1.5 text-sm outline-none focus:border-ring disabled:opacity-50"
         />
         </div>
-        <button type="submit" disabled={!enabled || busy || !input.trim()} title="Send" className="rounded-md bg-primary p-2 text-primary-foreground disabled:opacity-40">
+        <button type="submit" disabled={!enabled || busy || !input.trim()} title={tr("Send")} className="rounded-md bg-primary p-2 text-primary-foreground disabled:opacity-40">
           <Send className="size-4" />
         </button>
       </form>

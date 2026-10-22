@@ -1,6 +1,7 @@
 "use client";
 
 import { useFormStatus } from "react-dom";
+import { useT } from "@/components/i18n";
 
 export function Field({
   label,
@@ -38,15 +39,17 @@ export function Select({
 }
 
 export function FormError({ error }: { error?: string }) {
+  const tr = useT();
   if (!error) return null;
   return (
     <p role="alert" className="rounded-md bg-[rgba(239,68,68,0.08)] px-3 py-2 text-xs text-[#ef4444]">
-      {error}
+      {tr(error)}
     </p>
   );
 }
 
 export function SubmitButton({ children }: { children: React.ReactNode }) {
+  const tr = useT();
   const { pending } = useFormStatus();
   return (
     <button
@@ -54,7 +57,7 @@ export function SubmitButton({ children }: { children: React.ReactNode }) {
       disabled={pending}
       className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
     >
-      {pending ? "Saving…" : children}
+      {pending ? tr("Saving…") : children}
     </button>
   );
 }

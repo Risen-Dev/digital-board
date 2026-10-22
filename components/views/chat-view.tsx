@@ -7,6 +7,7 @@ import { AGENT_MENTION, cursorOf, mergeMessages } from "@/lib/chat";
 import type { Attachment, CanvasTag, ChatMessage, MemberPresence, Presence, Unread } from "@/lib/queries";
 import { MentionText, tagOptions, useMentionPicker } from "@/components/mentions";
 import { Avatar } from "../avatar";
+import { useT } from "@/components/i18n";
 
 // New messages are pushed (/api/chat/live); this slow poll only covers a dropped
 // stream or a message written on another server instance.
@@ -72,6 +73,7 @@ function Attachments({ files }: { files: Attachment[] }) {
 }
 
 export function ChatView({ meId, initialMembers, initialChannel = "all", tags, onTag }: { meId: string; initialMembers: MemberPresence[]; initialChannel?: string; tags: CanvasTag[]; onTag: (tag: CanvasTag) => void }) {
+  const tr = useT();
   const [members, setMembers] = useState(initialMembers);
   const [unread, setUnread] = useState<Unread[]>([]);
   const [active, setActive] = useState(initialChannel);
@@ -86,8 +88,8 @@ export function ChatView({ meId, initialMembers, initialChannel = "all", tags, o
     <div className="flex flex-1 overflow-hidden">
       <div className="flex w-56 shrink-0 flex-col border-r">
         <div className="border-b px-3 py-2.5">
-          <p className="text-xs font-semibold">{members.length} members</p>
-          <p className="text-[11px] text-muted-foreground">{onlineCount} online now</p>
+          <p className="text-xs font-semibold">{members.length} {tr("members")}</p>
+          <p className="text-[11px] text-muted-foreground">{onlineCount} {tr("online now")}</p>
         </div>
         <div className="flex-1 overflow-y-auto p-2">
           <button
@@ -97,7 +99,7 @@ export function ChatView({ meId, initialMembers, initialChannel = "all", tags, o
             }`}
           >
             <Hash className="size-3.5 shrink-0" />
-            Workspace
+            {tr("Workspace")}
             <UnreadBadge n={countFor("all")} />
           </button>
           {/* The private agent thread is a DM to yourself; every message there is answered. */}
@@ -108,12 +110,12 @@ export function ChatView({ meId, initialMembers, initialChannel = "all", tags, o
             }`}
           >
             <Sparkles className="size-3.5 shrink-0" />
-            Agent
+            {tr("Agent")}
             <UnreadBadge n={countFor(meId)} />
           </button>
 
           <p className="mb-1 mt-3 px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Direct messages
+            {tr("Direct messages")}
           </p>
           {others.map((m) => (
             <button
@@ -132,7 +134,7 @@ export function ChatView({ meId, initialMembers, initialChannel = "all", tags, o
             </button>
           ))}
           {others.length === 0 && (
-            <p className="px-2 text-[11px] text-muted-foreground">You&rsquo;re the only member so far.</p>
+            <p className="px-2 text-[11px] text-muted-foreground">{tr("You’re the only member so far.")}</p>
           )}
         </div>
       </div>
@@ -164,6 +166,7 @@ function Thread({
   tags: CanvasTag[];
   onTag: (tag: CanvasTag) => void;
 }) {
+  const tr = useT();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
   const mention = useMentionPicker(draft, setDraft, tagOptions(tags));
@@ -273,7 +276,7 @@ function Thread({
     } catch {
       setDraft(snapshot.draft);
       setFiles(snapshot.files);
-      setError("Could not send. Check your connection.");
+      setError(tr("Could not send. Check your connection."));
     } finally {
       setSending(false);
     }
@@ -303,8 +306,8 @@ function Thread({
         {agentThread ? (
           <>
             <Sparkles className="size-3.5 text-muted-foreground" />
-            <span className="text-sm font-medium">Agent</span>
-            <span className="text-[11px] text-muted-foreground">only you can see this thread</span>
+            <span className="text-sm font-medium">{tr("Agent")}</span>
+            <span className="text-[11px] text-muted-foreground">{tr("only you can see this thread")}</span>
           </>
         ) : member ? (
           <>
@@ -315,8 +318,8 @@ function Thread({
         ) : (
           <>
             <Hash className="size-3.5 text-muted-foreground" />
-            <span className="text-sm font-medium">Workspace</span>
-            <span className="text-[11px] text-muted-foreground">everyone can read this</span>
+            <span className="text-sm font-medium">{tr("Workspace")}</span>
+            <span className="text-[11px] text-muted-foreground">{tr("everyone can read this")}</span>
           </>
         )}
       </div>
@@ -324,7 +327,7 @@ function Thread({
       <div className="flex-1 overflow-y-auto px-4 py-3">
         {messages.length === 0 ? (
           <p className="mt-10 text-center text-sm text-muted-foreground">
-            {agentThread ? "Ask the agent about your boards. It can read them but not change them." : "No messages yet. Say something. Type @agent to ask the AI agent."}
+            {agentThread ? tr("Ask the agent about your boards. It can read them but not change them.") : tr("No messages yet. Say something. Type @agent to ask the AI agent.")}
           </p>
         ) : (
           <ul className="flex flex-col gap-3">
@@ -336,12 +339,12 @@ function Thread({
                   <div className={`flex max-w-[70%] flex-col ${mine ? "items-end" : ""}`}>
                     <div className="flex items-baseline gap-2">
                       <span className="text-xs font-medium">
-                        {m.agent ? "Agent" : mine ? "You" : m.author_name}
-                        {m.agent && !agentThread && <span className="font-normal text-muted-foreground"> · asked by {m.author_id === meId ? "you" : m.author_name}</span>}
+                        {m.agent ? tr("Agent") : mine ? tr("You") : m.author_name}
+                        {m.agent && !agentThread && <span className="font-normal text-muted-foreground"> {tr("· asked by")} {m.author_id === meId ? tr("you") : m.author_name}</span>}
                       </span>
                       <span className="text-[10px] text-muted-foreground">
                         {new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                        {m.edited_at && " · edited"}
+                        {m.edited_at && tr(" · edited")}
                       </span>
                       {editable(m) && editing !== m.id && (
                         <button
@@ -349,7 +352,7 @@ function Thread({
                             setEditing(m.id);
                             setEditDraft(m.body);
                           }}
-                          title="Edit message"
+                          title={tr("Edit message")}
                           className="text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100"
                         >
                           <Pencil className="size-3" />
@@ -403,7 +406,7 @@ function Thread({
         {waiting && (
           <div className="mt-3 flex items-center gap-2.5 text-xs text-muted-foreground">
             <AgentAvatar />
-            <span className="animate-pulse">Agent is thinking…</span>
+            <span className="animate-pulse">{tr("Agent is thinking…")}</span>
           </div>
         )}
         <div ref={bottom} />
@@ -427,7 +430,7 @@ function Thread({
             ))}
           </div>
         )}
-        {error && <p className="mb-2 text-[11px] text-[var(--chart-7)]">{error}</p>}
+        {error && <p className="mb-2 text-[11px] text-[var(--chart-7)]">{tr(error)}</p>}
 
         <div className="flex items-end gap-2">
           <input
@@ -442,7 +445,7 @@ function Thread({
           />
           <button
             onClick={() => picker.current?.click()}
-            title="Attach files"
+            title={tr("Attach files")}
             className="flex size-9 shrink-0 items-center justify-center rounded-md border text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
           >
             <Paperclip className="size-4" />
@@ -459,7 +462,7 @@ function Thread({
               }
             }}
             rows={1}
-            placeholder={agentThread ? "Ask the agent…" : member ? `Message ${member.name}… (@agent asks the AI)` : "Message the workspace… (@agent asks the AI)"}
+            placeholder={agentThread ? tr("Ask the agent…") : member ? tr("Message {name}… (@agent asks the AI)", { name: member.name }) : tr("Message the workspace… (@agent asks the AI)")}
             className="block max-h-32 min-h-9 w-full resize-y rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-ring"
           />
           </div>

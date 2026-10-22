@@ -2,16 +2,18 @@
 
 import { PRIORITY_CFG, type Task } from "@/lib/board";
 import { Assignees } from "../task-card";
+import { useT } from "@/components/i18n";
 
 export type MyTask = Task & { columnTitle: string; columnColor: string; projectName: string; done: boolean };
 
 const overdue = (d: string | null) => !!d && d < new Date().toISOString().slice(0, 10);
 
 export function MyTasksView({ tasks, onOpen }: { tasks: MyTask[]; onOpen: (id: string) => void }) {
+  const tr = useT();
   if (tasks.length === 0) {
     return (
       <div className="flex flex-1 items-center justify-center p-10 text-center text-sm text-muted-foreground">
-        Nothing is assigned to you.
+        {tr("Nothing is assigned to you.")}
       </div>
     );
   }
@@ -41,7 +43,7 @@ export function MyTasksView({ tasks, onOpen }: { tasks: MyTask[]; onOpen: (id: s
                   </span>
                 )}
                 <span style={{ color: p.color, background: p.bg }} className="rounded px-1.5 py-0.5 text-[10px] font-medium uppercase">
-                  {p.label}
+                  {tr(p.label)}
                 </span>
                 <Assignees task={t} />
               </button>

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ArrowLeft, ArrowRight, Check, CircleCheck, Trash2, X } from "lucide-react";
 import { PALETTE } from "@/lib/board";
+import { useT } from "@/components/i18n";
 
 const NEUTRAL = "var(--muted-foreground)";
 const SWATCHES = [NEUTRAL, ...PALETTE];
@@ -35,6 +36,7 @@ export function ColumnEditor({
   onToggleDone?: () => Promise<unknown>;
   onClose: () => void;
 }) {
+  const tr = useT();
   const [title, setTitle] = useState(initialTitle);
   const [color, setColor] = useState(initialColor);
   const [error, setError] = useState<string | null>(null);
@@ -66,7 +68,7 @@ export function ColumnEditor({
           if (e.key === "Enter") void submit();
           if (e.key === "Escape") onClose();
         }}
-        placeholder="Column name"
+        placeholder={tr("Column name")}
         className="mb-2 w-full rounded-md border bg-background px-2 py-1.5 text-xs outline-none focus:border-ring"
       />
 
@@ -90,15 +92,15 @@ export function ColumnEditor({
         <button
           onClick={() => void onToggleDone()}
           aria-pressed={done}
-          title="Cards here count as completed; repeating cards renew when they arrive"
+          title={tr("Cards here count as completed; repeating cards renew when they arrive")}
           className={`mb-3 flex w-full items-center gap-1.5 rounded-md border px-2 py-1.5 text-xs transition-colors hover:bg-secondary ${done ? "border-primary font-medium" : "text-muted-foreground"}`}
         >
           <CircleCheck className="size-3.5" />
-          {done ? "Done column" : "Mark as done column"}
+          {done ? tr("Done column") : tr("Mark as done column")}
         </button>
       )}
 
-      {error && <p className="mb-2 text-[11px] text-[var(--chart-7)]">{error}</p>}
+      {error && <p className="mb-2 text-[11px] text-[var(--chart-7)]">{tr(error)}</p>}
 
       <div className="flex items-center gap-1.5">
         <button
@@ -106,21 +108,21 @@ export function ColumnEditor({
           disabled={busy}
           className="rounded-md bg-primary px-2.5 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-50"
         >
-          {busy ? "Saving…" : submitLabel}
+          {busy ? tr("Saving…") : submitLabel}
         </button>
 
         {onMove && (
           <>
             <button
               onClick={() => void onMove(-1)}
-              title="Move left"
+              title={tr("Move left")}
               className="rounded-md border p-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
             >
               <ArrowLeft className="size-3.5" />
             </button>
             <button
               onClick={() => void onMove(1)}
-              title="Move right"
+              title={tr("Move right")}
               className="rounded-md border p-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
             >
               <ArrowRight className="size-3.5" />
@@ -135,7 +137,7 @@ export function ColumnEditor({
               if (res?.error) return setError(res.error);
               onClose();
             }}
-            title="Delete column"
+            title={tr("Delete column")}
             className="ml-auto rounded-md border p-1.5 text-muted-foreground transition-colors hover:bg-[rgba(239,68,68,0.08)] hover:text-[var(--chart-7)]"
           >
             <Trash2 className="size-3.5" />

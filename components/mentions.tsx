@@ -5,6 +5,7 @@ import { PenLine, Tag } from "lucide-react";
 
 import { loadCanvasSnapshot } from "@/lib/canvas/api";
 import type { CanvasTag } from "@/lib/queries";
+import { useT } from "@/components/i18n";
 
 export type MentionOption = { id: string; name: string; label: string; icon: ReactNode; hint?: string };
 
@@ -132,6 +133,7 @@ export function MentionText({ text, names, tags, onTag }: { text: string; names:
 
 /** A picture of one tagged group, drawn from its sheet's saved scene. */
 function TagPreview({ tag, onClick }: { tag: CanvasTag; onClick: () => void }) {
+  const tr = useT();
   const [src, setSrc] = useState<string | null>();
   useEffect(() => {
     let cancelled = false;
@@ -168,7 +170,7 @@ function TagPreview({ tag, onClick }: { tag: CanvasTag; onClick: () => void }) {
           // eslint-disable-next-line @next/next/no-img-element
           <img src={src} alt={`@${tag.tag}`} className="max-h-full max-w-full object-contain" />
         ) : (
-          <span className="text-[11px] text-muted-foreground">{src === null ? "Nothing drawn" : "Loading…"}</span>
+          <span className="text-[11px] text-muted-foreground">{src === null ? tr("Nothing drawn") : tr("Loading…")}</span>
         )}
       </span>
       <span className="flex items-center gap-1 border-t px-2 py-1 text-[11px] text-foreground">
@@ -181,6 +183,7 @@ function TagPreview({ tag, onClick }: { tag: CanvasTag; onClick: () => void }) {
 
 /** Previews of the canvas groups a text mentions; each opens its group on the canvas. */
 export function TagLinks({ text, tags, onTag }: { text: string; tags: CanvasTag[]; onTag: (tag: CanvasTag) => void }) {
+  const tr = useT();
   // One per name, the open project's first (callers order them that way).
   const found = tagsIn(text, tags).filter((t, i, all) => all.findIndex((o) => o.tag === t.tag) === i);
   if (!found.length) return null;
@@ -188,7 +191,7 @@ export function TagLinks({ text, tags, onTag }: { text: string; tags: CanvasTag[
     <div className="border-t py-4">
       <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
         <PenLine className="size-3.5" />
-        Canvas {found.length}
+        {tr("Canvas")} {found.length}
       </h3>
       <div className="flex flex-wrap gap-2">
         {found.map((t) => (

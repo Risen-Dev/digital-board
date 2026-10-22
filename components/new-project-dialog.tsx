@@ -8,8 +8,10 @@ import { parseImport, type Imported } from "@/lib/trello";
 import { FormError } from "./form-bits";
 import { Modal } from "./modal";
 import { TemplatePicker } from "./template-picker";
+import { useT } from "@/components/i18n";
 
 export function NewProjectDialog({ onClose }: { onClose: () => void }) {
+  const tr = useT();
   const router = useRouter();
   const [name, setName] = useState("");
   const [templateId, setTemplateId] = useState(TEMPLATES[0].id);
@@ -41,21 +43,21 @@ export function NewProjectDialog({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <Modal title="New project" onClose={onClose}>
+    <Modal title={tr("New project")} onClose={onClose}>
       <form onSubmit={create} className="flex flex-col gap-4">
         <label className="flex flex-col gap-1.5">
-          <span className="text-xs font-medium">Name</span>
+          <span className="text-xs font-medium">{tr("Name")}</span>
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
             required
             autoFocus
-            placeholder="Product v1"
+            placeholder={tr("Product v1")}
             className="rounded-md border bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-ring"
           />
         </label>
         <label className="flex flex-col gap-1.5">
-          <span className="text-xs font-medium">Import from Trello or CSV (optional)</span>
+          <span className="text-xs font-medium">{tr("Import from Trello or CSV (optional)")}</span>
           <input
             type="file"
             accept=".json,.csv,application/json,text/csv"
@@ -65,18 +67,18 @@ export function NewProjectDialog({ onClose }: { onClose: () => void }) {
           <span className="text-[11px] text-muted-foreground">
             {imported
               ? `${imported.cards.length} cards in ${imported.columns.length} columns. Members are matched by name.`
-              : "Trello: board menu → Print, export, and share → Export as JSON."}
+              : tr("Trello: board menu → Print, export, and share → Export as JSON.")}
           </span>
         </label>
         {!imported && (
           <>
             <div className="flex flex-col gap-2">
-              <span className="text-xs font-medium">Template</span>
+              <span className="text-xs font-medium">{tr("Template")}</span>
               <TemplatePicker value={templateId} onChange={setTemplateId} withExamples={withExamples} />
             </div>
             <label className="flex items-center gap-2 text-xs">
               <input type="checkbox" checked={withExamples} onChange={(e) => setWithExamples(e.target.checked)} className="accent-primary" />
-              Add example tasks and a canvas sheet
+              {tr("Add example tasks and a canvas sheet")}
             </label>
           </>
         )}
@@ -85,7 +87,7 @@ export function NewProjectDialog({ onClose }: { onClose: () => void }) {
           disabled={busy || !name.trim()}
           className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground disabled:opacity-40"
         >
-          {busy ? "Creating…" : imported ? "Import project" : "Create project"}
+          {busy ? tr("Creating…") : imported ? tr("Import project") : tr("Create project")}
         </button>
       </form>
     </Modal>

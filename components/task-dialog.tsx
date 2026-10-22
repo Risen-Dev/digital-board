@@ -12,6 +12,8 @@ import { TaskGithubLinks } from "./views/github-view";
 import { FormError, SubmitButton } from "./form-bits";
 import { MentionText, TagLinks, tagOptions, useMentionPicker } from "./mentions";
 import type { CanvasTag } from "@/lib/queries";
+import { useT } from "@/components/i18n";
+import { eventText } from "@/lib/i18n";
 
 type Props = {
   task: Task | null;
@@ -36,6 +38,7 @@ type Props = {
 };
 
 export function TaskDialog({ task, columns, members, mentionable, defaultColumnId, links, repo, tags, onTag, doneColumnId, onOpenTask, onClose }: Props) {
+  const tr = useT();
   const editing = task !== null;
   const [state, action] = useActionState(editing ? updateTask : createTask, null);
   const [history, setHistory] = useState<Entry[]>([]);
@@ -73,7 +76,7 @@ export function TaskDialog({ task, columns, members, mentionable, defaultColumnI
             </span>
           )}
           {task?.key && <span className="font-mono">{column ? "/ " : ""}{task.key}</span>}
-          {!editing && <span className="font-medium text-foreground">New task</span>}
+          {!editing && <span className="font-medium text-foreground">{tr("New task")}</span>}
           {task?.key && (
             <button
               type="button"
@@ -87,12 +90,12 @@ export function TaskDialog({ task, columns, members, mentionable, defaultColumnI
               className="ml-auto flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] transition-colors hover:bg-secondary hover:text-foreground"
             >
               {copied ? <Check className="size-3" /> : <GitBranch className="size-3" />}
-              {copied ? "Copied" : "Copy branch name"}
+              {copied ? tr("Copied") : tr("Copy branch name")}
             </button>
           )}
           <button
             onClick={onClose}
-            aria-label="Close"
+            aria-label={tr("Close")}
             className={`${task?.key ? "" : "ml-auto "}rounded p-1 transition-colors hover:bg-secondary hover:text-foreground`}
           >
             <X className="size-4" />
@@ -109,15 +112,15 @@ export function TaskDialog({ task, columns, members, mentionable, defaultColumnI
                 defaultValue={task?.title ?? ""}
                 autoFocus={!editing}
                 rows={1}
-                placeholder="Task name"
-                aria-label="Title"
+                placeholder={tr("Task name")}
+                aria-label={tr("Title")}
                 onKeyDown={(e) => e.key === "Enter" && e.preventDefault()}
                 className="field-sizing-content resize-none bg-transparent text-2xl font-semibold leading-tight outline-none placeholder:text-muted-foreground"
               />
 
               <div className="grid gap-x-8 gap-y-2.5 sm:grid-cols-2">
                 {!editing && (
-                  <Prop icon={CircleDot} label="Column">
+                  <Prop icon={CircleDot} label={tr("Column")}>
                     <select name="columnId" defaultValue={defaultColumnId ?? columns[0]?.id} className={bare}>
                       {columns.map((c) => (
                         <option key={c.id} value={c.id}>{c.title}</option>
@@ -125,28 +128,28 @@ export function TaskDialog({ task, columns, members, mentionable, defaultColumnI
                     </select>
                   </Prop>
                 )}
-                <Prop icon={Flag} label="Priority">
+                <Prop icon={Flag} label={tr("Priority")}>
                   <select name="priority" defaultValue={task?.priority ?? "medium"} className={bare}>
                     {PRIORITIES.map((p) => (
-                      <option key={p} value={p}>{PRIORITY_CFG[p].label}</option>
+                      <option key={p} value={p}>{tr(PRIORITY_CFG[p].label)}</option>
                     ))}
                   </select>
                 </Prop>
-                <Prop icon={CalendarDays} label="Due date">
+                <Prop icon={CalendarDays} label={tr("Due date")}>
                   <input type="date" name="dueDate" defaultValue={task?.dueDate ?? ""} className={bare} />
                 </Prop>
-                <Prop icon={Repeat} label="Repeat" title="Repeating cards get their next copy when moved to the done column.">
+                <Prop icon={Repeat} label={tr("Repeat")} title={tr("Repeating cards get their next copy when moved to the done column.")}>
                   <select name="repeat" defaultValue={task?.repeat ?? ""} className={bare}>
-                    <option value="">Never</option>
+                    <option value="">{tr("Never")}</option>
                     {REPEATS.map((r) => (
                       <option key={r} value={r}>{r[0].toUpperCase() + r.slice(1)}</option>
                     ))}
                   </select>
                 </Prop>
-                <Prop icon={Tag} label="Labels">
-                  <input name="label" defaultValue={task?.label ?? ""} placeholder="Design, QA" className={bare} />
+                <Prop icon={Tag} label={tr("Labels")}>
+                  <input name="label" defaultValue={task?.label ?? ""} placeholder={tr("Design, QA")} className={bare} />
                 </Prop>
-                <Prop icon={Users} label="Assignees" wide>
+                <Prop icon={Users} label={tr("Assignees")} wide>
                   <div className="flex flex-wrap gap-1.5">
                     {members.map((m) => (
                       <label key={m.id} className="flex cursor-pointer items-center gap-1.5 rounded-full border py-0.5 pl-0.5 pr-2.5 text-xs transition-colors has-[:checked]:border-primary has-[:checked]:bg-secondary">
@@ -162,7 +165,7 @@ export function TaskDialog({ task, columns, members, mentionable, defaultColumnI
               <div className="flex flex-col gap-2 border-t pt-5">
                 <label htmlFor="task-description" className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
                   <AlignLeft className="size-3.5" />
-                  Description
+                  {tr("Description")}
                 </label>
                 <div className="relative">
                   <textarea
@@ -171,7 +174,7 @@ export function TaskDialog({ task, columns, members, mentionable, defaultColumnI
                     {...describe.bind}
                     onKeyDown={(e) => describe.onKeyDown(e)}
                     rows={5}
-                    placeholder="Add a description. @tag links shapes on the canvas."
+                    placeholder={tr("Add a description. @tag links shapes on the canvas.")}
                     className="field-sizing-content min-h-28 w-full resize-none rounded-md border bg-background px-3 py-2 text-sm leading-relaxed outline-none transition-colors placeholder:text-muted-foreground focus:border-ring"
                   />
                   {describe.menu}
@@ -181,7 +184,7 @@ export function TaskDialog({ task, columns, members, mentionable, defaultColumnI
               <FormError error={state?.error} />
 
               <div className="flex items-center gap-2">
-                <SubmitButton>{editing ? "Save" : "Create task"}</SubmitButton>
+                <SubmitButton>{editing ? tr("Save") : tr("Create task")}</SubmitButton>
                 {editing && (
                   <button
                     type="button"
@@ -192,21 +195,21 @@ export function TaskDialog({ task, columns, members, mentionable, defaultColumnI
                     className="ml-auto flex items-center gap-1.5 rounded-md border px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
                   >
                     <Archive className="size-3.5" />
-                    Archive
+                    {tr("Archive")}
                   </button>
                 )}
                 {editing && (
                   <button
                     type="button"
                     onClick={async () => {
-                      if (!confirm(`Delete "${task.title}" and its history? Archive keeps it restorable.`)) return;
+                      if (!confirm(tr("Delete \"{name}\" and its history? Archive keeps it restorable.", { name: task.title }))) return;
                       await deleteTask(task.id);
                       onClose();
                     }}
                     className="flex items-center gap-1.5 rounded-md border px-3 py-2 text-xs text-[#ef4444] transition-colors hover:bg-[rgba(239,68,68,0.08)]"
                   >
                     <Trash2 className="size-3.5" />
-                    Delete
+                    {tr("Delete")}
                   </button>
                 )}
               </div>
@@ -234,7 +237,7 @@ export function TaskDialog({ task, columns, members, mentionable, defaultColumnI
               <div className="border-t py-4">
                 <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
                   <GitPullRequest className="size-3.5" />
-                  GitHub
+                  {tr("GitHub")}
                 </h3>
                 {repo && task?.key && (
                   <GithubActions
@@ -258,7 +261,7 @@ export function TaskDialog({ task, columns, members, mentionable, defaultColumnI
             <aside className="flex shrink-0 flex-col border-t bg-secondary/30 md:w-[380px] md:border-l md:border-t-0">
               <h3 className="flex shrink-0 items-center gap-1.5 border-b px-4 py-3 text-xs font-semibold">
                 <History className="size-3.5 text-muted-foreground" />
-                Comments &amp; activity
+                {tr("Comments & activity")}
               </h3>
               <ol ref={feed} className="flex max-h-80 flex-col gap-3 overflow-y-auto px-4 py-4 md:max-h-none md:flex-1">
                 {history.toReversed().map((e, i) =>
@@ -267,7 +270,7 @@ export function TaskDialog({ task, columns, members, mentionable, defaultColumnI
                       <CommentAvatar entry={e} members={members} />
                       <div className="min-w-0 flex-1">
                         <p className="text-xs">
-                          <span className="font-semibold">{e.actor ?? "Someone"}</span>
+                          <span className="font-semibold">{e.actor ?? tr("Someone")}</span>
                           <span className="ml-1.5 text-[11px] text-muted-foreground">{e.atLabel}</span>
                         </p>
                         <p className="mt-0.5 whitespace-pre-wrap text-xs leading-snug">
@@ -277,11 +280,11 @@ export function TaskDialog({ task, columns, members, mentionable, defaultColumnI
                     </li>
                   ) : (
                     <li key={i} className="px-1 text-[11px] text-muted-foreground">
-                      <span className="text-foreground/80">{e.actor ?? "Someone"}</span> · {e.text} · {e.atLabel}
+                      <span className="text-foreground/80">{e.actor ?? tr("Someone")}</span> · {eventText(e.text, tr)} · {e.atLabel}
                     </li>
                   ),
                 )}
-                {history.length === 0 && <li className="m-auto text-xs text-muted-foreground">No comments yet.</li>}
+                {history.length === 0 && <li className="m-auto text-xs text-muted-foreground">{tr("No comments yet.")}</li>}
               </ol>
               <div className="shrink-0 border-t p-3">
                 <CommentBox taskId={task.id} members={mentionable} tags={tags} onPosted={loadHistory} />
@@ -311,6 +314,7 @@ function Prop({ icon: Icon, label, title, wide, children }: { icon: LucideIcon; 
 
 /** Images inside the card; the first is its cover on the board ("Make cover" moves one there). Saves on pick, like the checklist. */
 function Images({ task }: { task: Task }) {
+  const tr = useT();
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
@@ -331,7 +335,7 @@ function Images({ task }: { task: Task }) {
   }
 
   async function remove(image: TaskImage) {
-    if (!confirm(`Delete "${image.name}"?`)) return;
+    if (!confirm(tr("Delete \"{name}\"?", { name: image.name }))) return;
     const res = await fetch(`/api/tasks/${task.id}/images/${image.id}`, { method: "DELETE" });
     if (!res.ok) return setError(await res.text());
     setImages((all) => all.filter((i) => i.id !== image.id));
@@ -349,7 +353,7 @@ function Images({ task }: { task: Task }) {
     <div className="border-t py-4">
       <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
         <ImageIcon className="size-3.5" />
-        Images {images.length > 0 && images.length}
+        {tr("Images")} {images.length > 0 && images.length}
       </h3>
       {images.length > 0 && (
         <div className="mb-2 grid grid-cols-3 gap-2">
@@ -360,14 +364,14 @@ function Images({ task }: { task: Task }) {
                 <img src={imageUrl(task.id, image.id)} alt={image.name} className="aspect-video w-full rounded-md border bg-secondary object-cover" />
               </a>
               {i === 0 ? (
-                <span className="absolute left-1 top-1 rounded bg-black/60 px-1 text-[10px] text-white">Cover</span>
+                <span className="absolute left-1 top-1 rounded bg-black/60 px-1 text-[10px] text-white">{tr("Cover")}</span>
               ) : (
                 <button
                   type="button"
                   onClick={() => void makeCover(image)}
                   className="absolute left-1 top-1 rounded bg-black/60 px-1 text-[10px] text-white opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
                 >
-                  Make cover
+                  {tr("Make cover")}
                 </button>
               )}
               <button
@@ -383,7 +387,7 @@ function Images({ task }: { task: Task }) {
         </div>
       )}
       <label className={`${btn} w-fit cursor-pointer ${busy ? "pointer-events-none opacity-50" : ""}`}>
-        <ImagePlus className="size-3" /> {busy ? "Uploading…" : "Add images"}
+        <ImagePlus className="size-3" /> {busy ? tr("Uploading…") : tr("Add images")}
         <input
           type="file"
           multiple
@@ -396,7 +400,7 @@ function Images({ task }: { task: Task }) {
           }}
         />
       </label>
-      {error && <p className="mt-1.5 text-[11px] text-[#ef4444]">{error}</p>}
+      {error && <p className="mt-1.5 text-[11px] text-[#ef4444]">{tr(error)}</p>}
     </div>
   );
 }
@@ -408,6 +412,7 @@ function Images({ task }: { task: Task }) {
 function Dependencies({ task, columns, doneColumnId, onOpen, onChange }: {
   task: Task; columns: Column[]; doneColumnId: string | null; onOpen: (task: Task) => void; onChange: () => void;
 }) {
+  const tr = useT();
   const [ids, setIds] = useState(task.blockedBy.map((b) => b.id));
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -436,7 +441,7 @@ function Dependencies({ task, columns, doneColumnId, onOpen, onChange }: {
           <span className="shrink-0 font-mono text-muted-foreground">{t.key}</span>
           <span className={`truncate ${done ? "text-muted-foreground line-through" : ""}`}>{t.title}</span>
         </button>
-        {done && <Check className="size-3.5 shrink-0 text-[var(--chart-2)]" aria-label="Done" />}
+        {done && <Check className="size-3.5 shrink-0 text-[var(--chart-2)]" aria-label={tr("Done")} />}
         {remove && (
           <button
             type="button"
@@ -455,24 +460,24 @@ function Dependencies({ task, columns, doneColumnId, onOpen, onChange }: {
     <div className="border-t py-4">
       <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
         <Ban className="size-3.5" />
-        Dependencies
+        {tr("Dependencies")}
       </h3>
       {waitingOn.length > 0 && (
         <>
-          <p className="mb-1 text-[11px] text-muted-foreground">Waiting on</p>
+          <p className="mb-1 text-[11px] text-muted-foreground">{tr("Waiting on")}</p>
           <ul className="mb-3 flex flex-col gap-1">{waitingOn.map((t) => row(t, () => void toggle(t, false)))}</ul>
         </>
       )}
       {blocking.length > 0 && (
         <>
-          <p className="mb-1 text-[11px] text-muted-foreground">Blocking</p>
+          <p className="mb-1 text-[11px] text-muted-foreground">{tr("Blocking")}</p>
           <ul className="mb-3 flex flex-col gap-1">{blocking.map((t) => row(t))}</ul>
         </>
       )}
       <input
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        placeholder="Blocked by… type a key or title"
+        placeholder={tr("Blocked by… type a key or title")}
         className="w-full rounded-md border bg-background px-2.5 py-1.5 text-xs outline-none transition-colors focus:border-ring"
       />
       {matches.length > 0 && (
@@ -491,13 +496,14 @@ function Dependencies({ task, columns, doneColumnId, onOpen, onChange }: {
           ))}
         </ul>
       )}
-      {error && <p className="mt-1 text-[11px] text-[#ef4444]">{error}</p>}
+      {error && <p className="mt-1 text-[11px] text-[#ef4444]">{tr(error)}</p>}
     </div>
   );
 }
 
 /** Ticks save at once; there is no Save button for the checklist. */
 function Checklist({ taskId, initial }: { taskId: string; initial: CheckItem[] }) {
+  const tr = useT();
   const [items, setItems] = useState(initial);
   const [draft, setDraft] = useState("");
   const save = (next: CheckItem[]) => {
@@ -509,7 +515,7 @@ function Checklist({ taskId, initial }: { taskId: string; initial: CheckItem[] }
     <div className="border-t py-4">
       <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
         <ListChecks className="size-3.5" />
-        Checklist {items.length > 0 && `${done}/${items.length}`}
+        {tr("Checklist")} {items.length > 0 && `${done}/${items.length}`}
       </h3>
       <ul className="flex flex-col gap-1">
         {items.map((item, i) => (
@@ -543,7 +549,7 @@ function Checklist({ taskId, initial }: { taskId: string; initial: CheckItem[] }
         <input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder="Add an item and press Enter"
+          placeholder={tr("Add an item and press Enter")}
           className="w-full rounded-md border bg-background px-2.5 py-1.5 text-xs outline-none transition-colors focus:border-ring"
         />
       </form>
@@ -553,13 +559,14 @@ function Checklist({ taskId, initial }: { taskId: string; initial: CheckItem[] }
 
 /** "@" at the caret opens a member and canvas-tag picker; the agent is always the first choice. */
 function CommentBox({ taskId, members, tags, onPosted }: { taskId: string; members: Member[]; tags: CanvasTag[]; onPosted: () => void }) {
+  const tr = useT();
   const [body, setBody] = useState("");
   const picker = useMentionPicker(body, setBody, [
     {
       id: "agent",
       name: "agent",
-      label: "AI agent",
-      hint: "Ask about this card",
+      label: tr("AI agent"),
+      hint: tr("Ask about this card"),
       icon: (
         <span className="flex size-5 items-center justify-center rounded-full bg-secondary text-[var(--chart-1)]">
           <Sparkles className="size-3" />
@@ -596,7 +603,7 @@ function CommentBox({ taskId, members, tags, onPosted }: { taskId: string; membe
           if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void post();
         }}
         rows={2}
-        placeholder="Write a comment. @Name mentions a member or a canvas tag, @agent asks the AI."
+        placeholder={tr("Write a comment. @Name mentions a member or a canvas tag, @agent asks the AI.")}
         className="resize-y rounded-md border bg-background px-3 py-2 text-xs outline-none transition-colors focus:border-ring"
       />
       <div className="flex items-center gap-2">
@@ -606,10 +613,10 @@ function CommentBox({ taskId, members, tags, onPosted }: { taskId: string; membe
           disabled={!body.trim() || busy}
           className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
         >
-          Comment
+          {tr("Comment")}
         </button>
-        <span className="text-[11px] text-muted-foreground">{thinking ? "AI agent is thinking…" : "Ctrl/⌘ + Enter"}</span>
-        {error && <span className="text-[11px] text-[#ef4444]">{error}</span>}
+        <span className="text-[11px] text-muted-foreground">{thinking ? tr("AI agent is thinking…") : tr("Ctrl/⌘ + Enter")}</span>
+        {error && <span className="text-[11px] text-[#ef4444]">{tr(error)}</span>}
       </div>
     </div>
   );
@@ -629,6 +636,7 @@ function CommentAvatar({ entry, members }: { entry: Entry; members: Member[] }) 
 
 /** Create a GitHub issue from the card, or open GitHub's new-PR page for its branch. */
 function GithubActions({ taskId, repo, task, closes, onDone }: { taskId: string; repo: string; task: Task; closes: string[]; onDone: () => void }) {
+  const tr = useT();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const btn = "flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-50";
@@ -652,7 +660,7 @@ function GithubActions({ taskId, repo, task, closes, onDone }: { taskId: string;
     <>
       <div className="flex flex-wrap gap-2">
         <button type="button" disabled={busy} onClick={() => void issue()} className={btn}>
-          <CircleDot className="size-3" /> {busy ? "Creating issue…" : "Create issue"}
+          <CircleDot className="size-3" /> {busy ? tr("Creating issue…") : tr("Create issue")}
         </button>
         <a
           href={pullRequestUrlOf(repo, task, closes)}
@@ -661,10 +669,10 @@ function GithubActions({ taskId, repo, task, closes, onDone }: { taskId: string;
           title={`Push ${branchNameOf(task)} first; GitHub opens a pull request from it into the default branch.${closes.length ? ` Merging it closes ${closes.join(", ")}.` : ""}`}
           className={btn}
         >
-          <GitPullRequest className="size-3" /> Open pull request
+          <GitPullRequest className="size-3" /> {tr("Open pull request")}
         </a>
       </div>
-      {error && <p className="mt-1.5 text-[11px] text-[#ef4444]">{error}</p>}
+      {error && <p className="mt-1.5 text-[11px] text-[#ef4444]">{tr(error)}</p>}
     </>
   );
 }

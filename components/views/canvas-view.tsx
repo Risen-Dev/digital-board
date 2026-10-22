@@ -41,6 +41,7 @@ import type { ExcalidrawElementSkeleton } from "@excalidraw/excalidraw/data/tran
 import { layoutFlow, parseFlow, type Flow } from "@/lib/canvas/flow";
 import { CanvasAgent } from "@/components/canvas-agent";
 import { registerDrawer } from "@/hooks/use-agent-session";
+import { useT } from "@/components/i18n";
 
 /**
  * Excalidraw is browser-only.
@@ -55,13 +56,42 @@ const Excalidraw = dynamic(
   {
     ssr: false,
 
-    loading: () => (
-      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-        Loading canvas…
-      </div>
-    ),
+    loading: () => <CanvasLoading />,
   },
 );
+
+function CanvasLoading() {
+  const tr = useT();
+  return (
+    <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+      {tr("Loading canvas…")}
+    </div>
+  );
+}
+
+/** The boundary is a class (error boundaries must be); its fallback is a component so it can use hooks. */
+function CanvasFailed() {
+  const tr = useT();
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-3 p-10 text-center">
+      <p className="text-sm font-medium">
+        {tr("The canvas could not load")}
+      </p>
+
+      <p className="max-w-sm text-xs text-muted-foreground">
+        {tr("This usually means the app was updated while this tab was open. Your drawing is safe — reload to pick up the new version.")}
+      </p>
+
+      <button
+        type="button"
+        onClick={() => window.location.reload()}
+        className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90"
+      >
+        {tr("Reload")}
+      </button>
+    </div>
+  );
+}
 
 class CanvasBoundary extends Component<
   {
@@ -86,27 +116,7 @@ class CanvasBoundary extends Component<
       return this.props.children;
     }
 
-    return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 p-10 text-center">
-        <p className="text-sm font-medium">
-          The canvas could not load
-        </p>
-
-        <p className="max-w-sm text-xs text-muted-foreground">
-          This usually means the app was updated while this tab
-          was open. Your drawing is safe — reload to pick up the
-          new version.
-        </p>
-
-        <button
-          type="button"
-          onClick={() => window.location.reload()}
-          className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90"
-        >
-          Reload
-        </button>
-      </div>
-    );
+    return <CanvasFailed />;
   }
 }
 
@@ -226,6 +236,7 @@ export function CanvasView({
   onChanged,
   focus,
 }: CanvasViewProps) {
+  const tr = useT();
   const [agentOpen, setAgentOpen] = useState(false);
   const isDark = useSyncExternalStore(
     subscribeTheme,
@@ -437,7 +448,7 @@ export function CanvasView({
     name: string,
   ) {
     const confirmed = window.confirm(
-      `Delete sheet "${name}"? Its drawing goes with it.`,
+      tr("Delete sheet \"{name}\"? Its drawing goes with it.", { name }),
     );
 
     if (!confirmed) {
@@ -509,7 +520,7 @@ export function CanvasView({
 
                   <button
                     type="submit"
-                    title="Save name"
+                    title={tr("Save name")}
                     className="text-muted-foreground hover:text-foreground"
                   >
                     <Check className="size-3" />
@@ -534,7 +545,7 @@ export function CanvasView({
                         onClick={() =>
                           setRenaming(sheet.id)
                         }
-                        title="Rename"
+                        title={tr("Rename")}
                         className="text-muted-foreground hover:text-foreground"
                       >
                         <Pencil className="size-3" />
@@ -548,7 +559,7 @@ export function CanvasView({
                             sheet.name,
                           );
                         }}
-                        title="Delete sheet"
+                        title={tr("Delete sheet")}
                         className="text-muted-foreground hover:text-[var(--chart-7)]"
                       >
                         <Trash2 className="size-3" />
@@ -570,18 +581,18 @@ export function CanvasView({
         >
           <Plus className="size-3" />
 
-          Sheet
+          {tr("Sheet")}
         </button>}
 
         {!readOnly && activeId && (
           <button
             type="button"
             onClick={() => void tagSelection()}
-            title="Group and name the selected shapes so cards and chat can mention them as @name"
+            title={tr("Group and name the selected shapes so cards and chat can mention them as @name")}
             className="ml-auto flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
           >
             <Tag className="size-3" />
-            Tag
+            {tr("Tag")}
           </button>
         )}
 
@@ -595,21 +606,21 @@ export function CanvasView({
             ].join(" ")}
           >
             <Sparkles className="size-3" />
-            Agent
+            {tr("Agent")}
           </button>
         )}
 
         <span className={`${!readOnly && activeId ? "" : "ml-auto "}shrink-0 pl-3 text-[11px] text-muted-foreground`}>
           {status === "saving" ? (
-            "Saving…"
+            tr("Saving…")
           ) : status === "error" ? (
             <span className="text-[var(--chart-7)]">
-              Save failed — retrying on next change
+              {tr("Save failed — retrying on next change")}
             </span>
           ) : readOnly && activeId ? (
-            "View only"
+            tr("View only")
           ) : activeId ? (
-            "Saved"
+            tr("Saved")
           ) : null}
         </span>
       </div>
@@ -641,7 +652,7 @@ export function CanvasView({
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
             <p className="text-sm text-muted-foreground">
-              No sheets in this project yet.
+              {tr("No sheets in this project yet.")}
             </p>
 
             {!readOnly && <button
@@ -653,7 +664,7 @@ export function CanvasView({
             >
               <Plus className="size-3" />
 
-              Create the first sheet
+              {tr("Create the first sheet")}
             </button>}
           </div>
         )}

@@ -16,6 +16,7 @@ import { EditableTitle } from "./editable-title";
 import { Modal } from "./modal";
 import { NewProjectDialog } from "./new-project-dialog";
 import { REASONING_OPTIONS } from "./canvas-agent";
+import { LanguageSelect, useT } from "@/components/i18n";
 
 const ago = (iso: string | null) => {
   if (!iso) return "never signed in";
@@ -78,6 +79,7 @@ export function MembersPanel({
   activeProjectId: string | null;
   ai: AiSettings | null;
 }) {
+  const tr = useT();
   const [tab, setTab] = useState<Tab>("general");
   const tabs = TABS.filter((t) => isAdmin || !t.adminOnly);
   const me = presence.find((m) => m.id === memberId);
@@ -85,7 +87,7 @@ export function MembersPanel({
   return (
     <main className="flex min-h-0 flex-1 flex-col md:flex-row">
       {/* Same divider as the chat's conversation list: border-r on desktop, border-b on phones. */}
-      <nav aria-label="Settings" className="flex shrink-0 gap-1 overflow-x-auto border-b p-3 md:w-56 md:flex-col md:border-r md:border-b-0">
+      <nav aria-label={tr("Settings")} className="flex shrink-0 gap-1 overflow-x-auto border-b p-3 md:w-56 md:flex-col md:border-r md:border-b-0">
         {tabs.map(({ id, label, Icon }) => (
           <button
             key={id}
@@ -96,7 +98,7 @@ export function MembersPanel({
             }`}
           >
             <Icon className="size-4" />
-            {label}
+            {tr(label)}
           </button>
         ))}
       </nav>
@@ -113,16 +115,16 @@ export function MembersPanel({
           )}
           {tab === "ai" && isAdmin && (
             <>
-              <TabHeader title="AI agent" hint="Powers the Agent chat on the canvas. The API key is never shown again after saving." />
+              <TabHeader title={tr("AI agent")} hint={tr("Powers the Agent chat on the canvas. The API key is never shown again after saving.")} />
               <AiSettingsForm ai={ai} />
             </>
           )}
           {tab === "account" && (
             <>
-              <TabHeader title="Account" hint={me ? `${me.name} · ${me.email}` : undefined} />
-              <h3 className="mb-1 text-sm font-medium">Password</h3>
+              <TabHeader title={tr("Account")} hint={me ? `${me.name} · ${me.email}` : undefined} />
+              <h3 className="mb-1 text-sm font-medium">{tr("Password")}</h3>
               <p className="mb-3 text-xs text-muted-foreground">
-                Changing it signs out your other devices. There is no email reset; an admin can set a new one for you.
+                {tr("Changing it signs out your other devices. There is no email reset; an admin can set a new one for you.")}
               </p>
               <ChangePassword />
             </>
@@ -134,11 +136,12 @@ export function MembersPanel({
 }
 
 function GeneralTab({ workspace, isAdmin }: { workspace: string; isAdmin: boolean }) {
+  const tr = useT();
   const router = useRouter();
   return (
     <>
-      <TabHeader title="General" />
-      <label className="mb-1.5 block text-xs font-medium">Workspace name</label>
+      <TabHeader title={tr("General")} />
+      <label className="mb-1.5 block text-xs font-medium">{tr("Workspace name")}</label>
       {isAdmin ? (
         <EditableTitle
           value={workspace}
@@ -149,15 +152,18 @@ function GeneralTab({ workspace, isAdmin }: { workspace: string; isAdmin: boolea
       ) : (
         <p className="rounded-lg border bg-card px-3 py-2 text-sm font-medium">{workspace}</p>
       )}
-      {isAdmin && <p className="mt-1.5 text-[11px] text-muted-foreground">Click the name to rename it.</p>}
+      {isAdmin && <p className="mt-1.5 text-[11px] text-muted-foreground">{tr("Click the name to rename it.")}</p>}
+      <label className="mb-1.5 mt-6 block text-xs font-medium">{tr("Language")}</label>
+      <LanguageSelect />
+      <p className="mt-1.5 text-[11px] text-muted-foreground">{tr("Only for you, on this browser.")}</p>
       {isAdmin && (
         <>
-          <label className="mb-1.5 mt-6 block text-xs font-medium">Backup</label>
+          <label className="mb-1.5 mt-6 block text-xs font-medium">{tr("Backup")}</label>
           <a href="/api/export" download className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs hover:bg-secondary">
-            <Download className="size-3.5" /> Export workspace (JSON)
+            <Download className="size-3.5" /> {tr("Export workspace (JSON)")}
           </a>
           <p className="mt-1.5 text-[11px] text-muted-foreground">
-            Every project, card, comment, image, canvas, meeting and channel message. Passwords, tokens, API keys and direct messages are left out.
+            {tr("Every project, card, comment, image, canvas, meeting and channel message. Passwords, tokens, API keys and direct messages are left out.")}
           </p>
         </>
       )}
@@ -171,15 +177,16 @@ function MembersTab({ presence, isAdmin, projects, assignments }: {
   projects: Project[];
   assignments: ProjectMember[];
 }) {
+  const tr = useT();
   const [inviting, setInviting] = useState(false);
   const online = presence.filter((m) => m.presence === "online").length;
 
   return (
     <>
       <TabHeader
-        title="Members"
-        hint={`${presence.length} in this workspace · ${online} online now`}
-        action={isAdmin && <PrimaryButton onClick={() => setInviting(true)}><Plus className="size-3.5" /> Add member</PrimaryButton>}
+        title={tr("Members")}
+        hint={tr("{n} in this workspace · {online} online now", { n: presence.length, online })}
+        action={isAdmin && <PrimaryButton onClick={() => setInviting(true)}><Plus className="size-3.5" /> {tr("Add member")}</PrimaryButton>}
       />
       <ul className={list}>
         {presence.map((m) => {
@@ -194,15 +201,15 @@ function MembersTab({ presence, isAdmin, projects, assignments }: {
                 <p className="truncate text-sm">
                   {m.name}
                   {m.is_admin === 1 && (
-                    <span className="ml-1.5 rounded-full border bg-secondary px-1.5 py-0.5 text-[10px] text-muted-foreground">admin</span>
+                    <span className="ml-1.5 rounded-full border bg-secondary px-1.5 py-0.5 text-[10px] text-muted-foreground">{tr("admin")}</span>
                   )}
                 </p>
                 <p className="truncate text-[11px] text-muted-foreground">
-                  {m.email} · {m.is_admin === 1 ? "all projects" : `${count} project${count === 1 ? "" : "s"}`}
+                  {m.email} · {m.is_admin === 1 ? tr("all projects") : tr(count === 1 ? "{n} project" : "{n} projects", { n: count })}
                 </p>
               </div>
               <p className="hidden shrink-0 text-right text-[11px] text-muted-foreground sm:block">
-                {m.presence === "online" ? "online" : ago(m.lastSeen)}
+                {m.presence === "online" ? tr("online") : ago(m.lastSeen)}
               </p>
               {isAdmin && <SetPassword userId={m.id} name={m.name} />}
             </li>
@@ -216,25 +223,26 @@ function MembersTab({ presence, isAdmin, projects, assignments }: {
 
 /** New member plus their project access in one go; unassigned means they see no project. */
 function InviteDialog({ projects, onClose }: { projects: Project[]; onClose: () => void }) {
+  const tr = useT();
   const [state, action] = useActionState(inviteMember, null);
   const close = useEffectEvent(onClose);
   useEffect(() => { if (state?.ok) close(); }, [state]);
 
   return (
-    <Modal title="Add member" onClose={onClose}>
+    <Modal title={tr("Add member")} onClose={onClose}>
       <form action={action} className="flex flex-col gap-4">
-        <Field label="Name" name="name" required autoFocus />
-        <Field label="Email" name="email" type="email" required />
-        <Field label="Temporary password" name="password" type="password" required minLength={8} hint="Share it with them; they can change it under Account." />
+        <Field label={tr("Name")} name="name" required autoFocus />
+        <Field label={tr("Email")} name="email" type="email" required />
+        <Field label={tr("Temporary password")} name="password" type="password" required minLength={8} hint={tr("Share it with them; they can change it under Account.")} />
         {projects.length > 0 && (
           <div className="flex flex-col gap-1.5">
-            <span className="text-xs font-medium">Project access</span>
+            <span className="text-xs font-medium">{tr("Project access")}</span>
             <ul className={list}>
               {projects.map((p) => (
                 <li key={p.id} className="flex items-center gap-2 px-3 py-2">
                   <span className="min-w-0 flex-1 truncate text-sm">{p.name}</span>
                   <select name={`access:${p.id}`} defaultValue="" aria-label={`Access to ${p.name}`} className={smallSelect}>
-                    <option value="">No access</option>
+                    <option value="">{tr("No access")}</option>
                     {ROLES.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
                   </select>
                 </li>
@@ -243,7 +251,7 @@ function InviteDialog({ projects, onClose }: { projects: Project[]; onClose: () 
           </div>
         )}
         <FormError error={state?.error} />
-        <SubmitButton>Add member</SubmitButton>
+        <SubmitButton>{tr("Add member")}</SubmitButton>
       </form>
     </Modal>
   );
@@ -257,6 +265,7 @@ function ProjectsTab({ memberId, presence, isAdmin, projects, assignments, activ
   assignments: ProjectMember[];
   activeProjectId: string | null;
 }) {
+  const tr = useT();
   const [creating, setCreating] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   const open = projects.find((p) => p.id === openId);
@@ -273,12 +282,12 @@ function ProjectsTab({ memberId, presence, isAdmin, projects, assignments, activ
   return (
     <>
       <TabHeader
-        title="Projects"
-        hint={isAdmin ? "Open a project to manage who can see and edit it." : "Projects you have access to."}
-        action={isAdmin && <PrimaryButton onClick={() => setCreating(true)}><FolderPlus className="size-3.5" /> New project</PrimaryButton>}
+        title={tr("Projects")}
+        hint={isAdmin ? tr("Open a project to manage who can see and edit it.") : tr("Projects you have access to.")}
+        action={isAdmin && <PrimaryButton onClick={() => setCreating(true)}><FolderPlus className="size-3.5" /> {tr("New project")}</PrimaryButton>}
       />
       {projects.length === 0 ? (
-        <p className="rounded-lg border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">No projects yet.</p>
+        <p className="rounded-lg border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">{tr("No projects yet.")}</p>
       ) : (
         <ul className={list}>
           {projects.map((p) => {
@@ -291,7 +300,7 @@ function ProjectsTab({ memberId, presence, isAdmin, projects, assignments, activ
                     style={{ background: p.id === activeProjectId ? "var(--chart-1)" : "var(--muted-foreground)" }}
                   />
                   <span className="min-w-0 flex-1 truncate text-sm">{p.name}</span>
-                  <span className="shrink-0 text-[11px] text-muted-foreground">{count} member{count === 1 ? "" : "s"}</span>
+                  <span className="shrink-0 text-[11px] text-muted-foreground">{tr(count === 1 ? "{n} member" : "{n} members", { n: count })}</span>
                   <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
                 </button>
               </li>
@@ -313,6 +322,7 @@ function ProjectDetail({ project, memberId, presence, isAdmin, assignments, onBa
   assignments: ProjectMember[];
   onBack: () => void;
 }) {
+  const tr = useT();
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState("");
@@ -333,7 +343,7 @@ function ProjectDetail({ project, memberId, presence, isAdmin, assignments, onBa
   }
 
   async function remove() {
-    if (!confirm(`Delete "${project.name}"? Its columns, tasks, history and canvas sheets are deleted with it.`)) return;
+    if (!confirm(tr("Delete \"{name}\"? Its columns, tasks, history and canvas sheets are deleted with it.", { name: project.name }))) return;
     const res = await deleteProject(project.id);
     if (res?.error) return setError(res.error);
     router.push("/board");
@@ -343,7 +353,7 @@ function ProjectDetail({ project, memberId, presence, isAdmin, assignments, onBa
   return (
     <>
       <button onClick={onBack} className="mb-3 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
-        <ChevronLeft className="size-3.5" /> Projects
+        <ChevronLeft className="size-3.5" /> {tr("Projects")}
       </button>
       {canRename ? (
         <EditableTitle
@@ -358,9 +368,9 @@ function ProjectDetail({ project, memberId, presence, isAdmin, assignments, onBa
 
       <div className="mb-6 flex items-center gap-3">
         <div className="min-w-0 flex-1">
-          <h3 className="text-sm font-medium">Task key</h3>
+          <h3 className="text-sm font-medium">{tr("Task key")}</h3>
           <p className="text-xs text-muted-foreground">
-            Cards are numbered {project.key}-1, {project.key}-2… Put the key in a branch, PR title or commit to link it to the card.
+            {tr("Cards are numbered {key}-1, {key}-2… Put the key in a branch, PR title or commit to link it to the card.", { key: project.key })}
           </p>
         </div>
         {canRename ? (
@@ -375,10 +385,10 @@ function ProjectDetail({ project, memberId, presence, isAdmin, assignments, onBa
         )}
       </div>
 
-      <h3 className="mb-1 text-sm font-medium">Members</h3>
-      <p className="mb-3 text-xs text-muted-foreground">View can only look · Edit can change tasks and canvas · Admin can also rename it and manage columns. Workspace admins can open every project.</p>
+      <h3 className="mb-1 text-sm font-medium">{tr("Members")}</h3>
+      <p className="mb-3 text-xs text-muted-foreground">{tr("View can only look · Edit can change tasks and canvas · Admin can also rename it and manage columns. Workspace admins can open every project.")}</p>
       {assigned.length === 0 ? (
-        <p className="mb-3 rounded-lg border border-dashed px-3 py-4 text-center text-xs text-muted-foreground">Only workspace admins can see this project.</p>
+        <p className="mb-3 rounded-lg border border-dashed px-3 py-4 text-center text-xs text-muted-foreground">{tr("Only workspace admins can see this project.")}</p>
       ) : (
         <ul className={`${list} mb-3`}>
           {assigned.map(({ member, role }) => (
@@ -404,11 +414,11 @@ function ProjectDetail({ project, memberId, presence, isAdmin, assignments, onBa
 
       {isAdmin && unassigned.length > 0 && (
         <div className="flex gap-2">
-          <select value={adding} onChange={(e) => setAdding(e.target.value)} aria-label="Member to add" className={`${smallSelect} min-w-0 flex-1 py-1.5`}>
-            <option value="">Add a member…</option>
+          <select value={adding} onChange={(e) => setAdding(e.target.value)} aria-label={tr("Member to add")} className={`${smallSelect} min-w-0 flex-1 py-1.5`}>
+            <option value="">{tr("Add a member…")}</option>
             {unassigned.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
           </select>
-          <select value={addRole} onChange={(e) => setAddRole(e.target.value as Role)} aria-label="Role" className={`${smallSelect} py-1.5`}>
+          <select value={addRole} onChange={(e) => setAddRole(e.target.value as Role)} aria-label={tr("Role")} className={`${smallSelect} py-1.5`}>
             {ROLES.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
           </select>
           <button
@@ -416,11 +426,11 @@ function ProjectDetail({ project, memberId, presence, isAdmin, assignments, onBa
             onClick={() => { void setRole(adding, addRole); setAdding(""); }}
             className="rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground disabled:opacity-40"
           >
-            Add
+            {tr("Add")}
           </button>
         </div>
       )}
-      {error && <p className="mt-2 text-xs text-[var(--chart-7)]">{error}</p>}
+      {error && <p className="mt-2 text-xs text-[var(--chart-7)]">{tr(error)}</p>}
 
       {canRename && <ImportCards key={`import-${project.id}`} project={project} />}
       {canRename && <GithubSettings project={project} />}
@@ -430,11 +440,11 @@ function ProjectDetail({ project, memberId, presence, isAdmin, assignments, onBa
       {isAdmin && (
         <div className="mt-8 flex items-center gap-3 rounded-lg border border-[rgba(239,68,68,0.3)] px-3 py-2.5">
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium">Delete project</p>
-            <p className="text-[11px] text-muted-foreground">Removes its columns, tasks, history and canvas sheets.</p>
+            <p className="text-sm font-medium">{tr("Delete project")}</p>
+            <p className="text-[11px] text-muted-foreground">{tr("Removes its columns, tasks, history and canvas sheets.")}</p>
           </div>
           <button onClick={() => void remove()} className="flex shrink-0 items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs text-[var(--chart-7)] hover:bg-[rgba(239,68,68,0.08)]">
-            <Trash2 className="size-3.5" /> Delete
+            <Trash2 className="size-3.5" /> {tr("Delete")}
           </button>
         </div>
       )}
@@ -444,6 +454,7 @@ function ProjectDetail({ project, memberId, presence, isAdmin, assignments, onBa
 
 /** Trello/CSV import into this project: keep the cards already here, or replace them all. */
 function ImportCards({ project }: { project: Project }) {
+  const tr = useT();
   const router = useRouter();
   const [imported, setImported] = useState<Imported>();
   const [replace, setReplace] = useState(false);
@@ -465,7 +476,7 @@ function ImportCards({ project }: { project: Project }) {
   const run = () =>
     startBusy(async () => {
       if (!imported) return;
-      if (replace && !confirm(`Delete every column and card in "${project.name}" (archived ones too, with their comments and history), then import ${imported.columns.length} columns and ${imported.cards.length} cards?`)) return;
+      if (replace && !confirm(tr("Delete every column and card in \"{name}\" (archived ones too, with their comments and history), then import {columns} columns and {cards} cards?", { name: project.name, columns: imported.columns.length, cards: imported.cards.length }))) return;
       const res = await importIntoProject(project.id, imported, replace);
       if ("error" in res) return setError(res.error ?? null);
       setImported(undefined);
@@ -476,11 +487,11 @@ function ImportCards({ project }: { project: Project }) {
 
   return (
     <section className="mt-8">
-      <h3 className="mb-1 text-sm font-medium">Import cards</h3>
+      <h3 className="mb-1 text-sm font-medium">{tr("Import cards")}</h3>
       <div className="flex flex-col gap-3 rounded-lg border bg-card p-3">
         <p className="text-[11px] text-muted-foreground">
-          From a Trello export (board menu → Print, export, and share → Export as JSON) or a CSV with a{" "}
-          <span className="font-mono">Title</span> column. Lists go into the column with the same name, or a new one.
+          {tr("From a Trello export (board menu → Print, export, and share → Export as JSON) or a CSV with a")}{" "}
+          <span className="font-mono">{tr("Title")}</span> {tr("column. Lists go into the column with the same name, or a new one.")}
         </p>
         <input
           ref={fileRef}
@@ -491,15 +502,15 @@ function ImportCards({ project }: { project: Project }) {
         />
         {imported && (
           <>
-            <p className="text-[11px] text-muted-foreground">{imported.cards.length} cards in {imported.columns.length} columns.</p>
-            <div role="radiogroup" aria-label="Existing cards" className="flex flex-col gap-1.5 text-xs">
+            <p className="text-[11px] text-muted-foreground">{tr("{cards} cards in {columns} columns.", { cards: imported.cards.length, columns: imported.columns.length })}</p>
+            <div role="radiogroup" aria-label={tr("Existing cards")} className="flex flex-col gap-1.5 text-xs">
               <label className="flex items-center gap-2">
                 <input type="radio" name="import-mode" checked={!replace} onChange={() => setReplace(false)} className="accent-primary" />
-                Keep the cards already in this project
+                {tr("Keep the cards already in this project")}
               </label>
               <label className="flex items-center gap-2">
                 <input type="radio" name="import-mode" checked={replace} onChange={() => setReplace(true)} className="accent-primary" />
-                Replace the whole board: delete all columns and cards, use the file&rsquo;s lists
+                {tr("Replace the whole board: delete all columns and cards, use the file’s lists")}
               </label>
             </div>
           </>
@@ -508,7 +519,7 @@ function ImportCards({ project }: { project: Project }) {
         {note && <p className="text-[11px] text-[var(--chart-2)]">{note}</p>}
         <div>
           <button type="button" disabled={busy || !imported} onClick={run} className="rounded-md border px-3 py-1.5 text-xs hover:bg-secondary disabled:opacity-50">
-            {busy ? "Importing…" : replace && imported ? "Replace and import" : "Import"}
+            {busy ? tr("Importing…") : replace && imported ? tr("Replace and import") : tr("Import")}
           </button>
         </div>
       </div>
@@ -518,6 +529,7 @@ function ImportCards({ project }: { project: Project }) {
 
 /** Repo + fine-grained token for the project's GitHub view. The token is write-only from here. */
 function GithubSettings({ project }: { project: Project }) {
+  const tr = useT();
   const router = useRouter();
   const [repo, setRepo] = useState(project.repo ?? "");
   const [token, setToken] = useState("");
@@ -537,37 +549,37 @@ function GithubSettings({ project }: { project: Project }) {
 
   return (
     <section className="mt-8">
-      <h3 className="mb-1 text-sm font-medium">GitHub</h3>
+      <h3 className="mb-1 text-sm font-medium">{tr("GitHub")}</h3>
       <p className="mb-3 text-xs text-muted-foreground">
-        Shows this repo&rsquo;s pull requests, issues, commits and branches in the project&rsquo;s GitHub view. Use a{" "}
+        {tr("Shows this repo’s pull requests, issues, commits and branches in the project’s GitHub view. Use a")}{" "}
         <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noreferrer" className="underline">
-          fine-grained token
+          {tr("fine-grained token")}
         </a>{" "}
-        limited to this repo with read-only Contents, Issues, Pull requests and Metadata. Give Issues Read and write to create issues from cards.
+        {tr("limited to this repo with read-only Contents, Issues, Pull requests and Metadata. Give Issues Read and write to create issues from cards.")}
       </p>
       <form
         onSubmit={(e) => { e.preventDefault(); save(repo); }}
         className="flex flex-col gap-3 rounded-lg border bg-card p-3"
       >
-        <Field label="Repository" value={repo} onChange={(e) => setRepo(e.target.value)} placeholder="owner/name" autoComplete="off" />
+        <Field label={tr("Repository")} value={repo} onChange={(e) => setRepo(e.target.value)} placeholder={tr("owner/name")} autoComplete="off" />
         <Field
-          label="Token"
-          hint="Optional for a public repo (GitHub then allows 60 requests an hour)."
+          label={tr("Token")}
+          hint={tr("Optional for a public repo (GitHub then allows 60 requests an hour).")}
           type="password"
           value={token}
           onChange={(e) => setToken(e.target.value)}
           autoComplete="off"
-          placeholder={project.tokenHint ? `Saved (…${project.tokenHint}) — leave blank to keep` : "github_pat_…"}
+          placeholder={project.tokenHint ? `Saved (…${project.tokenHint}) — leave blank to keep` : tr("github_pat_…")}
         />
         {msg?.error && <FormError error={msg.error} />}
         {msg?.ok && <p className="text-xs text-[var(--chart-2)]">{msg.ok}</p>}
         <div className="flex items-center gap-2">
           <button disabled={busy || !repo.trim()} className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">
-            {busy ? "Checking…" : project.repo ? "Save" : "Connect"}
+            {busy ? tr("Checking…") : project.repo ? tr("Save") : tr("Connect")}
           </button>
           {project.repo && (
             <button type="button" disabled={busy} onClick={() => save("")} className="rounded-md border px-3 py-2 text-xs text-muted-foreground hover:bg-secondary">
-              Disconnect
+              {tr("Disconnect")}
             </button>
           )}
         </div>
@@ -580,23 +592,27 @@ function GithubSettings({ project }: { project: Project }) {
 const noSubscribe = () => () => {};
 
 /** A read-only value with a Copy button, for webhook URLs and secrets. */
-const row = (label: string, value: string) => (
+const Row = ({ label, value }: { label: string; value: string }) => {
+  const tr = useT();
+  return (
   <div className="flex flex-col gap-1">
     <span className="text-xs font-medium">{label}</span>
     <div className="flex gap-1.5">
       <input readOnly value={value} onFocus={(e) => e.target.select()} className="min-w-0 flex-1 rounded-md border bg-background px-2.5 py-1.5 font-mono text-[11px]" />
       <button type="button" onClick={() => void navigator.clipboard.writeText(value)} className="rounded-md border px-2 text-[11px] text-muted-foreground hover:bg-secondary">
-        Copy
+        {tr("Copy")}
       </button>
     </div>
   </div>
 );
+};
 
 /**
  * Webhook setup: the URL and a secret to paste into the repo's Settings → Webhooks.
  * The secret is shown once, right after it is generated.
  */
 function GithubWebhook({ project }: { project: Project }) {
+  const tr = useT();
   const router = useRouter();
   const [secret, setSecret] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -607,7 +623,7 @@ function GithubWebhook({ project }: { project: Project }) {
 
   const generate = () =>
     startBusy(async () => {
-      if (project.webhookHint && !confirm("Make a new secret? The webhook stops working until you paste the new one into GitHub.")) return;
+      if (project.webhookHint && !confirm(tr("Make a new secret? The webhook stops working until you paste the new one into GitHub."))) return;
       const res = await rotateGithubWebhook(project.id);
       if ("error" in res) return setError(res.error ?? null);
       setError(null);
@@ -618,29 +634,27 @@ function GithubWebhook({ project }: { project: Project }) {
   return (
     <div className="mt-3 flex flex-col gap-3 rounded-lg border bg-card p-3">
       <div>
-        <h4 className="text-xs font-semibold">Webhook — move cards automatically</h4>
+        <h4 className="text-xs font-semibold">{tr("Webhook — move cards automatically")}</h4>
         <p className="mt-0.5 text-[11px] text-muted-foreground">
-          In {project.repo} → Settings → Webhooks → Add webhook, paste the URL and secret, set content type to{" "}
-          <span className="font-mono">application/json</span>, and pick the events Pull requests, Pushes and Check suites. Then a push to a
-          card&rsquo;s branch moves it to In Progress, an opened PR to In Review, a merged PR to QA (or Done), and failing checks show in its
-          history. Cards only move forward. GitHub must be able to reach this address.
+          {tr("In {repo} → Settings → Webhooks → Add webhook, paste the URL and secret, set content type to", { repo: project.repo ?? "" })}{" "}
+          <span className="font-mono">{tr("application/json")}</span>{tr(", and pick the events Pull requests, Pushes and Check suites. Then a push to a card’s branch moves it to In Progress, an opened PR to In Review, a merged PR to QA (or Done), and failing checks show in its history. Cards only move forward. GitHub must be able to reach this address.")}
         </p>
       </div>
-      {url && row("Payload URL", url)}
+      {url && <Row label={tr("Payload URL")} value={url} />}
       {secret ? (
         <>
-          {row("Secret", secret)}
-          <p className="-mt-1 text-[11px] text-[var(--chart-3)]">Copy it now — it won&rsquo;t be shown again.</p>
+          <Row label={tr("Secret")} value={secret} />
+          <p className="-mt-1 text-[11px] text-[var(--chart-3)]">{tr("Copy it now — it won’t be shown again.")}</p>
         </>
       ) : (
         <p className="text-[11px] text-muted-foreground">
-          {project.webhookHint ? `Secret set (…${project.webhookHint}).` : "No secret yet."}
+          {project.webhookHint ? `Secret set (…${project.webhookHint}).` : tr("No secret yet.")}
         </p>
       )}
       {error && <FormError error={error} />}
       <div>
         <button type="button" disabled={busy} onClick={generate} className="rounded-md border px-3 py-1.5 text-xs hover:bg-secondary disabled:opacity-50">
-          {busy ? "Generating…" : project.webhookHint ? "Generate new secret" : "Generate secret"}
+          {busy ? tr("Generating…") : project.webhookHint ? tr("Generate new secret") : tr("Generate secret")}
         </button>
       </div>
     </div>
@@ -652,6 +666,7 @@ function GithubWebhook({ project }: { project: Project }) {
  * curl can POST to, creating a card. The token is shown once, right after it is made.
  */
 function InboundWebhook({ project }: { project: Project }) {
+  const tr = useT();
   const router = useRouter();
   const [token, setToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -661,7 +676,7 @@ function InboundWebhook({ project }: { project: Project }) {
 
   const generate = () =>
     startBusy(async () => {
-      if (project.inbound && !confirm("Make a new token? Anything using the old one stops working.")) return;
+      if (project.inbound && !confirm(tr("Make a new token? Anything using the old one stops working."))) return;
       const res = await rotateInboundToken(project.id);
       if ("error" in res) return setError(res.error ?? null);
       setError(null);
@@ -671,34 +686,31 @@ function InboundWebhook({ project }: { project: Project }) {
 
   return (
     <section className="mt-8">
-      <h3 className="mb-1 text-sm font-medium">Inbound webhook</h3>
+      <h3 className="mb-1 text-sm font-medium">{tr("Inbound webhook")}</h3>
       <div className="flex flex-col gap-3 rounded-lg border bg-card p-3">
         <p className="text-[11px] text-muted-foreground">
-          Create cards from Zapier, Make, a form tool or any script. POST JSON or form fields to the URL with the header{" "}
-          <span className="font-mono">Authorization: Bearer &lt;token&gt;</span> (or add <span className="font-mono">&amp;token=&lt;token&gt;</span> to
-          the URL). Fields: <span className="font-mono">title</span> (required), <span className="font-mono">description</span>,{" "}
-          <span className="font-mono">label</span>, <span className="font-mono">priority</span> (low, medium, high),{" "}
-          <span className="font-mono">due_date</span> (YYYY-MM-DD), <span className="font-mono">column</span> (its title; default the first column).
+          {tr("Create cards from Zapier, Make, a form tool or any script. POST JSON or form fields to the URL with the header")}{" "}
+          <span className="font-mono">{tr("Authorization: Bearer <token>")}</span> {tr("(or add")} <span className="font-mono">{tr("&token=<token>")}</span> {tr("to the URL). Fields:")} <span className="font-mono">{tr("title")}</span> {tr("(required),")} <span className="font-mono">{tr("description")}</span>,{" "}
+          <span className="font-mono">{tr("label")}</span>, <span className="font-mono">{tr("priority")}</span> {tr("(low, medium, high),")}{" "}
+          <span className="font-mono">{tr("due_date")}</span> {tr("(YYYY-MM-DD),")} <span className="font-mono">{tr("column")}</span> {tr("(its title; default the first column).")}
         </p>
         <p className="text-[11px] text-muted-foreground">
-          <span className="font-medium text-foreground">Email-to-ticket:</span> point an inbound-mail service (Postmark, SendGrid Inbound Parse,
-          Mailgun) at the URL with <span className="font-mono">&amp;token=&lt;token&gt;</span> added. Each email becomes a card (subject as title,
-          sender and body in the description). A reply from the same sender is added to that card instead.
+          <span className="font-medium text-foreground">{tr("Email-to-ticket:")}</span> {tr("point an inbound-mail service (Postmark, SendGrid Inbound Parse, Mailgun) at the URL with")} <span className="font-mono">{tr("&token=<token>")}</span> {tr("added. Each email becomes a card (subject as title, sender and body in the description). A reply from the same sender is added to that card instead.")}
         </p>
-        {url && row("URL", url)}
+        {url && <Row label={tr("URL")} value={url} />}
         {token ? (
           <>
-            {row("Token", token)}
-            <p className="-mt-1 text-[11px] text-[var(--chart-3)]">Copy it now — it won&rsquo;t be shown again.</p>
-            {url && row("Try it", `curl -X POST '${url}' -H 'Authorization: Bearer ${token}' -H 'Content-Type: application/json' -d '{"title":"Hello from a webhook"}'`)}
+            <Row label={tr("Token")} value={token} />
+            <p className="-mt-1 text-[11px] text-[var(--chart-3)]">{tr("Copy it now — it won’t be shown again.")}</p>
+            {url && <Row label={tr("Try it")} value={`curl -X POST '${url}' -H 'Authorization: Bearer ${token}' -H 'Content-Type: application/json' -d '{"title":"Hello from a webhook"}'`} />}
           </>
         ) : (
-          <p className="text-[11px] text-muted-foreground">{project.inbound ? "Token set." : "No token yet."}</p>
+          <p className="text-[11px] text-muted-foreground">{project.inbound ? tr("Token set.") : tr("No token yet.")}</p>
         )}
         {error && <FormError error={error} />}
         <div>
           <button type="button" disabled={busy} onClick={generate} className="rounded-md border px-3 py-1.5 text-xs hover:bg-secondary disabled:opacity-50">
-            {busy ? "Generating…" : project.inbound ? "Generate new token" : "Generate token"}
+            {busy ? tr("Generating…") : project.inbound ? tr("Generate new token") : tr("Generate token")}
           </button>
         </div>
       </div>
@@ -715,6 +727,7 @@ const EVENT_LABEL: Record<(typeof OUTGOING_EVENTS)[number], string> = {
  * also has `text`/`content`, so Slack, Discord and Google Chat incoming webhooks work as is.
  */
 function OutgoingWebhook({ project }: { project: Project }) {
+  const tr = useT();
   const router = useRouter();
   const saved = project.outgoing;
   const [url, setUrl] = useState(saved?.url ?? "");
@@ -741,16 +754,15 @@ function OutgoingWebhook({ project }: { project: Project }) {
 
   return (
     <section className="mt-8">
-      <h3 className="mb-1 text-sm font-medium">Outgoing webhook</h3>
+      <h3 className="mb-1 text-sm font-medium">{tr("Outgoing webhook")}</h3>
       <form onSubmit={(e) => { e.preventDefault(); save(url); }} className="flex flex-col gap-3 rounded-lg border bg-card p-3">
         <p className="text-[11px] text-muted-foreground">
-          When a card changes, this project POSTs JSON to the URL (event, project, task, change, actor). Paste a Slack, Discord or Google Chat
-          incoming-webhook URL to get a message per change, or your own endpoint. Each request is signed:{" "}
-          <span className="font-mono">X-Board-Signature: sha256=&lt;hmac of the body&gt;</span>.
+          {tr("When a card changes, this project POSTs JSON to the URL (event, project, task, change, actor). Paste a Slack, Discord or Google Chat incoming-webhook URL to get a message per change, or your own endpoint. Each request is signed:")}{" "}
+          <span className="font-mono">{tr("X-Board-Signature: sha256=<hmac of the body>")}</span>.
         </p>
-        <Field label="URL" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://hooks.slack.com/services/…" autoComplete="off" />
+        <Field label={tr("URL")} value={url} onChange={(e) => setUrl(e.target.value)} placeholder={tr("https://hooks.slack.com/services/…")} autoComplete="off" />
         <fieldset className="flex flex-col gap-1.5">
-          <legend className="mb-1 text-xs font-medium">Send when a card is</legend>
+          <legend className="mb-1 text-xs font-medium">{tr("Send when a card is")}</legend>
           {OUTGOING_EVENTS.map((e) => (
             <label key={e} className="flex items-center gap-2 text-xs">
               <input
@@ -764,38 +776,38 @@ function OutgoingWebhook({ project }: { project: Project }) {
         </fieldset>
         {secret && (
           <>
-            {row("Signing secret", secret)}
-            <p className="-mt-1 text-[11px] text-[var(--chart-3)]">Copy it now — it won&rsquo;t be shown again.</p>
+            <Row label={tr("Signing secret")} value={secret} />
+            <p className="-mt-1 text-[11px] text-[var(--chart-3)]">{tr("Copy it now — it won’t be shown again.")}</p>
           </>
         )}
         {last && (
           <p className="text-[11px] text-muted-foreground">
-            Last delivery: <span className="font-mono">{last.event}</span> →{" "}
+            {tr("Last delivery:")} <span className="font-mono">{last.event}</span> →{" "}
             <span className={typeof last.status === "number" && last.status < 300 ? "text-[var(--chart-2)]" : "text-[var(--chart-7)]"}>{last.status}</span>{" "}
-            at {last.at.slice(0, 16).replace("T", " ")} UTC
+            {tr("at")} {last.at.slice(0, 16).replace("T", " ")} {tr("UTC")}
           </p>
         )}
         {msg?.error && <FormError error={msg.error} />}
         {msg?.ok && <p className="text-xs text-[var(--chart-2)]">{msg.ok}</p>}
         <div className="flex flex-wrap items-center gap-2">
           <button disabled={busy || !url.trim()} className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">
-            {busy ? "Saving…" : "Save"}
+            {busy ? tr("Saving…") : tr("Save")}
           </button>
           {saved && (
             <>
               <button type="button" disabled={busy} onClick={test} className="rounded-md border px-3 py-2 text-xs hover:bg-secondary disabled:opacity-50">
-                Send test
+                {tr("Send test")}
               </button>
               <button
                 type="button"
                 disabled={busy}
-                onClick={() => confirm("Make a new signing secret? Receivers checking the old one will reject deliveries.") && save(url, true)}
+                onClick={() => confirm(tr("Make a new signing secret? Receivers checking the old one will reject deliveries.")) && save(url, true)}
                 className="rounded-md border px-3 py-2 text-xs text-muted-foreground hover:bg-secondary disabled:opacity-50"
               >
-                New secret
+                {tr("New secret")}
               </button>
               <button type="button" disabled={busy} onClick={() => save("")} className="rounded-md border px-3 py-2 text-xs text-muted-foreground hover:bg-secondary disabled:opacity-50">
-                Turn off
+                {tr("Turn off")}
               </button>
             </>
           )}
@@ -807,20 +819,22 @@ function OutgoingWebhook({ project }: { project: Project }) {
 
 /** Own password: current one required, so a borrowed tab cannot take the account. */
 function ChangePassword() {
+  const tr = useT();
   const [state, action] = useActionState(changeMyPassword, null);
   return (
     <form action={action} className="flex flex-col gap-3 rounded-lg border bg-card p-3">
-      <Field label="Current password" name="current" type="password" required autoComplete="current-password" />
-      <Field label="New password" name="next" type="password" required minLength={8} autoComplete="new-password" />
+      <Field label={tr("Current password")} name="current" type="password" required autoComplete="current-password" />
+      <Field label={tr("New password")} name="next" type="password" required minLength={8} autoComplete="new-password" />
       <FormError error={state?.error} />
-      {state?.ok && <p className="text-xs text-[var(--chart-2)]">Password changed.</p>}
-      <SubmitButton>Change password</SubmitButton>
+      {state?.ok && <p className="text-xs text-[var(--chart-2)]">{tr("Password changed.")}</p>}
+      <SubmitButton>{tr("Change password")}</SubmitButton>
     </form>
   );
 }
 
 /** Admin reset. No current password — that is the point of a reset. */
 function SetPassword({ userId, name }: { userId: string; name: string }) {
+  const tr = useT();
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -857,16 +871,16 @@ function SetPassword({ userId, name }: { userId: string; name: string }) {
         type="text"
         autoFocus
         minLength={8}
-        placeholder="New password"
+        placeholder={tr("New password")}
         aria-label={`New password for ${name}`}
         className="w-32 rounded border bg-background px-1.5 py-1 text-xs outline-none focus:border-ring"
       />
-      <button type="submit" className="rounded border px-1.5 py-1 text-xs hover:bg-secondary">Set</button>
+      <button type="submit" className="rounded border px-1.5 py-1 text-xs hover:bg-secondary">{tr("Set")}</button>
       <button type="button" onClick={() => { setOpen(false); setValue(""); }} className="rounded p-1 text-xs text-muted-foreground hover:bg-secondary">
         ✕
       </button>
-      {error && <span className="text-[10px] text-[var(--chart-7)]">{error}</span>}
-      {done && <span className="text-[10px] text-[var(--chart-2)]">Set</span>}
+      {error && <span className="text-[10px] text-[var(--chart-7)]">{tr(error)}</span>}
+      {done && <span className="text-[10px] text-[var(--chart-2)]">{tr("Set")}</span>}
     </form>
   );
 }
@@ -874,6 +888,7 @@ function SetPassword({ userId, name }: { userId: string; name: string }) {
 const DEFAULT_MODEL: Record<AiProvider, string> = { anthropic: "claude-opus-5-5", openai: "gpt-4o-mini", gemini: "gemini-3.8-flash" };
 
 function AiSettingsForm({ ai }: { ai: AiSettings | null }) {
+  const tr = useT();
   const [state, action, pending] = useActionState(saveAiConfig, null);
   const [provider, setProvider] = useState<AiProvider>(ai?.provider ?? "anthropic");
   const [model, setModel] = useState(ai?.model ?? DEFAULT_MODEL.anthropic);
@@ -917,10 +932,10 @@ function AiSettingsForm({ ai }: { ai: AiSettings | null }) {
       className="flex flex-col gap-3 rounded-lg border bg-card p-3"
     >
       <p className="text-[11px] text-muted-foreground">
-        Status: {ai ? <span className="text-[var(--chart-2)]">on — {ai.provider} · {ai.model}</span> : "off"}
+        {tr("Status:")} {ai ? <span className="text-[var(--chart-2)]">{tr("on —")} {ai.provider} · {ai.model}</span> : tr("off")}
       </p>
       <Select
-        label="Provider"
+        label={tr("Provider")}
         name="provider"
         value={provider}
         onChange={(e) => {
@@ -933,28 +948,28 @@ function AiSettingsForm({ ai }: { ai: AiSettings | null }) {
           if (ai?.provider === p || p === "openai") loadModels(p);
         }}
       >
-        <option value="anthropic">Anthropic (Claude)</option>
-        <option value="gemini">Google Gemini</option>
-        <option value="openai">OpenAI-compatible (OpenAI, OpenRouter, Groq, Ollama…)</option>
+        <option value="anthropic">{tr("Anthropic (Claude)")}</option>
+        <option value="gemini">{tr("Google Gemini")}</option>
+        <option value="openai">{tr("OpenAI-compatible (OpenAI, OpenRouter, Groq, Ollama…)")}</option>
       </Select>
       {provider === "openai" && (
         <Field
-          label="Base URL"
+          label={tr("Base URL")}
           name="baseUrl"
           defaultValue={sameProvider ? ai.baseUrl : ""}
-          placeholder="https://api.openai.com/v1"
-          hint="Leave blank for OpenAI. Ollama: http://localhost:11434/v1"
+          placeholder={tr("https://api.openai.com/v1")}
+          hint={tr("Leave blank for OpenAI. Ollama: http://localhost:11434/v1")}
           onBlur={() => loadModels(provider)}
         />
       )}
       {provider === "gemini" && (
         <p className="text-[11px] text-muted-foreground">
-          Get a key at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" className="underline">aistudio.google.com/apikey</a>. The free tier is rate-limited.
+          {tr("Get a key at")} <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" className="underline">{tr("aistudio.google.com/apikey")}</a>{tr(". The free tier is rate-limited.")}
         </p>
       )}
       <Field
         key={`key-${provider}-${ai?.keyHint}`}
-        label="API key"
+        label={tr("API key")}
         name="apiKey"
         type="password"
         autoComplete="off"
@@ -962,42 +977,42 @@ function AiSettingsForm({ ai }: { ai: AiSettings | null }) {
         onBlur={(e) => { if (e.target.value.trim()) loadModels(provider); }}
       />
       {models ? (
-        <Select label="Model" name="model" value={model} onChange={(e) => setModel(e.target.value)}>
+        <Select label={tr("Model")} name="model" value={model} onChange={(e) => setModel(e.target.value)}>
           {models.map((id) => <option key={id} value={id}>{id}</option>)}
         </Select>
       ) : (
         // Until the provider answers (or if it can't list, like some local servers), type the id.
-        <Field label="Model" name="model" required value={model} onChange={(e) => setModel(e.target.value)} />
+        <Field label={tr("Model")} name="model" required value={model} onChange={(e) => setModel(e.target.value)} />
       )}
       <p className="-mt-2 text-[11px] text-muted-foreground">
-        {loading ? "Loading models…"
+        {loading ? tr("Loading models…")
           : listError ? <span className="text-[var(--chart-7)]">{listError}</span>
           : models ? `${models.length} models available to this key.`
-          : "Enter the API key to choose from the models it can use."}
+          : tr("Enter the API key to choose from the models it can use.")}
         {!loading && (
-          <button type="button" onClick={() => loadModels(provider)} className="ml-1.5 underline">Refresh</button>
+          <button type="button" onClick={() => loadModels(provider)} className="ml-1.5 underline">{tr("Refresh")}</button>
         )}
       </p>
       <Select
         key={`reasoning-${provider}`}
-        label="Reasoning"
+        label={tr("Reasoning")}
         name="reasoning"
         defaultValue={sameProvider ? ai.reasoning : provider === "gemini" ? "low" : ""}
       >
         {REASONING_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
       </Select>
       <p className="-mt-2 text-[11px] text-muted-foreground">
-        The default for everyone; members can change it per message in the Agent chat. Higher thinks longer before answering.
+        {tr("The default for everyone; members can change it per message in the Agent chat. Higher thinks longer before answering.")}
       </p>
       <FormError error={state?.error} />
       {state?.ok && <p className="text-xs text-[var(--chart-2)]">{state.ok}</p>}
       <div className="flex items-center gap-2">
         <button type="submit" disabled={pending} className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
-          {pending ? "Saving…" : "Save"}
+          {pending ? tr("Saving…") : tr("Save")}
         </button>
         {ai && (
           <button type="submit" name="disable" value="1" formNoValidate className="rounded-md border px-3 py-2 text-xs text-muted-foreground hover:bg-secondary">
-            Turn off
+            {tr("Turn off")}
           </button>
         )}
       </div>

@@ -33,6 +33,8 @@ import { ChatView, PresenceDot, UnreadBadge } from "./views/chat-view";
 import { MeetingsView, startsIn } from "./views/meetings-view";
 import { SearchPalette } from "./search-palette";
 import { meetingState, type Meeting } from "@/lib/meetings";
+import { useT } from "@/components/i18n";
+import { eventText } from "@/lib/i18n";
 
 const VIEWS = [
   { Icon: LayoutGrid, label: "Board" },
@@ -113,6 +115,7 @@ export function Workspace({
   aiEnabled: boolean;
   ai: AiSettings | null;
 }) {
+  const tr = useT();
   const router = useRouter();
   const [section, setSection] = useState<SectionKey>("home");
   const [view, setView] = useState(0);
@@ -243,9 +246,9 @@ export function Workspace({
       const key = `${u.meeting.id}@${u.start.getTime()}`;
       if (announcedMeetings.current.has(key)) continue;
       announcedMeetings.current.add(key);
-      announce(u.meeting.title, now ? `Meeting ${startsIn(u.start, now)}` : "Meeting");
+      announce(u.meeting.title, now ? `${tr("Meeting")} ${startsIn(u.start, now, tr)}` : tr("Meeting"));
     }
-  }, [upcoming, announce, now]);
+  }, [upcoming, announce, now, tr]);
 
   // Keep presence and unread badges live outside the Chat section. The ping is
   // also what keeps this user's own status "online" while they sit on a board.
@@ -271,8 +274,8 @@ export function Workspace({
         // New card activity may come from outside this tab (another member, the GitHub webhook): reload the board.
         if (card) router.refresh();
         seenChats.current = new Map(data.unread.map((item) => [item.channel, item.n]));
-        if (card) announce(mentionsMe(card) ? `${card.actor ?? "Someone"} mentioned you` : "Card updated", `${card.taskTitle} · ${card.text}`);
-        else if (chat) announce("New chat message", chatName(chat.channel, user.id, data.members));
+        if (card) announce(mentionsMe(card) ? tr("{name} mentioned you", { name: card.actor ?? tr("Someone") }) : tr("Card updated"), `${card.taskTitle} · ${card.text}`);
+        else if (chat) announce(tr("New chat message"), chatName(chat.channel, user.id, data.members));
         setLive(data.members);
         setUnread(data.unread);
         setNotifications(data.notifications);
@@ -287,7 +290,7 @@ export function Workspace({
       alive = false;
       clearInterval(t);
     };
-  }, [announce, router, mentionsMe, user.id]);
+  }, [announce, router, mentionsMe, user.id, tr]);
 
   const online = live.filter((m) => m.presence === "online").length;
   const unreadTotal = section === "chat" ? 0 : unread.reduce((n, u) => n + u.n, 0);
@@ -310,22 +313,22 @@ export function Workspace({
 
   async function enableAlerts() {
     if (typeof Notification === "undefined") {
-      setAlert({ title: "Alerts unavailable", body: "This browser does not support device alerts." });
+      setAlert({ title: tr("Alerts unavailable"), body: tr("This browser does not support device alerts.") });
       return;
     }
     const permission = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
     if (permission !== "granted") {
-      setAlert({ title: "Alerts blocked", body: "Allow notifications in your browser settings to enable device alerts." });
+      setAlert({ title: tr("Alerts blocked"), body: tr("Allow notifications in your browser settings to enable device alerts.") });
       return;
     }
     audio.current ??= new AudioContext();
     if (audio.current.state === "suspended") await audio.current.resume();
     const pushed = await subscribePush().catch(() => false);
     setAlert({
-      title: "Alerts enabled",
+      title: tr("Alerts enabled"),
       body: pushed
-        ? "Mentions, direct messages and due cards reach this device even with the tab closed."
-        : "New card and chat notifications will show here while this tab is open.",
+        ? tr("Mentions, direct messages and due cards reach this device even with the tab closed.")
+        : tr("New card and chat notifications will show here while this tab is open."),
     });
   }
 
@@ -358,7 +361,7 @@ export function Workspace({
       >
         <div className="flex h-14 items-center gap-2 border-b px-3">
           <button
-            aria-label={drawer ? "Close menu" : "Collapse sidebar"}
+            aria-label={drawer ? tr("Close menu") : tr("Collapse sidebar")}
             onClick={() => (drawer ? setDrawer(false) : setCollapsed((c) => !c))}
             className="shrink-0"
           >
@@ -388,7 +391,7 @@ export function Workspace({
               }`}
             >
               <Icon className="size-4 shrink-0" />
-              {!slim && <span className="whitespace-nowrap">{label}</span>}
+              {!slim && <span className="whitespace-nowrap">{tr(label)}</span>}
               {!slim && key === "chat" && (
                 unreadTotal > 0 ? (
                   <UnreadBadge n={unreadTotal} />
@@ -415,7 +418,7 @@ export function Workspace({
 
         {!slim && projects.length > 0 && (
           <div className="border-t p-2">
-            <p className="mb-1.5 px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Projects</p>
+            <p className="mb-1.5 px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{tr("Projects")}</p>
             {projects.map((p) => (
               <Link
                 key={p.id}
@@ -446,7 +449,7 @@ export function Workspace({
                 </div>
                 <span className="md:hidden"><ThemeToggle /></span>
                 <form action={async () => { await dropPush(); await logoutAction(); }}>
-                  <button title="Sign out" className="rounded p-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
+                  <button title={tr("Sign out")} className="rounded p-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
                     <LogOut className="size-3.5" />
                   </button>
                 </form>
@@ -460,7 +463,7 @@ export function Workspace({
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-14 shrink-0 items-center gap-2 border-b px-3 sm:gap-4 sm:px-5">
           <button
-            aria-label="Open menu"
+            aria-label={tr("Open menu")}
             onClick={() => setDrawer(true)}
             className="-ml-1 rounded-md p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground md:hidden"
           >
@@ -475,7 +478,7 @@ export function Workspace({
             />
           ) : (
             <h1 className="min-w-0 truncate text-sm font-semibold">
-              {onBoard ? "Board" : SECTIONS.find((s) => s.key === section)!.label}
+              {onBoard ? tr("Board") : tr(SECTIONS.find((s) => s.key === section)!.label)}
             </h1>
           )}
 
@@ -485,14 +488,14 @@ export function Workspace({
                 <button
                   key={label}
                   onClick={() => setView(i)}
-                  title={label}
-                  aria-label={label}
+                  title={tr(label)}
+                  aria-label={tr(label)}
                   className={`flex items-center gap-1.5 rounded px-1.5 py-1 text-xs transition-all sm:px-2.5 ${
                     view === i ? "bg-card font-medium text-foreground shadow-sm" : "text-muted-foreground"
                   }`}
                 >
                   <Icon className="size-3.5" />
-                  <span className="hidden sm:inline">{label}</span>
+                  <span className="hidden sm:inline">{tr(label)}</span>
                 </button>
               ))}
             </div>
@@ -508,7 +511,7 @@ export function Workspace({
                   <input
                     value={filters.q ?? ""}
                     onChange={(e) => setFilters((f) => ({ ...f, q: e.target.value }))}
-                    placeholder="Search tasks…"
+                    placeholder={tr("Search tasks…")}
                     className="w-full bg-transparent outline-none placeholder:text-muted-foreground"
                   />
                 </label>
@@ -519,7 +522,7 @@ export function Workspace({
                   }`}
                 >
                   <Filter className="size-3.5" />
-                  <span className="hidden sm:inline">Filter</span>
+                  <span className="hidden sm:inline">{tr("Filter")}</span>
                   {activeFilters > 0 && (
                     <span className="rounded-full bg-primary px-1.5 text-[10px] text-primary-foreground">{activeFilters}</span>
                   )}
@@ -528,8 +531,8 @@ export function Workspace({
             )}
             <button
               onClick={() => setSearching(true)}
-              title="Search (⌘K)"
-              aria-label="Search"
+              title={tr("Search (⌘K)")}
+              aria-label={tr("Search")}
               className="flex items-center gap-1.5 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
             >
               <Search className="size-4" />
@@ -539,7 +542,7 @@ export function Workspace({
             <span className="hidden md:contents"><ThemeToggle /></span>
             <div className="relative">
               <button
-                aria-label="Notifications"
+                aria-label={tr("Notifications")}
                 aria-expanded={showNotifications}
                 aria-haspopup="menu"
                 onClick={() => setShowNotifications((open) => !open)}
@@ -552,7 +555,7 @@ export function Workspace({
                 <NotificationMenu
                   cards={notifications}
                   due={due}
-                  meetings={upcoming.map((u) => ({ id: u.meeting.id, title: u.meeting.title, when: u.state === "live" || !now ? "Now" : startsIn(u.start, now) }))}
+                  meetings={upcoming.map((u) => ({ id: u.meeting.id, title: u.meeting.title, when: u.state === "live" || !now ? tr("Now") : startsIn(u.start, now, tr) }))}
                   onOpenMeetings={() => {
                     setShowNotifications(false);
                     setSection("meetings");
@@ -589,12 +592,12 @@ export function Workspace({
             {project && !readOnly && section !== "canvas" && (
               <button
                 onClick={() => setAgentOpen((o) => !o)}
-                title="Project agent"
+                title={tr("Project agent")}
                 aria-pressed={agentOpen}
                 className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs transition-colors hover:bg-secondary ${agentOpen ? "border-primary font-medium" : "text-muted-foreground"}`}
               >
                 <Sparkles className="size-3.5" />
-                <span className="hidden sm:inline">Agent</span>
+                <span className="hidden sm:inline">{tr("Agent")}</span>
               </button>
             )}
             {project && section !== "canvas" && (
@@ -603,7 +606,7 @@ export function Workspace({
                 className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90"
               >
                 <Plus className="size-3" />
-                <span className="hidden sm:inline">New Task</span>
+                <span className="hidden sm:inline">{tr("New Task")}</span>
               </button>
             )}
           </div>
@@ -617,7 +620,7 @@ export function Workspace({
               onChange={(e) => setFilters((f) => ({ ...f, assignee: e.target.value || undefined }))}
               className="rounded-md border bg-background px-2 py-1"
             >
-              <option value="">All assignees</option>
+              <option value="">{tr("All assignees")}</option>
               {members.map((m) => (
                 <option key={m.id} value={m.id}>{m.name}</option>
               ))}
@@ -627,10 +630,10 @@ export function Workspace({
               onChange={(e) => setFilters((f) => ({ ...f, priority: e.target.value || undefined }))}
               className="rounded-md border bg-background px-2 py-1"
             >
-              <option value="">All priorities</option>
-              <option value="high">High</option>
-              <option value="medium">Medium</option>
-              <option value="low">Low</option>
+              <option value="">{tr("All priorities")}</option>
+              <option value="high">{tr("High")}</option>
+              <option value="medium">{tr("Medium")}</option>
+              <option value="low">{tr("Low")}</option>
             </select>
             {labels.length > 0 && (
               <select
@@ -638,7 +641,7 @@ export function Workspace({
                 onChange={(e) => setFilters((f) => ({ ...f, label: e.target.value || undefined }))}
                 className="rounded-md border bg-background px-2 py-1"
               >
-                <option value="">All labels</option>
+                <option value="">{tr("All labels")}</option>
                 {labels.map((l) => (
                   <option key={l} value={l}>{l}</option>
                 ))}
@@ -649,17 +652,17 @@ export function Workspace({
               className="flex items-center gap-1 rounded-md border px-2 py-1 text-muted-foreground transition-colors hover:bg-secondary"
             >
               <X className="size-3" />
-              Reset
+              {tr("Reset")}
             </button>
             <button
               onClick={() => setShowArchived(true)}
               className="flex items-center gap-1 rounded-md border px-2 py-1 text-muted-foreground transition-colors hover:bg-secondary"
             >
               <Archive className="size-3" />
-              Archived
+              {tr("Archived")}
             </button>
             <span className="ml-auto text-muted-foreground">
-              {shown} of {total} tasks
+              {tr("{shown} of {total} tasks", { shown, total })}
             </span>
           </div>
         )}
@@ -788,16 +791,17 @@ export function Workspace({
 
 /** Archived cards of the open project; Restore puts one back at the end of its column. */
 function ArchivedDialog({ projectId, readOnly, onClose }: { projectId: string; readOnly: boolean; onClose: () => void }) {
+  const tr = useT();
   const [tasks, setTasks] = useState<Task[] | null>(null);
   useEffect(() => {
     fetchArchived(projectId).then(setTasks);
   }, [projectId]);
   return (
-    <Modal title="Archived tasks" onClose={onClose}>
+    <Modal title={tr("Archived tasks")} onClose={onClose}>
       {tasks === null ? (
-        <p className="text-xs text-muted-foreground">Loading…</p>
+        <p className="text-xs text-muted-foreground">{tr("Loading…")}</p>
       ) : tasks.length === 0 ? (
-        <p className="text-xs text-muted-foreground">Nothing archived. Archive a card from its dialog.</p>
+        <p className="text-xs text-muted-foreground">{tr("Nothing archived. Archive a card from its dialog.")}</p>
       ) : (
         <ul className="flex flex-col divide-y">
           {tasks.map((t) => (
@@ -812,7 +816,7 @@ function ArchivedDialog({ projectId, readOnly, onClose }: { projectId: string; r
                   }}
                   className="rounded-md border px-2 py-1 text-xs transition-colors hover:bg-secondary"
                 >
-                  Restore
+                  {tr("Restore")}
                 </button>
               )}
             </li>
@@ -824,10 +828,11 @@ function ArchivedDialog({ projectId, readOnly, onClose }: { projectId: string; r
 }
 
 function EmptyProject() {
+  const tr = useT();
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-2 p-10 text-center">
-      <p className="text-sm font-medium">No project yet</p>
-      <p className="max-w-sm text-xs text-muted-foreground">Re-run setup to create your first project.</p>
+      <p className="text-sm font-medium">{tr("No project yet")}</p>
+      <p className="max-w-sm text-xs text-muted-foreground">{tr("Re-run setup to create your first project.")}</p>
     </div>
   );
 }
@@ -835,11 +840,12 @@ function EmptyProject() {
 function FeedView({ feed: all, mentionsMe, onMarkRead, onMarkAll }: {
   feed: FeedItem[]; mentionsMe: (e: FeedItem) => boolean; onMarkRead: (ids: number[]) => void; onMarkAll: () => void;
 }) {
+  const tr = useT();
   const [selected, setSelected] = useState(new Set<number>());
   const [onlyMentions, setOnlyMentions] = useState(false);
   const feed = onlyMentions ? all.filter(mentionsMe) : all;
   if (all.length === 0) {
-    return <div className="flex flex-1 items-center justify-center p-10 text-center text-sm text-muted-foreground">No unread notifications.</div>;
+    return <div className="flex flex-1 items-center justify-center p-10 text-center text-sm text-muted-foreground">{tr("No unread notifications.")}</div>;
   }
   function readSelected() {
     onMarkRead([...selected]);
@@ -848,17 +854,17 @@ function FeedView({ feed: all, mentionsMe, onMarkRead, onMarkAll }: {
   return (
     <main className="flex-1 overflow-y-auto">
       <div className="mx-auto flex max-w-2xl items-center gap-2 px-5 pt-6">
-        <button onClick={readSelected} disabled={selected.size === 0} className="rounded border px-2 py-1 text-xs disabled:opacity-40">Mark selected read</button>
-        <button onClick={onMarkAll} className="rounded border px-2 py-1 text-xs">Mark all read</button>
+        <button onClick={readSelected} disabled={selected.size === 0} className="rounded border px-2 py-1 text-xs disabled:opacity-40">{tr("Mark selected read")}</button>
+        <button onClick={onMarkAll} className="rounded border px-2 py-1 text-xs">{tr("Mark all read")}</button>
         <button
           onClick={() => setOnlyMentions((on) => !on)}
           aria-pressed={onlyMentions}
           className={`ml-auto rounded border px-2 py-1 text-xs ${onlyMentions ? "border-primary font-medium" : ""}`}
         >
-          Mentioned me
+          {tr("Mentioned me")}
         </button>
       </div>
-      {feed.length === 0 && <p className="mx-auto max-w-2xl px-5 py-6 text-sm text-muted-foreground">No unread mentions.</p>}
+      {feed.length === 0 && <p className="mx-auto max-w-2xl px-5 py-6 text-sm text-muted-foreground">{tr("No unread mentions.")}</p>}
       <ul className="mx-auto max-w-2xl divide-y px-5 py-3">
         {feed.map((e) => (
           <li key={e.id} onContextMenu={(event) => { event.preventDefault(); onMarkRead([e.id]); }} className="flex items-start gap-3 py-3">
@@ -875,9 +881,9 @@ function FeedView({ feed: all, mentionsMe, onMarkRead, onMarkAll }: {
             <div className="min-w-0 flex-1">
               <p className="text-sm font-medium leading-snug">
                 {e.taskTitle}
-                {mentionsMe(e) && <span className="ml-1.5 rounded bg-primary px-1 py-px text-[10px] font-semibold text-primary-foreground">@you</span>}
+                {mentionsMe(e) && <span className="ml-1.5 rounded bg-primary px-1 py-px text-[10px] font-semibold text-primary-foreground">{tr("@you")}</span>}
               </p>
-              <p className="text-xs text-muted-foreground">{e.text}{e.actor ? ` · ${e.actor}` : ""}</p>
+              <p className="text-xs text-muted-foreground">{eventText(e.text, tr)}{e.actor ? ` · ${e.actor}` : ""}</p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <span className="flex items-center gap-1.5 rounded-full border bg-secondary px-2 py-0.5 text-[10px] text-muted-foreground"><span className="size-1.5 rounded-full" style={{ background: e.columnColor }} />{e.columnTitle}</span>
@@ -913,12 +919,13 @@ function NotificationMenu({
   onOpenInboxPage: () => void;
   onEnableAlerts: () => void;
 }) {
+  const tr = useT();
   return (
     <div role="menu" className="absolute right-0 top-full z-40 mt-2 w-80 overflow-hidden rounded-lg border bg-card shadow-lg animate-in fade-in zoom-in-95 slide-in-from-top-1 duration-150">
       <div className="max-h-80 overflow-y-auto p-1">
         {meetings.length > 0 && (
           <>
-            <p className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Meetings</p>
+            <p className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{tr("Meetings")}</p>
             {meetings.map((m) => (
               <button key={m.id} role="menuitem" onClick={onOpenMeetings} className="w-full rounded-md px-2 py-2 text-left hover:bg-secondary">
                 <p className="truncate text-xs font-medium">{m.title}</p>
@@ -929,12 +936,12 @@ function NotificationMenu({
         )}
         {due.length > 0 && (
           <>
-            <p className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Due</p>
+            <p className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{tr("Due")}</p>
             {due.map((t) => (
               <button key={t.id} role="menuitem" onClick={onOpenMine} className="w-full rounded-md px-2 py-2 text-left hover:bg-secondary">
                 <p className="truncate text-xs font-medium">{t.title}</p>
                 <p className={`truncate text-[11px] ${t.dueDate! < today ? "font-medium text-[var(--chart-7)]" : "text-muted-foreground"}`}>
-                  {t.dueDate! < today ? `Overdue since ${t.dueDate}` : "Due today"} · {t.projectName}
+                  {t.dueDate! < today ? `Overdue since ${t.dueDate}` : tr("Due today")} · {t.projectName}
                 </p>
               </button>
             ))}
@@ -942,37 +949,37 @@ function NotificationMenu({
         )}
         {cards.length > 0 && (
           <>
-            <p className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Card notifications</p>
+            <p className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{tr("Card notifications")}</p>
             {cards.map((item) => (
               <button key={item.id} role="menuitem" onClick={onOpenInbox} className="w-full rounded-md px-2 py-2 text-left hover:bg-secondary">
                 <p className="truncate text-xs font-medium">
-                  {mentionsMe(item) && <span className="mr-1 font-semibold text-primary">@you</span>}
+                  {mentionsMe(item) && <span className="mr-1 font-semibold text-primary">{tr("@you")}</span>}
                   {item.taskTitle}
                 </p>
-                <p className="truncate text-[11px] text-muted-foreground">{item.text}{item.actor ? ` · ${item.actor}` : ""}</p>
+                <p className="truncate text-[11px] text-muted-foreground">{eventText(item.text, tr)}{item.actor ? ` · ${item.actor}` : ""}</p>
               </button>
             ))}
           </>
         )}
         {unread.length > 0 && (
           <>
-            <p className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Chat notifications</p>
+            <p className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{tr("Chat notifications")}</p>
             {unread.map((item) => (
               <button key={item.channel} role="menuitem" onClick={() => onOpenChat(item.channel)} className="w-full rounded-md px-2 py-2 text-left hover:bg-secondary">
                 <p className="text-xs font-medium">{chatName(item.channel, meId, members)}</p>
-                <p className="text-[11px] text-muted-foreground">{item.n} new message{item.n === 1 ? "" : "s"}</p>
+                <p className="text-[11px] text-muted-foreground">{tr(item.n === 1 ? "{n} new message" : "{n} new messages", { n: item.n })}</p>
               </button>
             ))}
           </>
         )}
         {cards.length === 0 && unread.length === 0 && due.length === 0 && meetings.length === 0 && (
-          <p className="px-2 py-4 text-center text-xs text-muted-foreground">No unread notifications.</p>
+          <p className="px-2 py-4 text-center text-xs text-muted-foreground">{tr("No unread notifications.")}</p>
         )}
       </div>
       <div className="flex border-t p-1">
-        <button onClick={onMarkRead} disabled={cards.length === 0 && unread.length === 0} className="rounded px-2 py-1.5 text-xs text-muted-foreground hover:bg-secondary disabled:opacity-40">Mark all read</button>
-        <button onClick={onEnableAlerts} className="rounded px-2 py-1.5 text-xs text-muted-foreground hover:bg-secondary">Enable alerts</button>
-        <button onClick={onOpenInboxPage} className="ml-auto rounded px-2 py-1.5 text-xs font-medium hover:bg-secondary">Open inbox</button>
+        <button onClick={onMarkRead} disabled={cards.length === 0 && unread.length === 0} className="rounded px-2 py-1.5 text-xs text-muted-foreground hover:bg-secondary disabled:opacity-40">{tr("Mark all read")}</button>
+        <button onClick={onEnableAlerts} className="rounded px-2 py-1.5 text-xs text-muted-foreground hover:bg-secondary">{tr("Enable alerts")}</button>
+        <button onClick={onOpenInboxPage} className="ml-auto rounded px-2 py-1.5 text-xs font-medium hover:bg-secondary">{tr("Open inbox")}</button>
       </div>
     </div>
   );

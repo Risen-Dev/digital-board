@@ -4,10 +4,12 @@ import { useState, useTransition } from "react";
 import { CalendarPlus, ChevronLeft, ChevronRight } from "lucide-react";
 import { calendarFeedToken } from "@/lib/actions";
 import { PRIORITY_CFG, type Column, type Task } from "@/lib/board";
+import { useT } from "@/components/i18n";
 
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 
 export function CalendarView({ columns, projectId, onOpen }: { columns: Column[]; projectId: string; onOpen: (t: Task) => void }) {
+  const tr = useT();
   const [month, setMonth] = useState(() => {
     const d = new Date();
     return new Date(d.getFullYear(), d.getMonth(), 1);
@@ -45,7 +47,7 @@ export function CalendarView({ columns, projectId, onOpen }: { columns: Column[]
           <ChevronRight className="size-4" />
         </button>
         <div className="ml-auto flex items-center gap-3">
-          {undated > 0 && <span className="text-xs text-muted-foreground">{undated} tasks with no due date</span>}
+          {undated > 0 && <span className="text-xs text-muted-foreground">{undated} {tr("tasks with no due date")}</span>}
           <Subscribe key={projectId} projectId={projectId} />
         </div>
       </div>
@@ -92,6 +94,7 @@ export function CalendarView({ columns, projectId, onOpen }: { columns: Column[]
 
 /** The project's iCal link, for Google Calendar, Apple Calendar or Outlook to subscribe to. */
 function Subscribe({ projectId }: { projectId: string }) {
+  const tr = useT();
   const [feed, setFeed] = useState<{ token?: string; error?: string } | null>(null);
   const [busy, startBusy] = useTransition();
   const load = (reset = false) => startBusy(async () => setFeed(await calendarFeedToken(projectId, reset)));
@@ -103,7 +106,7 @@ function Subscribe({ projectId }: { projectId: string }) {
         onClick={() => (feed ? setFeed(null) : load())}
         className="flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
       >
-        <CalendarPlus className="size-3.5" /> Subscribe
+        <CalendarPlus className="size-3.5" /> {tr("Subscribe")}
       </button>
       {feed && (
         <div className="absolute right-0 top-full z-20 mt-1.5 flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-2 rounded-lg border bg-popover p-3 shadow-lg">
@@ -112,23 +115,22 @@ function Subscribe({ projectId }: { projectId: string }) {
           ) : url ? (
             <>
               <p className="text-[11px] text-muted-foreground">
-                Add this link to your calendar app (Google Calendar: Other calendars → From URL). Tasks with a due date show as all-day events.
-                Anyone with the link can see them.
+                {tr("Add this link to your calendar app (Google Calendar: Other calendars → From URL). Tasks with a due date show as all-day events. Anyone with the link can see them.")}
               </p>
               <div className="flex gap-1.5">
                 <input readOnly value={url} onFocus={(e) => e.target.select()} className="min-w-0 flex-1 rounded-md border bg-background px-2 py-1 font-mono text-[11px]" />
                 <button onClick={() => void navigator.clipboard.writeText(url)} className="rounded-md border px-2 text-[11px] text-muted-foreground hover:bg-secondary">
-                  Copy
+                  {tr("Copy")}
                 </button>
               </div>
               <div className="flex items-center justify-between text-[11px]">
-                <a href={url.replace(/^https?:/, "webcal:")} className="underline">Open in calendar app</a>
+                <a href={url.replace(/^https?:/, "webcal:")} className="underline">{tr("Open in calendar app")}</a>
                 <button
                   disabled={busy}
-                  onClick={() => confirm("Make a new link? Calendars using the old one stop updating.") && load(true)}
+                  onClick={() => confirm(tr("Make a new link? Calendars using the old one stop updating.")) && load(true)}
                   className="text-muted-foreground underline disabled:opacity-50"
                 >
-                  Reset link
+                  {tr("Reset link")}
                 </button>
               </div>
             </>

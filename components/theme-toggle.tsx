@@ -1,10 +1,12 @@
 "use client";
 
 import { Moon, Sun } from "lucide-react";
+import { useT } from "@/components/i18n";
 
 const YEAR = 60 * 60 * 24 * 365;
 
 export function ThemeToggle() {
+  const tr = useT();
   return (
     <button
       onClick={(e) => {
@@ -31,7 +33,7 @@ export function ThemeToggle() {
         document.documentElement.style.setProperty("--wipe-r", `${r}px`);
         document.startViewTransition(apply);
       }}
-      aria-label="Toggle theme"
+      aria-label={tr("Toggle theme")}
       className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
     >
       <Moon className="size-4 dark:hidden" />

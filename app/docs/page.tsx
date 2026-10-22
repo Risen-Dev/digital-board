@@ -313,6 +313,7 @@ WantedBy=multi-user.target`}</Code>
               [<strong className="text-foreground">My Tasks</strong>, <>Everything assigned to you, soonest due first, overdue in red.</>],
               [<strong className="text-foreground">Inbox</strong>, <>Every change to every task, newest first, with who did it.</>],
               [<strong className="text-foreground">Notifications</strong>, <>The bell dropdown combines unread card activity and chat. Card items open Inbox; chat items open the right conversation. Mark card activity read to clear it. Enable alerts there for browser notifications, an in-app popup, and sound. Over HTTPS (or on localhost) that also subscribes the browser to Web Push (<C>public/sw.js</C>, keys made on first use and kept in <C>settings</C>): mentions in comments and chat, direct messages, and a once-a-day list of due cards from 08:00 server time (<C>TZ</C>) arrive with no tab open. The app installs as a PWA. Signing out unsubscribes that browser.</>],
+              [<strong className="text-foreground">Language</strong>, <>English or Bahasa Indonesia per person (Settings → General → Language, or under the sign-in form), kept in a <C>lang</C> cookie; without one, the browser&rsquo;s first language decides. The English text is the key (<C>lib/i18n/id.ts</C>), so an untranslated string shows in English and server error messages translate on the client. Stored card history is translated when shown. This documentation stays in English.</>],
               [<strong className="text-foreground">Search</strong>, <><C>⌘K</C> / <C>Ctrl K</C> or the search icon in the header: cards (title, description or key) in projects you can open, messages in the channel and your own DMs, projects and meetings. Enter opens the result.</>],
               [<strong className="text-foreground">Task history</strong>, <>Creation, column moves, reorders, and title/details/labels/priority/assignee/due-date edits are all recorded. Open a task to see its timeline.</>],
               [<strong className="text-foreground">Task dialog</strong>, <>Click a card to open it: the title and properties (priority, due date, repeat, labels, assignees) on the left with the description, checklist, images and GitHub links below, and the comments and activity on the right, oldest first, with the comment box at the bottom.</>],
@@ -541,7 +542,7 @@ pm2 restart digital-board        # or: systemctl restart digital-board`}</Code>
             <li>The outgoing webhook tries each delivery once (5-second timeout) and does not retry. Any project admin can point it at any URL the server can reach, including internal addresses.</li>
             <li>Email-to-ticket sends nothing back, so requesters never learn the card key. Replies are matched by the key or the subject, and only from the card&rsquo;s original sender.</li>
             <li>The iCal feed is read-only and anyone holding the link can read the project&rsquo;s dated tasks; <em>Reset link</em> revokes it.</li>
-                        <li>Every route renders dynamically, because the root layout reads the theme cookie.</li>
+                        <li>Every route renders dynamically, because the root layout reads the theme and language cookies.</li>
           </ul>
 
           <H id="develop">Development</H>
