@@ -26,7 +26,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run lint
-      - run: npx tsc --noEmit
+      - run: npx next typegen && npx tsc --noEmit
       - run: node --experimental-strip-types lib/board.check.ts
       - run: node --experimental-strip-types lib/chat.check.ts
       - run: node --experimental-strip-types lib/canvas/merge.check.ts
