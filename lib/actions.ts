@@ -2,6 +2,7 @@
 
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { redirect } from "next/navigation";
 import { all, get, run, transaction } from "./db";
 import { createUser, createWorkspace, currentUser, endSession, login, passwordOf, setPassword, startSession, verifyPassword, type User } from "./auth";
@@ -15,6 +16,7 @@ import { nextTaskNumber, relocateTask } from "./tasks";
 import { DONE_COLUMN } from "./queries";
 import { cleanImport, type Imported } from "./trello";
 import { appUrl, mailEnabled, sendMail } from "./mail";
+import { mentionedIn, pushTo } from "./push";
 import { MEETING_REPEATS, safeLink, type MeetingRepeat } from "./meetings";
 import type { Flow } from "./canvas/flow";
 import examplesData from "./template-examples.json";
@@ -495,11 +497,15 @@ export async function fetchArchived(projectId: string) {
 export async function addComment(taskId: string, body: string) {
   const user = await requireUser();
   const text = body.trim().slice(0, 5000);
-  const task = await get<{ project_id: string }>(
-    "SELECT c.project_id FROM tasks t JOIN columns c ON c.id = t.column_id WHERE t.id = ?", taskId,
+  const task = await get<{ project_id: string; title: string }>(
+    "SELECT c.project_id, t.title FROM tasks t JOIN columns c ON c.id = t.column_id WHERE t.id = ?", taskId,
   );
   if (!text || !task || await projectRole(user, task.project_id) === null) return { error: "You cannot comment on this task." };
   await logEvent(taskId, user.id, text, "comment");
+  after(async () => pushTo(await mentionedIn(user.workspace_id, text, user.id, task.project_id), {
+    title: `${user.name} mentioned you`, body: `${task.title}: ${text}`.slice(0, 200),
+    url: `/board?${new URLSearchParams({ project: task.project_id, task: taskId })}`,
+  }));
   await notify("task.updated", taskId, `Comment: ${text}`, user.name);
   revalidatePath("/board");
   return { ok: true, agent: AGENT_MENTION.test(text) };

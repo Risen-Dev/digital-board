@@ -6,6 +6,7 @@ import { conversation, listMembersWithPresence, markRead, unreadCounts } from "@
 import { AGENT_MENTION } from "@/lib/chat";
 import { answerInChat } from "@/lib/chat-agent";
 import { nudgeChat } from "@/lib/chat-live";
+import { mentionedIn, pushTo } from "@/lib/push";
 
 /**
  * Chat is plain fetches plus a push nudge over SSE (/api/chat/live), not a
@@ -94,6 +95,10 @@ export async function POST(req: Request) {
     }
   });
   nudgeChat(me.workspace_id);
+  // Device push: the other person in a DM, or whoever is @named in the channel. Not the private agent thread.
+  const preview = (text || `Sent ${files.length === 1 ? "a file" : `${files.length} files`}`).slice(0, 200);
+  if (recipient && recipient !== me.id) after(() => pushTo([recipient], { title: me.name, body: preview, url: "/board" }));
+  if (!recipient) after(async () => pushTo(await mentionedIn(me.workspace_id, text, me.id), { title: `${me.name} mentioned you`, body: preview, url: "/board" }));
   // The private agent thread (a DM to yourself) always answers; elsewhere only on "@agent".
   // After the response, so sending never waits on the model; the push nudge brings the reply in.
   if (recipient === me.id || AGENT_MENTION.test(text)) after(() => answerInChat(me, recipient));
