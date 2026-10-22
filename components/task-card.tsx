@@ -2,7 +2,7 @@
 
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { AlignLeft, CalendarDays, Flag, ListChecks, MessageSquare, Paperclip, Repeat, Tag } from "lucide-react";
+import { AlignLeft, Ban, CalendarDays, Flag, ListChecks, MessageSquare, Paperclip, Repeat, Tag } from "lucide-react";
 import { initials, labelsOf, PRIORITY_CFG, type Task } from "@/lib/board";
 import type { TaskLinks } from "@/lib/github";
 import { Avatar } from "./avatar";
@@ -13,6 +13,7 @@ export function TaskCard({ task, links, onOpen, overdue = false, overlay = false
   const pull = primaryPull(links);
   const issue = pull ? undefined : primaryIssue(links);
   const labels = labelsOf(task.label);
+  const waiting = task.blockedBy.filter((b) => !b.done).length;
   return (
     <div
       onClick={onOpen}
@@ -37,8 +38,14 @@ export function TaskCard({ task, links, onOpen, overdue = false, overlay = false
         </div>
       )}
       <p className="mb-2 line-clamp-2 text-sm font-medium leading-snug">{task.title}</p>
-      {(task.description || task.checklist.length > 0 || task.comments > 0 || task.images.length > 0 || task.repeat) && (
+      {(waiting > 0 || task.description || task.checklist.length > 0 || task.comments > 0 || task.images.length > 0 || task.repeat) && (
         <div className="mb-2 flex items-center gap-2.5 text-[11px] text-muted-foreground">
+          {waiting > 0 && (
+            <span className="flex items-center gap-1 font-medium text-[var(--chart-7)]" title={`Waiting on ${waiting} card${waiting === 1 ? "" : "s"}`}>
+              <Ban className="size-3.5" />
+              Blocked
+            </span>
+          )}
           {task.description && <AlignLeft className="size-3.5" aria-label="Has description" />}
           {task.checklist.length > 0 && (
             <span className="flex items-center gap-1">

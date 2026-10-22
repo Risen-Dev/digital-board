@@ -350,6 +350,7 @@ export async function moveTask(taskId: string, toColumnId: string, toIndex: numb
   });
   if (fromColumnId !== toColumnId) await notify("task.moved", taskId, `Moved from ${fromTitle} to ${dest.title}`, user.name);
   if (fromColumnId !== toColumnId) await repeatTask(taskId, toColumnId, user);
+  if (fromColumnId !== toColumnId) await announceUnblocked(taskId, toColumnId, user);
 
   revalidatePath("/board");
 }
@@ -520,6 +521,55 @@ export async function askCardAgent(taskId: string) {
   if (!task || await projectRole(user, task.project_id) === null) return;
   await answerOnCard(user, taskId);
   revalidatePath("/board");
+}
+
+/** A card reached its done column: say so on every card that was waiting on it. */
+async function announceUnblocked(taskId: string, columnId: string, user: User) {
+  const done = await get<{ key: string }>(
+    `SELECT p.key || '-' || t.number AS key FROM tasks t JOIN columns c ON c.id = t.column_id JOIN projects p ON p.id = c.project_id
+      WHERE t.id = ? AND c.id = ? AND c.id = ${DONE_COLUMN}`,
+    taskId, columnId,
+  );
+  if (!done) return;
+  for (const { task_id } of await all<{ task_id: string }>("SELECT task_id FROM task_blockers WHERE blocker_id = ?", taskId)) {
+    await logEvent(task_id, user.id, `${done.key} is done`);
+  }
+}
+
+/**
+ * "Blocked by": `taskId` waits on `blockerId`. Same project only, so a card never
+ * shows the title of one its viewers can't open; a dependency loop is refused.
+ */
+export async function setBlocker(taskId: string, blockerId: string, blocked: boolean) {
+  const user = await requireUser();
+  if (!await writableTask(user, taskId)) return { error: "You cannot edit this task." };
+  const pair = await all<{ id: string; project_id: string; key: string }>(
+    `SELECT t.id, c.project_id, p.key || '-' || t.number AS key
+       FROM tasks t JOIN columns c ON c.id = t.column_id JOIN projects p ON p.id = c.project_id
+      WHERE t.id IN (?, ?) AND t.archived_at IS NULL`,
+    taskId, blockerId,
+  );
+  const task = pair.find((t) => t.id === taskId), blocker = pair.find((t) => t.id === blockerId);
+  if (!task || !blocker || taskId === blockerId || task.project_id !== blocker.project_id) return { error: "Pick another card in this project." };
+
+  if (!blocked) {
+    await run("DELETE FROM task_blockers WHERE task_id = ? AND blocker_id = ?", taskId, blockerId);
+    await logEvent(taskId, user.id, `No longer blocked by ${blocker.key}`);
+  } else {
+    // Would the blocker (transitively) wait on this card? Then this edge closes a loop.
+    const loop = await get(
+      `WITH RECURSIVE up(id) AS (
+         SELECT blocker_id FROM task_blockers WHERE task_id = ?
+         UNION SELECT tb.blocker_id FROM task_blockers tb JOIN up ON tb.task_id = up.id
+       ) SELECT 1 FROM up WHERE id = ?`,
+      blockerId, taskId,
+    );
+    if (loop) return { error: `${blocker.key} already waits on this card.` };
+    await run("INSERT INTO task_blockers (task_id, blocker_id) VALUES (?,?) ON CONFLICT DO NOTHING", taskId, blockerId);
+    await logEvent(taskId, user.id, `Blocked by ${blocker.key}`);
+  }
+  revalidatePath("/board");
+  return { ok: true };
 }
 
 /** Saves the whole checklist; the dialog sends it after every tick, add or delete. */
