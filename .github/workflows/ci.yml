@@ -1,0 +1,34 @@
+# Lint, type-check, self-checks against a real Postgres, and a production build.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npx tsc --noEmit
+      - run: node --experimental-strip-types lib/board.check.ts
+      - run: node --experimental-strip-types lib/chat.check.ts
+      - run: node --experimental-strip-types lib/canvas/merge.check.ts
+      - run: node lib/postgres.check.mjs
+      - run: npm run build

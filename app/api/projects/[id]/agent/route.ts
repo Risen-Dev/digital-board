@@ -8,6 +8,7 @@ import { PROJECT_SYSTEM, boardBrief, resolveActions, type AgentOp, type TaskFiel
 import { parseFlow } from "@/lib/canvas/flow";
 import { sheetsBrief } from "@/lib/card-agent";
 import { PALETTE } from "@/lib/board";
+import { nudgeChat } from "@/lib/chat-live";
 
 const HISTORY_TURNS = 20;
 
@@ -99,6 +100,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
               "INSERT INTO messages (workspace_id, author_id, recipient_id, body, created_at) VALUES (?,?,?,?,?)",
               user.workspace_id, user.id, op.to, op.text, new Date().toISOString(),
             );
+            nudgeChat(user.workspace_id);
             return null;
           }
           const result = await addColumn(projectId, op.title, PALETTE[added++ % PALETTE.length]);

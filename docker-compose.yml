@@ -1,0 +1,31 @@
+# docker compose up -d  → http://localhost:3000
+# Change POSTGRES_PASSWORD (both places) before exposing this anywhere.
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    ports: ["3000:3000"]
+    environment:
+      DATABASE_URL: postgres://board:board@db:5432/board
+      # REGISTRATION_CLOSED: "1"
+      # Emailed password reset: both needed.
+      # SMTP_URL: smtps://user:pass@smtp.example.com
+      # APP_URL: https://board.example.com
+      # MAIL_FROM: Digital Board <board@example.com>
+    depends_on:
+      db:
+        condition: service_healthy
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: board
+      POSTGRES_PASSWORD: board
+      POSTGRES_DB: board
+    volumes: [db:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "board"]
+      interval: 5s
+      retries: 10
+volumes:
+  db:

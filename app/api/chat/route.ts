@@ -5,10 +5,11 @@ import { get, run, transaction } from "@/lib/db";
 import { conversation, listMembersWithPresence, markRead, unreadCounts } from "@/lib/queries";
 import { AGENT_MENTION } from "@/lib/chat";
 import { answerInChat } from "@/lib/chat-agent";
+import { nudgeChat } from "@/lib/chat-live";
 
 /**
- * Chat runs on a poll, not a socket. A self-hosted single instance does not
- * justify a WebSocket server, and Server Actions would revalidate the whole
+ * Chat is plain fetches plus a push nudge over SSE (/api/chat/live), not a
+ * WebSocket server, and not Server Actions, which would revalidate the whole
  * board on every message. Reading a conversation also marks it read.
  */
 
@@ -92,8 +93,9 @@ export async function POST(req: Request) {
       );
     }
   });
+  nudgeChat(me.workspace_id);
   // The private agent thread (a DM to yourself) always answers; elsewhere only on "@agent".
-  // After the response, so sending never waits on the model; the poll brings the reply in.
+  // After the response, so sending never waits on the model; the push nudge brings the reply in.
   if (recipient === me.id || AGENT_MENTION.test(text)) after(() => answerInChat(me, recipient));
 
   return new NextResponse(null, { status: 204 });
@@ -120,5 +122,6 @@ export async function PATCH(req: Request) {
   }
 
   await run("UPDATE messages SET body = ?, edited_at = ? WHERE id = ?", text, new Date().toISOString(), id);
+  nudgeChat(me.workspace_id, "edit");
   return new NextResponse(null, { status: 204 });
 }

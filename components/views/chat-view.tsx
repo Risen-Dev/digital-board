@@ -8,7 +8,9 @@ import type { Attachment, CanvasTag, ChatMessage, MemberPresence, Presence, Unre
 import { MentionText, tagOptions, useMentionPicker } from "@/components/mentions";
 import { Avatar } from "../avatar";
 
-const POLL_MS = 3000;
+// New messages are pushed (/api/chat/live); this slow poll only covers a dropped
+// stream or a message written on another server instance.
+const POLL_MS = 30_000;
 
 const PRESENCE_COLOR: Record<Presence, string> = {
   online: "var(--chart-2)",
@@ -178,6 +180,7 @@ function Thread({
   const picker = useRef<HTMLInputElement>(null);
   const lastId = useRef(0);
   const inFlight = useRef(false);
+  const again = useRef(false);
 
   /**
    * Poll this conversation. Reading it also clears its unread count server-side.
@@ -185,25 +188,34 @@ function Thread({
    * `reset` refetches from the start — needed after an edit, since an
    * `after=<id>` poll never revisits a row it has already seen.
    *
-   * Two polls can overlap (the 3s interval and the one fired right after a
+   * Two polls can overlap (a push nudge and the one fired right after a
    * send), and both would read the same `lastId` and append the same rows, so
-   * the merge dedupes by id and an interval tick yields while one is in flight.
+   * the merge dedupes by id and a call that finds one in flight queues one more round.
    */
   const poll = useCallback(
     async (reset = false) => {
-      if (inFlight.current && !reset) return;
+      // A nudge that lands mid-fetch must not be lost: note it and go round once more.
+      if (inFlight.current && !reset) {
+        again.current = true;
+        return;
+      }
       inFlight.current = true;
-      const from = reset ? 0 : lastId.current;
       try {
-        const res = await fetch(`/api/chat?with=${active}&after=${from}`, { cache: "no-store" });
-        if (!res.ok) return;
-        const data = (await res.json()) as { messages: ChatMessage[]; members: MemberPresence[]; unread: Unread[] };
-        onMembers(data.members);
-        onUnread(data.unread);
-        lastId.current = cursorOf(data.messages, from);
-        setMessages((prev) => mergeMessages(prev, data.messages, reset));
+        do {
+          again.current = false;
+          const from = reset ? 0 : lastId.current;
+          const res = await fetch(`/api/chat?with=${active}&after=${from}`, { cache: "no-store" });
+          if (!res.ok) return;
+          const data = (await res.json()) as { messages: ChatMessage[]; members: MemberPresence[]; unread: Unread[] };
+          onMembers(data.members);
+          onUnread(data.unread);
+          lastId.current = cursorOf(data.messages, from);
+          const fresh = reset;
+          setMessages((prev) => mergeMessages(prev, data.messages, fresh));
+          reset = false;
+        } while (again.current);
       } catch {
-        // A dropped poll is not worth surfacing; the next tick recovers.
+        // A dropped poll is not worth surfacing; the next nudge or tick recovers.
       } finally {
         inFlight.current = false;
       }
@@ -214,7 +226,13 @@ function Thread({
   useEffect(() => {
     void poll();
     const t = setInterval(() => void poll(), POLL_MS);
-    return () => clearInterval(t);
+    // EventSource reconnects on its own; an edit needs a full refetch (see poll).
+    const live = new EventSource("/api/chat/live");
+    live.onmessage = (e) => void poll((JSON.parse(e.data) as { type: string }).type === "edit");
+    return () => {
+      clearInterval(t);
+      live.close();
+    };
   }, [poll]);
 
   useEffect(() => {

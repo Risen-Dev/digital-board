@@ -14,6 +14,7 @@ import { answerOnCard } from "./card-agent";
 import { nextTaskNumber, relocateTask } from "./tasks";
 import { DONE_COLUMN } from "./queries";
 import { cleanImport, type Imported } from "./trello";
+import { appUrl, mailEnabled, sendMail } from "./mail";
 import { MEETING_REPEATS, safeLink, type MeetingRepeat } from "./meetings";
 import type { Flow } from "./canvas/flow";
 import examplesData from "./template-examples.json";
@@ -144,6 +145,7 @@ export async function loginAction(_prev: unknown, form: FormData) {
   const email = String(form.get("email") ?? "");
   const password = String(form.get("password") ?? "");
   const id = await login(email, password);
+  if (id === "locked") return { error: "Too many failed attempts. Try again in 15 minutes." };
   if (!id) return { error: "Wrong email or password." };
   await startSession(id);
   redirect("/board");
@@ -183,11 +185,11 @@ export async function inviteMember(_prev: unknown, form: FormData) {
 const PROJECT_ROLES = ["admin", "editor", "viewer"];
 
 // ── Passwords ───────────────────────────────────────────────────────────────
-// No mail server here, so there is no emailed reset link. Two paths instead:
-// you change your own with your current password, or a workspace admin sets a
-// member's. Both drop that user's sessions, so a stolen one dies with the
-// password. Locked out of the admin account entirely? scripts/reset-password.mjs
-// on the machine holding the database.
+// You change your own with your current password, a workspace admin sets a
+// member's, or — when SMTP_URL + APP_URL are set — an emailed one-hour link.
+// All drop that user's sessions, so a stolen one dies with the password. Locked
+// out of the admin account with no mail? scripts/reset-password.mjs on the
+// machine holding the database.
 
 export async function changeMyPassword(_prev: unknown, form: FormData) {
   const user = await requireUser();
@@ -217,6 +219,47 @@ export async function setMemberPassword(userId: string, password: string) {
   if (userId === user.id) await startSession(user.id);
   revalidatePath("/board");
   return { ok: true };
+}
+
+const RESET_MS = 60 * 60_000;
+const sha256 = (s: string) => createHash("sha256").update(s).digest("hex");
+
+/** Always answers the same, so the form can't be used to probe which emails exist. */
+export async function requestPasswordReset(_prev: unknown, form: FormData) {
+  if (!mailEnabled()) return { error: "Password reset by email is not set up on this server." };
+  const email = String(form.get("email") ?? "").toLowerCase().trim();
+  const user = await get<{ id: string; name: string }>("SELECT id, name FROM users WHERE email = ?", email);
+  // One mail per user per 5 minutes, so the form can't flood someone's inbox.
+  const recentSent = user && await get(
+    "SELECT 1 FROM password_resets WHERE user_id = ? AND created_at > ?", user.id, new Date(Date.now() - 5 * 60_000).toISOString());
+  if (user && !recentSent) {
+    const token = randomBytes(32).toString("hex");
+    const now = Date.now();
+    await run("DELETE FROM password_resets WHERE user_id = ?", user.id);
+    await run("INSERT INTO password_resets (token_hash, user_id, created_at, expires_at) VALUES (?,?,?,?)",
+      sha256(token), user.id, new Date(now).toISOString(), new Date(now + RESET_MS).toISOString());
+    try {
+      await sendMail(email, "Reset your Digital Board password",
+        `Hi ${user.name},\n\nOpen this link within an hour to choose a new password:\n${appUrl(`/reset?token=${token}`)}\n\nIf you didn't ask for this, ignore this email.`);
+    } catch (err) {
+      console.error("password reset mail failed", err);
+      return { error: "Could not send the email. Ask a workspace admin to check the mail settings." };
+    }
+  }
+  return { ok: true };
+}
+
+export async function resetPassword(_prev: unknown, form: FormData) {
+  const token = String(form.get("token") ?? "");
+  const next = String(form.get("next") ?? "");
+  if (next.length < 8) return { error: "New password must be at least 8 characters." };
+  const row = await get<{ user_id: string }>(
+    "SELECT user_id FROM password_resets WHERE token_hash = ? AND expires_at > ?", sha256(token), new Date().toISOString());
+  if (!row) return { error: "This link is invalid or has expired. Ask for a new one." };
+  await run("DELETE FROM password_resets WHERE user_id = ?", row.user_id);
+  await setPassword(row.user_id, next);
+  await startSession(row.user_id);
+  redirect("/board");
 }
 
 // ── Tasks ───────────────────────────────────────────────────────────────────

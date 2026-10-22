@@ -2,6 +2,7 @@ import "server-only";
 import { all, run } from "./db";
 import { aiConfig, askText } from "./ai";
 import { turnsOf } from "./chat";
+import { nudgeChat } from "./chat-live";
 import { boardBrief } from "./board-agent";
 import { getBoard, listMembers, listProjects } from "./queries";
 import type { User } from "./auth";
@@ -35,15 +36,17 @@ async function sharedProjects(workspaceId: string, participants: string[]) {
 /**
  * Answers the conversation `me` just wrote in: the channel (`to` null), a DM, or the
  * private agent thread (`to` = me). The reply is a message with `agent = true`,
- * stored under the asker's id (authors must be users) and picked up by the poll.
+ * stored under the asker's id (authors must be users) and pushed to open Chat tabs.
  */
 // ponytail: any member can call the agent, no per-user quota; add one if the provider bill matters.
 export async function answerInChat(me: User, to: string | null) {
-  const reply = async (body: string) =>
-    run(
+  const reply = async (body: string) => {
+    await run(
       "INSERT INTO messages (workspace_id, author_id, recipient_id, body, created_at, agent) VALUES (?,?,?,?,?,true)",
       me.workspace_id, me.id, to, body.slice(0, 4000), new Date().toISOString(),
     );
+    nudgeChat(me.workspace_id);
+  };
 
   const config = await aiConfig(me.workspace_id);
   if (!config) return reply("The AI agent isn't set up yet — a workspace admin can configure it in Settings → AI agent.");

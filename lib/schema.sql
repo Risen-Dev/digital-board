@@ -298,3 +298,13 @@ CREATE TABLE IF NOT EXISTS task_images (
   created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS task_images_task ON task_images(task_id, created_at);
+
+-- Emailed password-reset links (only when SMTP_URL + APP_URL are set). The token
+-- itself is only in the email; this keeps its sha256, valid for an hour.
+CREATE TABLE IF NOT EXISTS password_resets (
+  token_hash TEXT PRIMARY KEY,
+  user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS password_resets_user ON password_resets(user_id);
