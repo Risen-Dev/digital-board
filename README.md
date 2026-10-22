@@ -81,7 +81,8 @@ Requires **Node 22+** and **PostgreSQL 14+** (verified on 16). For development,
 | **Agent on a card** | Write `@agent` in a card comment and the AI agent answers there, reading the card, the rest of the board, upcoming meetings and the text on the project's canvas sheets and tagged groups. It only reads. |
 | **Meetings** | Daily, weekday, weekly or monthly meetings (or one-offs) with a time, link and attendees. Attendees get a reminder before each one in the bell and as a browser alert, while they have the app open. |
 | **Chat** | Workspace channel plus direct messages, with unread badges, attachments and a 15-minute edit window. |
-| **Notifications** | Bell dropdown combines unread card activity and chat. Card items open Inbox; chat items open their conversation; card items can be marked read. Enable alerts there for browser notifications, an in-app popup, and sound. |
+| **Search** | <kbd>⌘K</kbd> / <kbd>Ctrl K</kbd> or the header search icon: cards (title, description or key like `RIS-12`) and messages you can see, plus projects and meetings. Enter opens the card, project, conversation or Meetings. |
+| **Notifications** | Bell dropdown combines unread card activity and chat. Card items open Inbox; chat items open their conversation; card items can be marked read. Enable alerts there for browser notifications, an in-app popup, and sound. Over HTTPS (or on localhost) that also turns on device push: mentions, direct messages and a daily 08:00 list of due cards arrive with no tab open, and the app installs as a PWA. |
 | **Accounts** | Multi-user with `scrypt` password hashing and cookie sessions. Presence shows who is online. |
 | **Templates** | Six project templates with their own columns. Each can also seed example tasks and a canvas flow. The spec and agent prompts are in [`templates.md`](templates.md). |
 | **Import from Trello** | Settings → Projects → **New project**, then pick a file — or open an existing project there and use **Import cards**, either adding to its board (a list goes into the column with the same name, else a new column) or replacing the whole board with the file's lists and cards. Accepts a Trello export (**Export as JSON** works on every Trello plan; CSV needs Premium) or any CSV with a `Title` column, plus optional `Column`/`List`, `Description`, `Labels`, `Due`, `Members`, `Archived`. Lists become columns; cards keep labels, due dates, checklists (JSON) and archived state; members are matched to workspace members by name. Comments and attachments are not imported. |
@@ -332,7 +333,8 @@ arrives on the 30-second fallback poll. Chat has no deletion, reactions or threa
 not saved — it is gone after a reload. The inbound webhook only creates cards,
 the outgoing webhook does not retry failed deliveries, email-to-ticket sends
 no replies, and calendar apps refresh the iCal feed on
-their own schedule (Google: every few hours).
+their own schedule (Google: every few hours). Device push needs HTTPS (browsers refuse it on plain
+http other than localhost), and meeting reminders stay in-app only.
 
 Full list in the [docs](/docs).
 

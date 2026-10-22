@@ -377,3 +377,34 @@ export async function markAllMessagesRead(workspaceId: string, meId: string) {
     );
   }
 }
+
+export type SearchCard = { id: string; title: string; key: string | null; projectId: string; projectName: string; columnTitle: string };
+export type SearchMessage = { id: number; body: string; channel: string; author: string; atLabel: string };
+
+/**
+ * Cmd+K search over cards (title, description or key like "RIS-12") in the projects
+ * this user can open, and messages in the channel or their own DMs. Projects and
+ * meetings are already on the client, so the palette filters those itself.
+ */
+// ponytail: ILIKE scans; add a pg_trgm GIN index on tasks.title/messages.body if it gets slow.
+export async function searchWorkspace(workspaceId: string, meId: string, isAdmin: number, q: string) {
+  const like = `%${q.replace(/[\\%_]/g, "\\$&")}%`;
+  const cards = await all<SearchCard>(
+    `SELECT t.id, t.title, p.key || '-' || t.number AS key, p.id AS "projectId", p.name AS "projectName", c.title AS "columnTitle"
+       FROM tasks t JOIN columns c ON c.id = t.column_id JOIN projects p ON p.id = c.project_id
+      WHERE p.workspace_id = ? AND t.archived_at IS NULL
+        AND (? = 1 OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = ?))
+        AND (t.title ILIKE ? OR t.description ILIKE ? OR p.key || '-' || t.number ILIKE ?)
+      ORDER BY t.created_at DESC LIMIT 8`,
+    workspaceId, isAdmin, meId, like, like, like,
+  );
+  const messages = (await all<Omit<SearchMessage, "atLabel"> & { created_at: string }>(
+    `SELECT m.id, m.body, m.created_at, CASE WHEN m.agent THEN 'AI agent' ELSE u.name END AS author,
+            CASE WHEN m.recipient_id IS NULL THEN 'all' WHEN m.author_id = ? THEN m.recipient_id ELSE m.author_id END AS channel
+       FROM messages m JOIN users u ON u.id = m.author_id
+      WHERE m.workspace_id = ? AND (m.recipient_id IS NULL OR m.recipient_id = ? OR m.author_id = ?) AND m.body ILIKE ?
+      ORDER BY m.id DESC LIMIT 8`,
+    meId, workspaceId, meId, meId, like,
+  )).map(({ created_at, ...m }) => ({ ...m, atLabel: stamp(created_at) }));
+  return { cards, messages };
+}
