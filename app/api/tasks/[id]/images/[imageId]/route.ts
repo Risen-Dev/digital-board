@@ -22,6 +22,15 @@ export async function GET(_req: Request, { params }: Params) {
   });
 }
 
+/** Makes this image the card's cover; the others drop back to oldest-first. */
+export async function PATCH(_req: Request, { params }: Params) {
+  const { id, imageId } = await params;
+  if (!await taskGuard(id, true)) return new NextResponse("You cannot edit this task.", { status: 403 });
+  if (!await get("SELECT 1 FROM task_images WHERE id = ? AND task_id = ?", imageId, id)) return new NextResponse("Not found", { status: 404 });
+  await run("UPDATE task_images SET cover = (id = ?) WHERE task_id = ?", imageId, id);
+  return new NextResponse(null, { status: 204 });
+}
+
 export async function DELETE(_req: Request, { params }: Params) {
   const { id, imageId } = await params;
   if (!await taskGuard(id, true)) return new NextResponse("You cannot edit this task.", { status: 403 });

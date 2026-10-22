@@ -30,5 +30,5 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   });
   if (error) return new NextResponse(error, { status: 413 });
   // The open dialog shows these; it keeps the task it opened with.
-  return NextResponse.json(await all("SELECT id, name FROM task_images WHERE task_id = ? ORDER BY created_at, id", id));
+  return NextResponse.json(await all("SELECT id, name FROM task_images WHERE task_id = ? ORDER BY cover DESC, created_at, id", id));
 }
