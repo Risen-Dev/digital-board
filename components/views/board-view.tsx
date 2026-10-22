@@ -135,6 +135,9 @@ export function BoardView({
   return (
     <main className="flex-1 overflow-x-auto overflow-y-hidden">
       <DndContext
+        // A fixed id: dnd-kit otherwise numbers its aria-describedby from a global
+        // counter, which differs between the server render and hydration.
+        id="board"
         sensors={sensors}
         collisionDetection={collisionDetection}
         // Re-measure on every drag. Without this, droppable rects are captured
