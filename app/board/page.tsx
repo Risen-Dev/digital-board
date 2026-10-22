@@ -11,7 +11,7 @@ export default async function BoardPage({ searchParams }: PageProps<"/board">) {
   const ws = user.workspace_id;
 
   const projects = await listProjects(ws, user.id, user.is_admin === 1);
-  const { project: wanted, sheet, tag } = await searchParams;
+  const { project: wanted, sheet, tag, task } = await searchParams;
   const project = projects.find((p) => p.id === wanted) ?? projects[0] ?? null;
   const workspace = await workspaceName(ws);
   const ai = await aiConfig(ws);
@@ -35,6 +35,7 @@ export default async function BoardPage({ searchParams }: PageProps<"/board">) {
       sheets={project ? await listCanvases(project.id) : []}
       tags={await listCanvasTags(projects.map((p) => p.id))}
       focus={typeof sheet === "string" && typeof tag === "string" ? { sheetId: sheet, tag } : null}
+      openTask={typeof task === "string" ? task : null}
       today={new Date().toISOString().slice(0, 10)}
       aiEnabled={!!ai}
       // The key never leaves the server; only admins see the rest.

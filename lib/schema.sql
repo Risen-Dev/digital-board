@@ -318,3 +318,16 @@ CREATE TABLE IF NOT EXISTS task_blockers (
   CHECK (task_id <> blocker_id)
 );
 CREATE INDEX IF NOT EXISTS task_blockers_blocker ON task_blockers(blocker_id);
+
+-- Web Push: one row per browser that turned alerts on (lib/push.ts). The VAPID
+-- key pair lives in settings under 'vapid'.
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  endpoint   TEXT PRIMARY KEY,
+  user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  p256dh     TEXT NOT NULL,
+  auth       TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS push_subscriptions_user ON push_subscriptions(user_id);
+-- Server-local date of the last daily "cards due" push, so it goes once a day.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS due_pushed_on TEXT;

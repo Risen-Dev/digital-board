@@ -10,7 +10,7 @@ import {
 import { applyFilters, initials, labelsOf, type Column, type Filters, type Member, type Task } from "@/lib/board";
 import { archiveTask, fetchArchived, logoutAction, renameProject, renameWorkspace } from "@/lib/actions";
 import { Modal } from "./modal";
-import type { CanvasMeta, CanvasTag, FeedItem, MemberPresence, Project, ProjectMember, Unread } from "@/lib/queries";
+import type { CanvasMeta, CanvasTag, FeedItem, MemberPresence, Project, ProjectMember, SearchCard, Unread } from "@/lib/queries";
 import type { User } from "@/lib/auth";
 import { Avatar } from "./avatar";
 import { LogoMark } from "./logo-mark";
@@ -31,6 +31,7 @@ import { useGithubLinks } from "@/hooks/use-github-links";
 import type { AiSettings } from "@/lib/ai";
 import { ChatView, PresenceDot, UnreadBadge } from "./views/chat-view";
 import { MeetingsView, startsIn } from "./views/meetings-view";
+import { SearchPalette } from "./search-palette";
 import { meetingState, type Meeting } from "@/lib/meetings";
 
 const VIEWS = [
@@ -57,8 +58,35 @@ const SECTIONS: { key: SectionKey; Icon: typeof Home; label: string }[] = [
 
 type Alert = { title: string; body: string };
 
+/**
+ * Registers the service worker and saves this browser's push subscription, so
+ * alerts arrive with no tab open. False where push isn't available: plain http
+ * (other than localhost), or a browser without it.
+ */
+async function subscribePush() {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) return false;
+  const reg = await navigator.serviceWorker.register("/sw.js", { scope: "/", updateViaCache: "none" });
+  await navigator.serviceWorker.ready;
+  const sub = await reg.pushManager.getSubscription()
+    ?? await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: (await (await fetch("/api/push")).json()).key });
+  const res = await fetch("/api/push", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(sub) });
+  return res.ok;
+}
+
+/** On sign-out, so a shared device stops getting this person's alerts. */
+async function dropPush() {
+  try {
+    const sub = await (await navigator.serviceWorker?.getRegistration())?.pushManager.getSubscription();
+    if (!sub) return;
+    await fetch("/api/push", { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ endpoint: sub.endpoint }) });
+    await sub.unsubscribe();
+  } catch {
+    // Signing out must not hang on this.
+  }
+}
+
 export function Workspace({
-  user, workspace, projects, project, columns, members, assignments, presence, feed, notifications: initialNotifications, unread: initialUnread, mine, meetings: initialMeetings, stats, sheets, tags: allTags, focus, today, dark, aiEnabled, ai,
+  user, workspace, projects, project, columns, members, assignments, presence, feed, notifications: initialNotifications, unread: initialUnread, mine, meetings: initialMeetings, stats, sheets, tags: allTags, focus, openTask, today, dark, aiEnabled, ai,
 }: {
   user: User;
   workspace: string;
@@ -77,6 +105,8 @@ export function Workspace({
   tags: CanvasTag[];
   /** From `?sheet=&tag=`: an @tag clicked in another project lands here. */
   focus: { sheetId: string; tag: string } | null;
+  /** From `?task=`: a card picked in search from another project opens here. */
+  openTask: string | null;
   presence: MemberPresence[];
   today: string;
   dark: boolean;
@@ -112,6 +142,31 @@ export function Workspace({
       setSection("canvas");
     }
   }
+  // `?task=` opens that card once per new value, like `focus` above.
+  const [prevOpenTask, setPrevOpenTask] = useState<string | null>(null);
+  if (openTask !== prevOpenTask) {
+    setPrevOpenTask(openTask);
+    const task = openTask && columns.flatMap((c) => c.tasks).find((t) => t.id === openTask);
+    if (task) {
+      setEditing(task);
+      setSection("board");
+    }
+  }
+  // Alerts already allowed: keep this browser's push subscription saved (it can rotate).
+  useEffect(() => {
+    if (typeof Notification !== "undefined" && Notification.permission === "granted") void subscribePush().catch(() => {});
+  }, []);
+  const [searching, setSearching] = useState(false);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setSearching((open) => !open);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
   // The open project's tags first, so a name used in two projects resolves here.
   const tags = useMemo(() => [...allTags.filter((t) => t.projectId === project?.id), ...allTags.filter((t) => t.projectId !== project?.id)], [allTags, project?.id]);
   // A tag is focused once: leaving the canvas forgets it, so reopening starts as usual.
@@ -265,7 +320,13 @@ export function Workspace({
     }
     audio.current ??= new AudioContext();
     if (audio.current.state === "suspended") await audio.current.resume();
-    setAlert({ title: "Alerts enabled", body: "New card and chat notifications will show here and on this device." });
+    const pushed = await subscribePush().catch(() => false);
+    setAlert({
+      title: "Alerts enabled",
+      body: pushed
+        ? "Mentions, direct messages and due cards reach this device even with the tab closed."
+        : "New card and chat notifications will show here while this tab is open.",
+    });
   }
 
   const close = () => {
@@ -384,7 +445,7 @@ export function Workspace({
                   <p className="truncate text-[10px] text-muted-foreground">{user.email}</p>
                 </div>
                 <span className="md:hidden"><ThemeToggle /></span>
-                <form action={logoutAction}>
+                <form action={async () => { await dropPush(); await logoutAction(); }}>
                   <button title="Sign out" className="rounded p-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
                     <LogOut className="size-3.5" />
                   </button>
@@ -465,6 +526,15 @@ export function Workspace({
                 </button>
               </>
             )}
+            <button
+              onClick={() => setSearching(true)}
+              title="Search (⌘K)"
+              aria-label="Search"
+              className="flex items-center gap-1.5 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+            >
+              <Search className="size-4" />
+              <kbd className="hidden rounded border px-1 text-[10px] lg:inline">⌘K</kbd>
+            </button>
             {/* On phones the toggle lives in the drawer's footer instead. */}
             <span className="hidden md:contents"><ThemeToggle /></span>
             <div className="relative">
@@ -676,6 +746,35 @@ export function Workspace({
       )}
       {showArchived && project && (
         <ArchivedDialog projectId={project.id} readOnly={readOnly} onClose={() => setShowArchived(false)} />
+      )}
+      {searching && (
+        <SearchPalette
+          projects={projects}
+          meetings={meetings}
+          channelName={(channel) => chatName(channel, user.id, live)}
+          onClose={() => setSearching(false)}
+          onCard={(card: SearchCard) => {
+            setSearching(false);
+            const task = card.projectId === project?.id && columns.flatMap((c) => c.tasks).find((t) => t.id === card.id);
+            if (!task) return router.push(`/board?${new URLSearchParams({ project: card.projectId, task: card.id })}`);
+            setEditing(task);
+            setSection("board");
+          }}
+          onProject={(projectId) => {
+            setSearching(false);
+            setSection("board");
+            if (projectId !== project?.id) router.push(`/board?project=${projectId}`);
+          }}
+          onMessage={(channel) => {
+            setSearching(false);
+            setChatChannel(channel);
+            setSection("chat");
+          }}
+          onMeeting={() => {
+            setSearching(false);
+            setSection("meetings");
+          }}
+        />
       )}
       {alert && (
         <button onClick={() => setAlert(null)} className="fixed bottom-5 right-5 z-50 w-80 rounded-lg border bg-card p-3 text-left shadow-lg animate-in fade-in slide-in-from-bottom-4 duration-300">
