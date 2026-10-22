@@ -2,7 +2,7 @@
 
 import { startTransition, useActionState, useEffect, useEffectEvent, useRef, useState, useSyncExternalStore, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, ChevronRight, FolderKanban, FolderPlus, KeyRound, Plus, Settings2, Sparkles, Trash2, UserRound, Users, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, FolderKanban, FolderPlus, KeyRound, Plus, Settings2, Sparkles, Trash2, UserRound, Users, X } from "lucide-react";
 import { OUTGOING_EVENTS } from "@/lib/outgoing-events";
 import { changeMyPassword, fetchAiModels, importIntoProject, rotateGithubWebhook, rotateInboundToken, saveGithub, saveOutgoing, testOutgoing, setProjectKey, saveAiConfig, deleteProject, inviteMember, renameProject, renameWorkspace, setMemberPassword, setProjectMember } from "@/lib/actions";
 import { initials } from "@/lib/board";
@@ -150,6 +150,17 @@ function GeneralTab({ workspace, isAdmin }: { workspace: string; isAdmin: boolea
         <p className="rounded-lg border bg-card px-3 py-2 text-sm font-medium">{workspace}</p>
       )}
       {isAdmin && <p className="mt-1.5 text-[11px] text-muted-foreground">Click the name to rename it.</p>}
+      {isAdmin && (
+        <>
+          <label className="mb-1.5 mt-6 block text-xs font-medium">Backup</label>
+          <a href="/api/export" download className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs hover:bg-secondary">
+            <Download className="size-3.5" /> Export workspace (JSON)
+          </a>
+          <p className="mt-1.5 text-[11px] text-muted-foreground">
+            Every project, card, comment, image, canvas, meeting and channel message. Passwords, tokens, API keys and direct messages are left out.
+          </p>
+        </>
+      )}
     </>
   );
 }
