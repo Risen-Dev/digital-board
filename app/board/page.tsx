@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { currentUser } from "@/lib/auth";
-import { activityFeed, activityNotifications, analytics, getBoard, listCanvases, listCanvasTags, listMembers, listMembersWithPresence, listMeetings, listProjects, listViews, myTasks, projectMembers, unreadCounts, workspaceName } from "@/lib/queries";
+import { activityFeed, activityNotifications, analytics, getBoard, listCanvases, listCanvasTags, listMembers, listFields, listMembersWithPresence, listMeetings, listProjects, listViews, myTasks, projectMembers, unreadCounts, workspaceName } from "@/lib/queries";
 import { Workspace } from "@/components/workspace";
 import { aiConfig, aiSettings } from "@/lib/ai";
 
@@ -34,6 +34,7 @@ export default async function BoardPage({ searchParams }: PageProps<"/board">) {
       stats={project ? await analytics(project.id) : null}
       sheets={project ? await listCanvases(project.id) : []}
       views={project ? await listViews(project.id) : []}
+      fields={project ? await listFields(project.id) : []}
       tags={await listCanvasTags(projects.map((p) => p.id))}
       focus={typeof sheet === "string" && typeof tag === "string" ? { sheetId: sheet, tag } : null}
       openTask={typeof task === "string" ? task : null}

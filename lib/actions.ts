@@ -6,7 +6,7 @@ import { after } from "next/server";
 import { redirect } from "next/navigation";
 import { all, get, run, transaction } from "./db";
 import { createUser, createWorkspace, currentUser, endSession, login, passwordOf, setPassword, startSession, verifyPassword, type User } from "./auth";
-import { cleanFilters, joinLabels, LAYOUTS, nextDue, parseDuration, projectKeyOf, PROJECT_KEY_RE, REPEATS, templateOf, PALETTE, PRIORITIES, reorder, type CheckItem, type Filters, type Layout, type Member, type Priority, type Repeat } from "./board";
+import { cleanFilters, FIELD_TYPES, fieldOptionsOf, fieldValuesOf, joinLabels, LAYOUTS, nextDue, parseDuration, projectKeyOf, PROJECT_KEY_RE, REPEATS, templateOf, PALETTE, PRIORITIES, reorder, type CheckItem, type CustomField, type FieldType, type Filters, type Layout, type Member, type Priority, type Repeat } from "./board";
 import { broadcast } from "./canvas/hub";
 import { projectRole } from "./canvas/guard";
 import { notify } from "./outgoing";
@@ -315,15 +315,18 @@ export async function createTask(_prev: unknown, form: FormData) {
   const { description, label, dueDate, assignees, repeat } = taskFieldsOf(form);
   const invalid = await invalidTaskFields(user, priority, assignees, repeat);
   if (invalid) return { error: invalid };
+  const read = fieldValuesOf((k) => form.get(k), await fieldsOfColumn(columnId));
+  if ("error" in read) return { error: read.error };
+  const fields = read.values;
 
   const id = randomUUID();
   await transaction(async () => {
     const { project_id } = (await get<{ project_id: string }>("SELECT project_id FROM columns WHERE id = ?", columnId))!;
     const next = ((await get<{ n: number }>("SELECT COALESCE(MAX(position) + 1, 0) n FROM tasks WHERE column_id = ?", columnId)))!.n;
     await run(
-      `INSERT INTO tasks (id, column_id, title, description, label, priority, due_date, repeat, position, number, created_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-      id, columnId, title, description, label, priority, dueDate, repeat, next, await nextTaskNumber(project_id), now(),
+      `INSERT INTO tasks (id, column_id, title, description, label, priority, due_date, repeat, position, number, created_at, fields)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+      id, columnId, title, description, label, priority, dueDate, repeat, next, await nextTaskNumber(project_id), now(), JSON.stringify(fields),
     );
     await setAssignees(id, assignees);
     await logEvent(id, user.id, "Task created");
@@ -399,8 +402,8 @@ export async function updateTask(_prev: unknown, form: FormData) {
   const user = await requireUser();
   const id = String(form.get("id") ?? "");
   const before = await get<{ column_id: string; title: string; description: string | null; label: string | null; priority: string;
-    due_date: string | null; repeat: string | null; assignees: string[] }>(
-    `SELECT column_id, title, description, label, priority, due_date, repeat,
+    due_date: string | null; repeat: string | null; assignees: string[]; fields: Record<string, string> }>(
+    `SELECT column_id, title, description, label, priority, due_date, repeat, fields,
             ARRAY(SELECT user_id FROM task_assignees WHERE task_id = t.id) AS assignees
        FROM tasks t WHERE id = ?`,
     id,
@@ -413,12 +416,15 @@ export async function updateTask(_prev: unknown, form: FormData) {
   const { description, label, dueDate, assignees, repeat } = taskFieldsOf(form);
   const invalid = await invalidTaskFields(user, priority, assignees, repeat);
   if (invalid) return { error: invalid };
+  const read = fieldValuesOf((k) => form.get(k), await fieldsOfColumn(before.column_id));
+  if ("error" in read) return { error: read.error };
+  const fields = read.values;
 
   const assigneesChanged = [...assignees].sort().join() !== [...before.assignees].sort().join();
   await transaction(async () => {
     await run(
-      "UPDATE tasks SET title = ?, description = ?, label = ?, priority = ?, due_date = ?, repeat = ? WHERE id = ?",
-      title, description, label, priority, dueDate, repeat, id,
+      "UPDATE tasks SET title = ?, description = ?, label = ?, priority = ?, due_date = ?, repeat = ?, fields = ? WHERE id = ?",
+      title, description, label, priority, dueDate, repeat, JSON.stringify(fields), id,
     );
     if (assigneesChanged) await setAssignees(id, assignees);
   });
@@ -433,6 +439,7 @@ export async function updateTask(_prev: unknown, form: FormData) {
   }
   if (before.due_date !== dueDate) changes.push(dueDate ? `Due date set to ${dueDate}` : "Due date cleared");
   if (before.repeat !== repeat) changes.push(repeat ? `Repeats ${repeat}` : "Repeat turned off");
+  if (JSON.stringify(Object.entries(before.fields).sort()) !== JSON.stringify(Object.entries(fields).sort())) changes.push("Custom fields updated");
   for (const c of changes) await logEvent(id, user.id, c);
   if (changes.length) await notify("task.updated", id, changes.join("; "), user.name);
 
@@ -1016,6 +1023,47 @@ export async function fetchHistory(taskId: string) {
   if (!task || await projectRole(user, task.project_id) === null) return [];
   const { taskHistory } = await import("./queries");
   return taskHistory(taskId);
+}
+
+// ── Custom fields ───────────────────────────────────────────────────────────
+
+const fieldsOfColumn = async (columnId: string) =>
+  all<CustomField>(
+    "SELECT f.id, f.name, f.type, f.options FROM custom_fields f JOIN columns c ON c.project_id = f.project_id WHERE c.id = ? ORDER BY f.position",
+    columnId,
+  );
+
+/** Adds a field to the project (managers). `options` is comma-separated, for select. */
+export async function addField(projectId: string, name: string, type: FieldType, options: string) {
+  const user = await requireUser();
+  if (!await canManage(user, projectId)) return { error: "You cannot manage this project." };
+  const clean = name.trim();
+  if (!clean || clean.length > 40) return { error: "Field name must be 1 to 40 characters." };
+  if (!FIELD_TYPES.includes(type)) return { error: "Unknown field type." };
+  const opts = type === "select" ? fieldOptionsOf(options) : [];
+  if (type === "select" && opts.length === 0) return { error: "A select field needs at least one option." };
+  const taken = await all<{ name: string }>("SELECT name FROM custom_fields WHERE project_id = ?", projectId);
+  if (taken.length >= 20) return { error: "A project can have at most 20 fields." };
+  if (taken.some((f) => f.name.toLowerCase() === clean.toLowerCase())) return { error: "A field with that name already exists." };
+  await run(
+    "INSERT INTO custom_fields (id, project_id, name, type, options, position) VALUES (?,?,?,?,?,?)",
+    randomUUID(), projectId, clean, type, JSON.stringify(opts), taken.length,
+  );
+  revalidatePath("/board");
+  return { ok: true };
+}
+
+/** Removes a field and its value on every card of the project (managers). */
+export async function deleteField(id: string) {
+  const user = await requireUser();
+  const field = await get<{ project_id: string }>("SELECT project_id FROM custom_fields WHERE id = ?", id);
+  if (!field || !await canManage(user, field.project_id)) return { error: "You cannot manage this project." };
+  await transaction(async () => {
+    await run("UPDATE tasks SET fields = fields - ? WHERE column_id IN (SELECT id FROM columns WHERE project_id = ?)", id, field.project_id);
+    await run("DELETE FROM custom_fields WHERE id = ?", id);
+  });
+  revalidatePath("/board");
+  return { ok: true };
 }
 
 // ── Saved views ─────────────────────────────────────────────────────────────
