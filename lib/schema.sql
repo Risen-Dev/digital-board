@@ -357,3 +357,16 @@ CREATE TABLE IF NOT EXISTS time_entries (
 );
 CREATE INDEX IF NOT EXISTS time_entries_task ON time_entries(task_id);
 CREATE UNIQUE INDEX IF NOT EXISTS time_entries_running ON time_entries(user_id) WHERE ended_at IS NULL;
+
+-- Saved views: a named filter + layout, shared with everyone who can open the
+-- project. filters holds lib/board.ts `Filters` after cleanFilters.
+CREATE TABLE IF NOT EXISTS saved_views (
+  id         TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  name       TEXT NOT NULL,
+  filters    JSONB NOT NULL,
+  layout     TEXT NOT NULL,
+  created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS saved_views_project ON saved_views(project_id, created_at);

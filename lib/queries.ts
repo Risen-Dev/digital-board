@@ -1,6 +1,6 @@
 import "server-only";
 import { all, get, run } from "./db";
-import type { Blocker, CheckItem, Column, Entry, Member, Priority, Repeat, Task, TaskImage } from "./board";
+import type { Blocker, CheckItem, Column, Entry, Member, Priority, Repeat, SavedView, Task, TaskImage } from "./board";
 import { day, stamp } from "./format";
 import type { Meeting } from "./meetings";
 
@@ -233,6 +233,10 @@ export async function analytics(projectId: string) {
   ))!.n;
   return { byColumn, byPriority, byAssignee, activity14d, total, done };
 }
+
+/** The project's saved views, oldest first. */
+export const listViews = (projectId: string) =>
+  all<SavedView>("SELECT id, name, filters, layout FROM saved_views WHERE project_id = ? ORDER BY created_at, id", projectId);
 
 export type CanvasMeta = { id: string; name: string; updated_at: string };
 

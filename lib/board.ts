@@ -171,17 +171,40 @@ export function reorder<T>(ids: T[], from: number, to: number): T[] {
   return next;
 }
 
+/** `assignee` is a user id, or "me" for whoever is looking (so a shared view works for each person). */
 export type Filters = { q?: string; assignee?: string; priority?: string; label?: string };
 
-/** Filtering runs client-side over the already-loaded board. */
-export function applyFilters(columns: Column[], f: Filters): Column[] {
+/** Layouts a saved view can open in; the first three of the workspace's view tabs. */
+export const LAYOUTS = ["board", "list", "calendar"] as const;
+export type Layout = (typeof LAYOUTS)[number];
+export type SavedView = { id: string; name: string; filters: Filters; layout: Layout };
+
+/** Only the known keys, as trimmed non-empty strings of at most 100 characters; anything else is dropped. */
+export function cleanFilters(raw: unknown): Filters {
+  const out: Filters = {};
+  if (!raw || typeof raw !== "object") return out;
+  for (const key of ["q", "assignee", "priority", "label"] as const) {
+    const v = (raw as Record<string, unknown>)[key];
+    if (typeof v === "string" && v.trim() && v.length <= 100) out[key] = v.trim();
+  }
+  if (out.priority && !PRIORITIES.includes(out.priority as Priority)) delete out.priority;
+  return out;
+}
+
+/** Same filters, ignoring key order and empty values — which saved view (if any) is showing. */
+export const sameFilters = (a: Filters, b: Filters) =>
+  JSON.stringify(Object.entries(cleanFilters(a)).sort()) === JSON.stringify(Object.entries(cleanFilters(b)).sort());
+
+/** Filtering runs client-side over the already-loaded board. `me` resolves the "me" assignee. */
+export function applyFilters(columns: Column[], f: Filters, me?: string): Column[] {
   const q = f.q?.toLowerCase().trim();
+  const assignee = f.assignee === "me" ? me : f.assignee;
   return columns.map((c) => ({
     ...c,
     tasks: c.tasks.filter(
       (t) =>
         (!q || t.title.toLowerCase().includes(q) || (t.label ?? "").toLowerCase().includes(q)) &&
-        (!f.assignee || t.assignees.some((a) => a.id === f.assignee)) &&
+        (!assignee || t.assignees.some((a) => a.id === assignee)) &&
         (!f.priority || t.priority === f.priority) &&
         (!f.label || labelsOf(t.label).includes(f.label)),
     ),
