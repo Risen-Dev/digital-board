@@ -1,6 +1,6 @@
 // Run: node --experimental-strip-types lib/board.check.ts
 import assert from "node:assert/strict";
-import { applyFilters, branchNameOf, pullRequestUrlOf, ciOf, columnOf, formatDuration, initials, joinLabels, labelsOf, nextDue, parseDuration, placeTask, projectKeyOf, reorder, TEMPLATES, templateOf, type Column } from "./board.ts";
+import { applyFilters, branchNameOf, cleanFilters, pullRequestUrlOf, ciOf, columnOf, formatDuration, initials, joinLabels, labelsOf, nextDue, parseDuration, placeTask, projectKeyOf, reorder, sameFilters, TEMPLATES, templateOf, type Column } from "./board.ts";
 import { parseFlow } from "./canvas/flow.ts";
 import { columnFor, keysIn, planEvent } from "./github-events.ts";
 import { resolveActions } from "./board-agent.ts";
@@ -335,4 +335,16 @@ assert.equal(
   assert.equal(parseDuration("90"), 5400);
   assert.equal(parseDuration(" 2H "), 7200);
   for (const bad of ["", "h", "0", "0m", "abc", "1h30x", "-5m", "m"]) assert.equal(parseDuration(bad), null, bad);
+}
+
+// Saved views
+{
+  assert.deepEqual(cleanFilters({ q: "  bug ", assignee: "me", priority: "urgent", label: "", extra: "x", sort: 1 }), { q: "bug", assignee: "me" });
+  assert.deepEqual(cleanFilters(null), {});
+  assert.deepEqual(cleanFilters({ q: "x".repeat(101) }), {});
+  assert.ok(sameFilters({ priority: "high", q: "a" }, { q: "a", priority: "high", label: "" }));
+  assert.ok(!sameFilters({ q: "a" }, { q: "b" }));
+  const cols = [{ id: "c", title: "C", color: "", limitDays: null, tasks: [mk("t1", "c", 1), mk("t2", "c", 2)] }];
+  assert.deepEqual(applyFilters(cols, { assignee: "me" }, "u1")[0].tasks.map((t) => t.id), ["t1"], "me → the viewer");
+  assert.deepEqual(applyFilters(cols, { assignee: "me" }, "u9")[0].tasks.map((t) => t.id), [], "someone else");
 }

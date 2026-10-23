@@ -6,7 +6,7 @@ import { after } from "next/server";
 import { redirect } from "next/navigation";
 import { all, get, run, transaction } from "./db";
 import { createUser, createWorkspace, currentUser, endSession, login, passwordOf, setPassword, startSession, verifyPassword, type User } from "./auth";
-import { joinLabels, nextDue, parseDuration, projectKeyOf, PROJECT_KEY_RE, REPEATS, templateOf, PALETTE, PRIORITIES, reorder, type CheckItem, type Member, type Priority, type Repeat } from "./board";
+import { cleanFilters, joinLabels, LAYOUTS, nextDue, parseDuration, projectKeyOf, PROJECT_KEY_RE, REPEATS, templateOf, PALETTE, PRIORITIES, reorder, type CheckItem, type Filters, type Layout, type Member, type Priority, type Repeat } from "./board";
 import { broadcast } from "./canvas/hub";
 import { projectRole } from "./canvas/guard";
 import { notify } from "./outgoing";
@@ -1016,6 +1016,36 @@ export async function fetchHistory(taskId: string) {
   if (!task || await projectRole(user, task.project_id) === null) return [];
   const { taskHistory } = await import("./queries");
   return taskHistory(taskId);
+}
+
+// ── Saved views ─────────────────────────────────────────────────────────────
+
+/** Saves the current filters + layout under a name for everyone in the project; the same name replaces it. */
+export async function saveView(projectId: string, name: string, filters: Filters, layout: Layout) {
+  const user = await requireUser();
+  if (!await canEdit(user, projectId)) return { error: "You cannot edit this project." };
+  const clean = name.trim();
+  if (!clean || clean.length > 40) return { error: "View name must be 1 to 40 characters." };
+  if (!LAYOUTS.includes(layout)) return { error: "Unknown layout." };
+  const id = randomUUID();
+  await transaction(async () => {
+    await run("DELETE FROM saved_views WHERE project_id = ? AND lower(name) = lower(?)", projectId, clean);
+    await run(
+      "INSERT INTO saved_views (id, project_id, name, filters, layout, created_by, created_at) VALUES (?,?,?,?,?,?,?)",
+      id, projectId, clean, JSON.stringify(cleanFilters(filters)), layout, user.id, now(),
+    );
+  });
+  revalidatePath("/board");
+  return { ok: true, id };
+}
+
+export async function deleteView(id: string) {
+  const user = await requireUser();
+  const view = await get<{ project_id: string }>("SELECT project_id FROM saved_views WHERE id = ?", id);
+  if (!view || !await canEdit(user, view.project_id)) return { error: "You cannot edit this project." };
+  await run("DELETE FROM saved_views WHERE id = ?", id);
+  revalidatePath("/board");
+  return { ok: true };
 }
 
 // ── Time tracking ───────────────────────────────────────────────────────────

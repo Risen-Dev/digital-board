@@ -535,6 +535,14 @@ const id: Record<string, string> = {
   "Enter a time like 1h 30m or 45m, up to 24h.": "Masukkan waktu seperti 1h 30m atau 45m, maksimal 24 jam.",
   "Timer running": "Timer berjalan",
   "Time logged": "Waktu tercatat",
+  "Saved views": "View tersimpan",
+  "Save view": "Simpan view",
+  "View name, then Enter": "Nama view, lalu Enter",
+  "Save the current filters and layout for everyone in this project": "Simpan filter dan tampilan sekarang untuk semua anggota proyek ini",
+  "Delete view {name}": "Hapus view {name}",
+  "View name must be 1 to 40 characters.": "Nama view harus 1 sampai 40 karakter.",
+  "Unknown layout.": "Tampilan tidak dikenal.",
+  "Me": "Saya",
 };
 
 export default id;

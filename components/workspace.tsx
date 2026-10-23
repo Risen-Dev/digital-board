@@ -7,7 +7,8 @@ import {
   Archive, BarChart3, Bell, Calendar, CalendarClock, Check, CheckSquare, Filter, Home, Inbox,
   GitPullRequest, LayoutGrid, List, LogOut, Menu, MessageSquare, PenLine, Plus, Search, Settings, Sparkles, X,
 } from "lucide-react";
-import { applyFilters, initials, labelsOf, type Column, type Filters, type Member, type Task } from "@/lib/board";
+import { applyFilters, initials, labelsOf, LAYOUTS, type Column, type Filters, type Member, type SavedView, type Task } from "@/lib/board";
+import { SavedViews } from "./saved-views";
 import { archiveTask, fetchArchived, logoutAction, renameProject, renameWorkspace } from "@/lib/actions";
 import { Modal } from "./modal";
 import type { CanvasMeta, CanvasTag, FeedItem, MemberPresence, Project, ProjectMember, SearchCard, Unread } from "@/lib/queries";
@@ -88,7 +89,7 @@ async function dropPush() {
 }
 
 export function Workspace({
-  user, workspace, projects, project, columns, members, assignments, presence, feed, notifications: initialNotifications, unread: initialUnread, mine, meetings: initialMeetings, stats, sheets, tags: allTags, focus, openTask, today, dark, aiEnabled, ai,
+  user, workspace, projects, project, columns, members, assignments, presence, feed, notifications: initialNotifications, unread: initialUnread, mine, meetings: initialMeetings, stats, sheets, views, tags: allTags, focus, openTask, today, dark, aiEnabled, ai,
 }: {
   user: User;
   workspace: string;
@@ -104,6 +105,7 @@ export function Workspace({
   meetings: Meeting[];
   stats: Stats | null;
   sheets: CanvasMeta[];
+  views: SavedView[];
   tags: CanvasTag[];
   /** From `?sheet=&tag=`: an @tag clicked in another project lands here. */
   focus: { sheetId: string; tag: string } | null;
@@ -179,7 +181,7 @@ export function Workspace({
   const audio = useRef<AudioContext | null>(null);
   const alertTimer = useRef<number | undefined>(undefined);
 
-  const filtered = useMemo(() => applyFilters(columns, filters), [columns, filters]);
+  const filtered = useMemo(() => applyFilters(columns, filters, user.id), [columns, filters, user.id]);
   const readOnly = !!project && user.is_admin !== 1 && assignments.find((item) => item.user_id === user.id && item.project_id === project.id)?.role === "viewer";
   const activeFilters = [filters.assignee, filters.priority, filters.label].filter(Boolean).length;
   const shown = filtered.reduce((s, c) => s + c.tasks.length, 0);
@@ -615,12 +617,21 @@ export function Workspace({
         {/* Filter bar */}
         {onBoard && showFilters && project && view !== VIEWS.length && (
           <div className="flex shrink-0 flex-wrap items-center gap-2 border-b bg-secondary/50 px-5 py-2.5 text-xs">
+            <SavedViews
+              projectId={project.id}
+              views={views}
+              filters={filters}
+              layout={LAYOUTS[view] ?? "board"}
+              readOnly={readOnly}
+              onApply={(v) => { setFilters(v.filters); setView(LAYOUTS.indexOf(v.layout)); }}
+            />
             <select
               value={filters.assignee ?? ""}
               onChange={(e) => setFilters((f) => ({ ...f, assignee: e.target.value || undefined }))}
               className="rounded-md border bg-background px-2 py-1"
             >
               <option value="">{tr("All assignees")}</option>
+              <option value="me">{tr("Me")}</option>
               {members.map((m) => (
                 <option key={m.id} value={m.id}>{m.name}</option>
               ))}
