@@ -2,9 +2,9 @@
 
 import { useActionState, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlignLeft, Archive, CalendarDays, Check, CircleDot, Flag, GitBranch, GitPullRequest, History, Image as ImageIcon, ImagePlus, ListChecks, Ban, Repeat, Sparkles, Tag, Trash2, Users, X, type LucideIcon } from "lucide-react";
-import { addComment, archiveTask, askCardAgent, createGithubIssue, createTask, deleteTask, fetchHistory, setBlocker, setChecklist, updateTask } from "@/lib/actions";
-import { branchNameOf, initials, pullRequestUrlOf, PRIORITIES, PRIORITY_CFG, REPEATS, type CheckItem, type Column, type Entry, type Member, type Task, type TaskImage } from "@/lib/board";
+import { AlignLeft, Archive, CalendarDays, Check, CircleDot, Clock, Flag, GitBranch, GitPullRequest, History, Image as ImageIcon, ImagePlus, ListChecks, Ban, Pause, Play, Repeat, Sparkles, Tag, Trash2, Users, X, type LucideIcon } from "lucide-react";
+import { addComment, archiveTask, askCardAgent, createGithubIssue, createTask, deleteTask, fetchHistory, fetchTime, logTime, setBlocker, setChecklist, startTimer, stopTimer, updateTask } from "@/lib/actions";
+import { branchNameOf, formatDuration, initials, pullRequestUrlOf, PRIORITIES, PRIORITY_CFG, REPEATS, type CheckItem, type Column, type Entry, type Member, type Task, type TaskImage } from "@/lib/board";
 import { Avatar } from "./avatar";
 import { imageUrl } from "./task-card";
 import type { TaskLinks } from "@/lib/github";
@@ -230,6 +230,8 @@ export function TaskDialog({ task, columns, members, mentionable, defaultColumnI
               />
             )}
 
+            {editing && <TimeTracking key={`time-${task.id}`} taskId={task.id} />}
+
             {/* Every canvas group the card mentions, in the description or a comment. */}
             <TagLinks text={[description, ...history.filter((e) => e.kind === "comment").map((e) => e.text)].join("\n")} tags={tags} onTag={onTag} />
 
@@ -409,6 +411,106 @@ function Images({ task }: { task: Task }) {
  * "Waiting on" (this card's blockers) and "Blocking" (cards waiting on it), both from
  * this project's board. Adding or removing saves at once, like the checklist.
  */
+/** 3725 → "1:02:05", for a running timer. */
+const clock = (s: number) => `${Math.floor(s / 3600)}:${String(Math.floor(s / 60) % 60).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+
+function TimeTracking({ taskId }: { taskId: string }) {
+  const tr = useT();
+  const [time, setTime] = useState<Awaited<ReturnType<typeof fetchTime>>>(null);
+  // When `time` was loaded, so a running timer can count on from it.
+  const [loadedAt, setLoadedAt] = useState(0);
+  const [now, setNow] = useState(0);
+  const [entry, setEntry] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    fetchTime(taskId).then((t) => { setTime(t); setLoadedAt(Date.now()); setNow(Date.now()); });
+  }, [taskId]);
+  useEffect(load, [load]);
+  useEffect(() => {
+    if (!time?.since) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [time?.since]);
+
+  async function act(result: Promise<{ ok?: boolean; error?: string }>) {
+    setError(null);
+    const r = await result;
+    if (r.error) return setError(r.error);
+    setEntry("");
+    load();
+  }
+
+  if (!time) return null;
+  const extra = time.since ? Math.floor((now - loadedAt) / 1000) : 0;
+  const total = time.people.reduce((s, p) => s + p.seconds, 0) + extra;
+  const running = time.since ? Math.max(0, Math.floor((now - Date.parse(time.since)) / 1000)) : 0;
+
+  return (
+    <div className="border-t py-4">
+      <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+        <Clock className="size-3.5" />
+        {tr("Time tracking")}
+        {total >= 60 && <span className="ml-auto font-normal">{formatDuration(total)}</span>}
+      </h3>
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        {time.since ? (
+          <button
+            type="button"
+            onClick={() => void act(stopTimer(taskId))}
+            className="flex items-center gap-1.5 rounded-md bg-primary px-2.5 py-1.5 text-xs font-medium text-primary-foreground"
+          >
+            <Pause className="size-3.5" />
+            {tr("Stop timer")}
+            <span className="font-mono tabular-nums">{clock(running)}</span>
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => void act(startTimer(taskId))}
+            title={tr("Starting here stops your timer on any other card")}
+            className="flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs transition-colors hover:bg-secondary"
+          >
+            <Play className="size-3.5" />
+            {tr("Start timer")}
+          </button>
+        )}
+        <input
+          value={entry}
+          onChange={(e) => setEntry(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key !== "Enter") return;
+            e.preventDefault();
+            if (entry.trim()) void act(logTime(taskId, entry));
+          }}
+          placeholder={tr("Log time, e.g. 1h 30m")}
+          className="w-40 rounded-md border bg-background px-2 py-1.5 text-xs outline-none focus:border-ring"
+        />
+        <button
+          type="button"
+          disabled={!entry.trim()}
+          onClick={() => void act(logTime(taskId, entry))}
+          className="rounded-md border px-2.5 py-1.5 text-xs transition-colors hover:bg-secondary disabled:opacity-50"
+        >
+          {tr("Log")}
+        </button>
+      </div>
+      {error && <p className="mb-2 text-[11px] text-[var(--chart-7)]">{tr(error)}</p>}
+      {time.people.length > 0 && (
+        <ul className="flex flex-col gap-1.5">
+          {time.people.map((p) => (
+            <li key={p.id} className="flex items-center gap-2 text-xs">
+              <Avatar initials={initials(p.name)} color={p.color} size={18} />
+              <span className="min-w-0 flex-1 truncate">{p.name}</span>
+              <span className="tabular-nums text-muted-foreground">{formatDuration(p.seconds + (p.id === time.me ? extra : 0))}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function Dependencies({ task, columns, doneColumnId, onOpen, onChange }: {
   task: Task; columns: Column[]; doneColumnId: string | null; onOpen: (task: Task) => void; onChange: () => void;
 }) {

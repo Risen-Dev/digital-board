@@ -1,6 +1,6 @@
 // Run: node --experimental-strip-types lib/board.check.ts
 import assert from "node:assert/strict";
-import { applyFilters, branchNameOf, pullRequestUrlOf, ciOf, columnOf, initials, joinLabels, labelsOf, nextDue, placeTask, projectKeyOf, reorder, TEMPLATES, templateOf, type Column } from "./board.ts";
+import { applyFilters, branchNameOf, pullRequestUrlOf, ciOf, columnOf, formatDuration, initials, joinLabels, labelsOf, nextDue, parseDuration, placeTask, projectKeyOf, reorder, TEMPLATES, templateOf, type Column } from "./board.ts";
 import { parseFlow } from "./canvas/flow.ts";
 import { columnFor, keysIn, planEvent } from "./github-events.ts";
 import { resolveActions } from "./board-agent.ts";
@@ -15,7 +15,7 @@ import examples from "./template-examples.json" with { type: "json" };
 const mk = (id: string, title: string, n: number): Column["tasks"][number] => ({
   id, columnId: title, title: `task ${n}`, description: n % 2 ? "Detail" : null, label: n % 2 ? "Design, Web" : "QA",
   priority: n % 2 ? "high" : "low", assignees: n === 1 ? [{ id: "u1", name: "Ada L", color: "#000" }] : [], dueDate: null, key: null,
-  checklist: [], repeat: null, comments: 0, images: [], blockedBy: [],
+  checklist: [], repeat: null, comments: 0, images: [], blockedBy: [], stageDays: 0, trackedSeconds: 0, timing: false,
 });
 
 const board: Column[] = [
@@ -320,4 +320,19 @@ assert.equal(
   assert.equal(safeLink(" https://meet.google.com/abc "), "https://meet.google.com/abc");
   assert.equal(safeLink("javascript:alert(1)"), null);
   assert.equal(safeLink("not a url"), null);
+}
+
+// Time tracking durations
+{
+  assert.equal(formatDuration(0), "0m");
+  assert.equal(formatDuration(59), "0m");
+  assert.equal(formatDuration(300), "5m");
+  assert.equal(formatDuration(3600), "1h");
+  assert.equal(formatDuration(5400), "1h 30m");
+  assert.equal(parseDuration("1h 30m"), 5400);
+  assert.equal(parseDuration("1.5h"), 5400);
+  assert.equal(parseDuration("90m"), 5400);
+  assert.equal(parseDuration("90"), 5400);
+  assert.equal(parseDuration(" 2H "), 7200);
+  for (const bad of ["", "h", "0", "0m", "abc", "1h30x", "-5m", "m"]) assert.equal(parseDuration(bad), null, bad);
 }

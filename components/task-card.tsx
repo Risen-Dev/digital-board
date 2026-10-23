@@ -2,8 +2,8 @@
 
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { AlignLeft, Ban, CalendarDays, Flag, ListChecks, MessageSquare, Paperclip, Repeat, Tag, Timer } from "lucide-react";
-import { initials, labelsOf, PRIORITY_CFG, type Task } from "@/lib/board";
+import { AlignLeft, Ban, CalendarDays, Flag, ListChecks, MessageSquare, Paperclip, Clock, Repeat, Tag, Timer } from "lucide-react";
+import { formatDuration, initials, labelsOf, PRIORITY_CFG, type Task } from "@/lib/board";
 import type { TaskLinks } from "@/lib/github";
 import { Avatar } from "./avatar";
 import { PullBadge, primaryIssue, primaryPull } from "./views/github-view";
@@ -49,7 +49,7 @@ export function TaskCard({ task, links, onOpen, overdue = false, overlay = false
         </div>
       )}
       <p className="mb-2 line-clamp-2 text-sm font-medium leading-snug">{task.title}</p>
-      {(stage || waiting > 0 || task.description || task.checklist.length > 0 || task.comments > 0 || task.images.length > 0 || task.repeat) && (
+      {(stage || task.timing || task.trackedSeconds >= 60 || waiting > 0 || task.description || task.checklist.length > 0 || task.comments > 0 || task.images.length > 0 || task.repeat) && (
         <div className="mb-2 flex items-center gap-2.5 text-[11px] text-muted-foreground">
           {waiting > 0 && (
             <span className="flex items-center gap-1 font-medium text-[var(--chart-7)]" title={tr(waiting === 1 ? "Waiting on {n} card" : "Waiting on {n} cards", { n: waiting })}>
@@ -64,6 +64,12 @@ export function TaskCard({ task, links, onOpen, overdue = false, overlay = false
             >
               <Timer className="size-3.5" />
               {stage.text}
+            </span>
+          )}
+          {(task.timing || task.trackedSeconds >= 60) && (
+            <span className="flex items-center gap-1" title={tr(task.timing ? "Timer running" : "Time logged")}>
+              {task.timing ? <span className="size-1.5 animate-pulse rounded-full bg-[var(--chart-2)]" /> : <Clock className="size-3.5" />}
+              {formatDuration(task.trackedSeconds)}
             </span>
           )}
           {task.description && <AlignLeft className="size-3.5" aria-label={tr("Has description")} />}
