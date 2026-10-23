@@ -517,6 +517,15 @@ const id: Record<string, string> = {
   "Export workspace (JSON)": "Ekspor ruang kerja (JSON)",
   "Every project, card, comment, image, canvas, meeting and channel message. Passwords, tokens, API keys and direct messages are left out.": "Semua proyek, kartu, komentar, gambar, kanvas, rapat, dan pesan channel. Kata sandi, token, API key, dan pesan langsung tidak disertakan.",
   "Only workspace admins can export.": "Hanya admin ruang kerja yang bisa mengekspor.",
+  "Day limit": "Batas hari",
+  "None": "Tidak ada",
+  "Cards that stay longer than this turn red": "Kartu yang lebih lama dari ini jadi merah",
+  "Day limit must be a whole number from 1 to 365.": "Batas hari harus bilangan bulat 1 sampai 365.",
+  "{n}d": "{n} hr",
+  "{n}d left": "sisa {n} hr",
+  "{n}d over": "lewat {n} hr",
+  "{n} day in this column": "{n} hari di kolom ini",
+  "{n} days in this column": "{n} hari di kolom ini",
 };
 
 export default id;

@@ -335,3 +335,13 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS due_pushed_on TEXT;
 -- The image picked as the card's cover (at most one per card, set by PATCH
 -- /api/tasks/:id/images/:imageId). None picked: the oldest is the cover.
 ALTER TABLE task_images ADD COLUMN IF NOT EXISTS cover BOOLEAN NOT NULL DEFAULT false;
+
+-- When the card entered its current column; relocateTask sets it on every column
+-- change. Older and newly created cards start NULL and are filled here from their
+-- last "Moved from" event, else created_at (reads COALESCE to created_at meanwhile).
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS column_since TEXT;
+UPDATE tasks SET column_since = COALESCE(
+  (SELECT max(e.at) FROM task_events e WHERE e.task_id = tasks.id AND e.text LIKE 'Moved from %'), created_at)
+ WHERE column_since IS NULL;
+-- Days a card may stay in this column before its stage timer turns red; NULL = no limit.
+ALTER TABLE columns ADD COLUMN IF NOT EXISTS stage_limit_days INTEGER;

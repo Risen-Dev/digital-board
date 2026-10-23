@@ -2,20 +2,29 @@
 
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { AlignLeft, Ban, CalendarDays, Flag, ListChecks, MessageSquare, Paperclip, Repeat, Tag } from "lucide-react";
+import { AlignLeft, Ban, CalendarDays, Flag, ListChecks, MessageSquare, Paperclip, Repeat, Tag, Timer } from "lucide-react";
 import { initials, labelsOf, PRIORITY_CFG, type Task } from "@/lib/board";
 import type { TaskLinks } from "@/lib/github";
 import { Avatar } from "./avatar";
 import { PullBadge, primaryIssue, primaryPull } from "./views/github-view";
 import { useT } from "@/components/i18n";
 
-export function TaskCard({ task, links, onOpen, overdue = false, overlay = false }: { task: Task; links?: TaskLinks; onOpen?: () => void; overdue?: boolean; overlay?: boolean }) {
+/**
+ * `stageLimit`: the column's day limit (null = none) to show the stage timer;
+ * left out (done column) hides it.
+ */
+export function TaskCard({ task, links, onOpen, overdue = false, overlay = false, stageLimit }: { task: Task; links?: TaskLinks; onOpen?: () => void; overdue?: boolean; overlay?: boolean; stageLimit?: number | null }) {
   const tr = useT();
   const priority = PRIORITY_CFG[task.priority];
   const pull = primaryPull(links);
   const issue = pull ? undefined : primaryIssue(links);
   const labels = labelsOf(task.label);
   const waiting = task.blockedBy.filter((b) => !b.done).length;
+  // No limit: only once a card has sat a day. With one: a countdown, red once over.
+  const stage = stageLimit === undefined || (stageLimit === null && task.stageDays < 1) ? null
+    : stageLimit === null ? { text: tr("{n}d", { n: task.stageDays }), over: false }
+    : task.stageDays > stageLimit ? { text: tr("{n}d over", { n: task.stageDays - stageLimit }), over: true }
+    : { text: tr("{n}d left", { n: stageLimit - task.stageDays }), over: false };
   return (
     <div
       onClick={onOpen}
@@ -40,12 +49,21 @@ export function TaskCard({ task, links, onOpen, overdue = false, overlay = false
         </div>
       )}
       <p className="mb-2 line-clamp-2 text-sm font-medium leading-snug">{task.title}</p>
-      {(waiting > 0 || task.description || task.checklist.length > 0 || task.comments > 0 || task.images.length > 0 || task.repeat) && (
+      {(stage || waiting > 0 || task.description || task.checklist.length > 0 || task.comments > 0 || task.images.length > 0 || task.repeat) && (
         <div className="mb-2 flex items-center gap-2.5 text-[11px] text-muted-foreground">
           {waiting > 0 && (
             <span className="flex items-center gap-1 font-medium text-[var(--chart-7)]" title={tr(waiting === 1 ? "Waiting on {n} card" : "Waiting on {n} cards", { n: waiting })}>
               <Ban className="size-3.5" />
               {tr("Blocked")}
+            </span>
+          )}
+          {stage && (
+            <span
+              className={`flex items-center gap-1 ${stage.over ? "font-medium text-[var(--chart-7)]" : ""}`}
+              title={tr(task.stageDays === 1 ? "{n} day in this column" : "{n} days in this column", { n: task.stageDays })}
+            >
+              <Timer className="size-3.5" />
+              {stage.text}
             </span>
           )}
           {task.description && <AlignLeft className="size-3.5" aria-label={tr("Has description")} />}
@@ -106,7 +124,7 @@ const shortDate = (d: string) => `${MONTHS[Number(d.slice(5, 7)) - 1]} ${Number(
 
 export const imageUrl = (taskId: string, imageId: string) => `/api/tasks/${taskId}/images/${imageId}`;
 
-export function SortableTaskCard({ task, links, overdue, onOpen }: { task: Task; links?: TaskLinks; overdue?: boolean; onOpen: () => void }) {
+export function SortableTaskCard({ task, links, overdue, stageLimit, onOpen }: { task: Task; links?: TaskLinks; overdue?: boolean; stageLimit?: number | null; onOpen: () => void }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
   return (
     <div
@@ -116,7 +134,7 @@ export function SortableTaskCard({ task, links, overdue, onOpen }: { task: Task;
       {...attributes}
       {...listeners}
     >
-      <TaskCard task={task} links={links} overdue={overdue} onOpen={onOpen} />
+      <TaskCard task={task} links={links} overdue={overdue} stageLimit={stageLimit} onOpen={onOpen} />
     </div>
   );
 }

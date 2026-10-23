@@ -301,6 +301,9 @@ async function writableTask(user: User, taskId: string) {
 /** Column colours land in inline styles, so only the editor's own swatches are accepted. */
 const COLUMN_COLORS = ["var(--muted-foreground)", ...PALETTE];
 
+/** A column's stage limit: whole days 1–365, or null for none. */
+const validLimit = (days: number | null) => days === null || (Number.isInteger(days) && days >= 1 && days <= 365);
+
 export async function createTask(_prev: unknown, form: FormData) {
   const user = await requireUser();
   const columnId = String(form.get("columnId") ?? "");
@@ -930,31 +933,33 @@ export async function renameProject(id: string, name: string) {
   return { ok: true };
 }
 
-export async function addColumn(projectId: string, title: string, color: string) {
+export async function addColumn(projectId: string, title: string, color: string, limitDays: number | null = null) {
   const user = await requireUser();
   if (!await canManage(user, projectId)) return { error: "You cannot manage this project." };
   const clean = title.trim();
   if (!clean) return { error: "Column name is required." };
   if (!COLUMN_COLORS.includes(color)) return { error: "Invalid colour." };
+  if (!validLimit(limitDays)) return { error: "Day limit must be a whole number from 1 to 365." };
   const next = (await get<{ n: number }>(
     "SELECT COALESCE(MAX(position) + 1, 0) n FROM columns WHERE project_id = ?",
     projectId,
   ))!.n;
   await run(
-    "INSERT INTO columns (id, project_id, title, color, position) VALUES (?,?,?,?,?)",
-    randomUUID(), projectId, clean, color, next,
+    "INSERT INTO columns (id, project_id, title, color, position, stage_limit_days) VALUES (?,?,?,?,?,?)",
+    randomUUID(), projectId, clean, color, next, limitDays,
   );
   revalidatePath("/board");
   return { ok: true };
 }
 
-export async function updateColumn(id: string, title: string, color: string) {
+export async function updateColumn(id: string, title: string, color: string, limitDays: number | null) {
   const user = await requireUser();
   if (!await canManage(user, await projectOfColumn(id))) return { error: "You cannot manage this project." };
   const clean = title.trim();
   if (!clean) return { error: "Column name is required." };
   if (!COLUMN_COLORS.includes(color)) return { error: "Invalid colour." };
-  await run("UPDATE columns SET title = ?, color = ? WHERE id = ?", clean, color, id);
+  if (!validLimit(limitDays)) return { error: "Day limit must be a whole number from 1 to 365." };
+  await run("UPDATE columns SET title = ?, color = ?, stage_limit_days = ? WHERE id = ?", clean, color, limitDays, id);
   revalidatePath("/board");
   return { ok: true };
 }
