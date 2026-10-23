@@ -1,6 +1,6 @@
 import "server-only";
 import { all, get, run } from "./db";
-import type { Blocker, CheckItem, Column, Entry, Member, Priority, Repeat, SavedView, Task, TaskImage } from "./board";
+import type { Blocker, CheckItem, Column, CustomField, Entry, Member, Priority, Repeat, SavedView, Task, TaskImage } from "./board";
 import { day, stamp } from "./format";
 import type { Meeting } from "./meetings";
 
@@ -22,6 +22,7 @@ type TaskRow = {
   column_since: string;
   tracked: number;
   timing: boolean;
+  fields: Record<string, string>;
 };
 
 const toTask = (r: TaskRow): Task => ({
@@ -42,13 +43,14 @@ const toTask = (r: TaskRow): Task => ({
   stageDays: Math.floor((Date.now() - Date.parse(r.column_since)) / 86_400_000),
   trackedSeconds: r.tracked,
   timing: r.timing,
+  fields: r.fields,
 });
 
 /** The project's done column for `p` (projects): the chosen one, else its last column. */
 export const DONE_COLUMN = `COALESCE(p.done_column_id, (SELECT dc.id FROM columns dc WHERE dc.project_id = p.id ORDER BY dc.position DESC LIMIT 1))`;
 
 /** Card columns shared by the board and My Tasks; `t`, `p` are tasks and projects. */
-const TASK_COLS = `t.id, t.column_id, t.title, t.description, t.label, t.priority, t.due_date, t.checklist, t.repeat,
+const TASK_COLS = `t.id, t.column_id, t.title, t.description, t.label, t.priority, t.due_date, t.checklist, t.repeat, t.fields,
             COALESCE(t.column_since, t.created_at) AS column_since,
             (SELECT COALESCE(SUM(EXTRACT(EPOCH FROM COALESCE(te.ended_at, now()::text)::timestamptz - te.started_at::timestamptz)), 0)::int
                FROM time_entries te WHERE te.task_id = t.id) AS tracked,
@@ -233,6 +235,10 @@ export async function analytics(projectId: string) {
   ))!.n;
   return { byColumn, byPriority, byAssignee, activity14d, total, done };
 }
+
+/** The project's custom fields, in order. */
+export const listFields = (projectId: string) =>
+  all<CustomField>("SELECT id, name, type, options FROM custom_fields WHERE project_id = ? ORDER BY position, id", projectId);
 
 /** The project's saved views, oldest first. */
 export const listViews = (projectId: string) =>

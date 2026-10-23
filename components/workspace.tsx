@@ -7,7 +7,7 @@ import {
   Archive, BarChart3, Bell, Calendar, CalendarClock, Check, CheckSquare, Filter, Home, Inbox,
   GitPullRequest, LayoutGrid, List, LogOut, Menu, MessageSquare, PenLine, Plus, Search, Settings, Sparkles, X,
 } from "lucide-react";
-import { applyFilters, initials, labelsOf, LAYOUTS, type Column, type Filters, type Member, type SavedView, type Task } from "@/lib/board";
+import { applyFilters, initials, labelsOf, LAYOUTS, type Column, type CustomField, type Filters, type Member, type SavedView, type Task } from "@/lib/board";
 import { SavedViews } from "./saved-views";
 import { archiveTask, fetchArchived, logoutAction, renameProject, renameWorkspace } from "@/lib/actions";
 import { Modal } from "./modal";
@@ -89,7 +89,7 @@ async function dropPush() {
 }
 
 export function Workspace({
-  user, workspace, projects, project, columns, members, assignments, presence, feed, notifications: initialNotifications, unread: initialUnread, mine, meetings: initialMeetings, stats, sheets, views, tags: allTags, focus, openTask, today, dark, aiEnabled, ai,
+  user, workspace, projects, project, columns, members, assignments, presence, feed, notifications: initialNotifications, unread: initialUnread, mine, meetings: initialMeetings, stats, sheets, views, fields, tags: allTags, focus, openTask, today, dark, aiEnabled, ai,
 }: {
   user: User;
   workspace: string;
@@ -106,6 +106,7 @@ export function Workspace({
   stats: Stats | null;
   sheets: CanvasMeta[];
   views: SavedView[];
+  fields: CustomField[];
   tags: CanvasTag[];
   /** From `?sheet=&tag=`: an @tag clicked in another project lands here. */
   focus: { sheetId: string; tag: string } | null;
@@ -183,6 +184,8 @@ export function Workspace({
 
   const filtered = useMemo(() => applyFilters(columns, filters, user.id), [columns, filters, user.id]);
   const readOnly = !!project && user.is_admin !== 1 && assignments.find((item) => item.user_id === user.id && item.project_id === project.id)?.role === "viewer";
+  // Project admins (and workspace admins) define custom fields.
+  const manages = !!project && (user.is_admin === 1 || assignments.some((a) => a.user_id === user.id && a.project_id === project.id && a.role === "admin"));
   const activeFilters = [filters.assignee, filters.priority, filters.label].filter(Boolean).length;
   const shown = filtered.reduce((s, c) => s + c.tasks.length, 0);
   const total = columns.reduce((s, c) => s + c.tasks.length, 0);
@@ -719,7 +722,7 @@ export function Workspace({
         ) : view === VIEWS.length && project.repo ? (
           <GithubView key={project.id} projectId={project.id} repo={project.repo} />
         ) : view === 0 ? (
-          <BoardView columns={filtered} projectId={project.id} doneColumnId={project.doneColumnId} today={today} links={links} onOpen={setEditing} onAdd={setCreating} />
+          <BoardView columns={filtered} fields={fields} projectId={project.id} doneColumnId={project.doneColumnId} today={today} links={links} onOpen={setEditing} onAdd={setCreating} />
         ) : view === 1 ? (
           <ListView columns={filtered} members={members} readOnly={readOnly} onOpen={setEditing} />
         ) : view === 2 ? (
@@ -754,6 +757,8 @@ export function Workspace({
           tags={tags}
           onTag={showTag}
           doneColumnId={project?.doneColumnId ?? null}
+          fields={fields}
+          manageFields={manages && project ? project.id : null}
           onOpenTask={setEditing}
           onClose={close}
         />

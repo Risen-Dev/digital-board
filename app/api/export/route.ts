@@ -41,6 +41,7 @@ export async function GET() {
     task_links: await all(`SELECT * FROM task_links WHERE task_id IN ${T}`, ws),
     task_images: await all(
       `SELECT id, task_id, name, mime, cover, created_at, encode(data, 'base64') AS data FROM task_images WHERE task_id IN ${T}`, ws),
+    custom_fields: await all(`SELECT * FROM custom_fields WHERE project_id IN ${P} ORDER BY project_id, position`, ws),
     saved_views: await all(`SELECT * FROM saved_views WHERE project_id IN ${P} ORDER BY project_id, created_at`, ws),
     canvases: await all(`SELECT * FROM canvases WHERE project_id IN ${P} ORDER BY project_id, position`, ws),
     meetings: await all("SELECT * FROM meetings WHERE workspace_id = ? ORDER BY created_at", ws),

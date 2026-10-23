@@ -370,3 +370,16 @@ CREATE TABLE IF NOT EXISTS saved_views (
   created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS saved_views_project ON saved_views(project_id, created_at);
+
+-- Custom fields: per-project definitions; each card keeps its values in
+-- tasks.fields as {fieldId: value-as-text}. Removing a field drops its values.
+CREATE TABLE IF NOT EXISTS custom_fields (
+  id         TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  name       TEXT NOT NULL,
+  type       TEXT NOT NULL CHECK (type IN ('text', 'number', 'date', 'select')),
+  options    JSONB NOT NULL DEFAULT '[]',
+  position   INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS custom_fields_project ON custom_fields(project_id, position);
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS fields JSONB NOT NULL DEFAULT '{}';

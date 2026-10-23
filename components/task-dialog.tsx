@@ -2,9 +2,9 @@
 
 import { useActionState, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlignLeft, Archive, CalendarDays, Check, CircleDot, Clock, Flag, GitBranch, GitPullRequest, History, Image as ImageIcon, ImagePlus, ListChecks, Ban, Pause, Play, Repeat, Sparkles, Tag, Trash2, Users, X, type LucideIcon } from "lucide-react";
-import { addComment, archiveTask, askCardAgent, createGithubIssue, createTask, deleteTask, fetchHistory, fetchTime, logTime, setBlocker, setChecklist, startTimer, stopTimer, updateTask } from "@/lib/actions";
-import { branchNameOf, formatDuration, initials, pullRequestUrlOf, PRIORITIES, PRIORITY_CFG, REPEATS, type CheckItem, type Column, type Entry, type Member, type Task, type TaskImage } from "@/lib/board";
+import { AlignLeft, Archive, CalendarDays, Check, CircleDot, Clock, Flag, Hash, List as ListIcon, Plus, Settings2, Type, GitBranch, GitPullRequest, History, Image as ImageIcon, ImagePlus, ListChecks, Ban, Pause, Play, Repeat, Sparkles, Tag, Trash2, Users, X, type LucideIcon } from "lucide-react";
+import { addComment, addField, archiveTask, askCardAgent, createGithubIssue, createTask, deleteField, deleteTask, fetchHistory, fetchTime, logTime, setBlocker, setChecklist, startTimer, stopTimer, updateTask } from "@/lib/actions";
+import { branchNameOf, FIELD_TYPES, formatDuration, initials, pullRequestUrlOf, PRIORITIES, PRIORITY_CFG, REPEATS, type CheckItem, type Column, type CustomField, type Entry, type FieldType, type Member, type Task, type TaskImage } from "@/lib/board";
 import { Avatar } from "./avatar";
 import { imageUrl } from "./task-card";
 import type { TaskLinks } from "@/lib/github";
@@ -32,12 +32,16 @@ type Props = {
   onTag: (tag: CanvasTag) => void;
   /** The project's done column; null = its last column. Decides whether a blocker is finished. */
   doneColumnId: string | null;
+  /** The project's custom fields. */
+  fields: CustomField[];
+  /** The project id when the viewer may add/remove custom fields, else null. */
+  manageFields: string | null;
   /** A card in the Dependencies list was clicked. */
   onOpenTask: (task: Task) => void;
   onClose: () => void;
 };
 
-export function TaskDialog({ task, columns, members, mentionable, defaultColumnId, links, repo, tags, onTag, doneColumnId, onOpenTask, onClose }: Props) {
+export function TaskDialog({ task, columns, members, mentionable, defaultColumnId, links, repo, tags, onTag, doneColumnId, fields, manageFields, onOpenTask, onClose }: Props) {
   const tr = useT();
   const editing = task !== null;
   const [state, action] = useActionState(editing ? updateTask : createTask, null);
@@ -160,7 +164,27 @@ export function TaskDialog({ task, columns, members, mentionable, defaultColumnI
                     ))}
                   </div>
                 </Prop>
+                {fields.map((f) => (
+                  <Prop key={f.id} icon={FIELD_ICONS[f.type]} label={f.name}>
+                    {f.type === "select" ? (
+                      <select name={`cf:${f.id}`} defaultValue={task?.fields[f.id] ?? ""} className={bare}>
+                        <option value="">—</option>
+                        {f.options.map((o) => <option key={o} value={o}>{o}</option>)}
+                      </select>
+                    ) : (
+                      <input
+                        name={`cf:${f.id}`}
+                        type={f.type === "text" ? "text" : f.type}
+                        step={f.type === "number" ? "any" : undefined}
+                        defaultValue={task?.fields[f.id] ?? ""}
+                        placeholder="—"
+                        className={bare}
+                      />
+                    )}
+                  </Prop>
+                ))}
               </div>
+              {manageFields && <FieldManager projectId={manageFields} fields={fields} />}
 
               <div className="flex flex-col gap-2 border-t pt-5">
                 <label htmlFor="task-description" className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
@@ -411,6 +435,101 @@ function Images({ task }: { task: Task }) {
  * "Waiting on" (this card's blockers) and "Blocking" (cards waiting on it), both from
  * this project's board. Adding or removing saves at once, like the checklist.
  */
+const FIELD_ICONS: Record<FieldType, LucideIcon> = { text: Type, number: Hash, date: CalendarDays, select: ListIcon };
+
+/**
+ * Add or remove the project's custom fields (project admins). Lives inside the
+ * card's form, so nothing here has a name or submits it.
+ */
+function FieldManager({ projectId, fields }: { projectId: string; fields: CustomField[] }) {
+  const tr = useT();
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [type, setType] = useState<FieldType>("text");
+  const [options, setOptions] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  async function add() {
+    setError(null);
+    const r = await addField(projectId, name, type, options);
+    if (r.error) return setError(r.error);
+    setName("");
+    setOptions("");
+  }
+
+  if (!open) {
+    return (
+      <button type="button" onClick={() => setOpen(true)} className="-mt-2 flex w-fit items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground">
+        <Settings2 className="size-3.5" />
+        {tr("Custom fields")}
+      </button>
+    );
+  }
+  return (
+    <div className="-mt-2 rounded-md border p-3 text-xs">
+      <div className="mb-2 flex items-center gap-1.5 font-semibold text-muted-foreground">
+        <Settings2 className="size-3.5" />
+        {tr("Custom fields")}
+        <span className="font-normal">· {tr("for every card in this project")}</span>
+        <button type="button" onClick={() => setOpen(false)} aria-label={tr("Close")} className="ml-auto hover:text-foreground">
+          <X className="size-3.5" />
+        </button>
+      </div>
+      {fields.length > 0 && (
+        <ul className="mb-2 flex flex-wrap gap-1.5">
+          {fields.map((f) => (
+            <li key={f.id} className="flex items-center gap-1 rounded-full border py-0.5 pl-2 pr-1">
+              {f.name}
+              <span className="text-muted-foreground">({tr(f.type)})</span>
+              <button
+                type="button"
+                aria-label={tr("Remove field {name}", { name: f.name })}
+                onClick={() => {
+                  if (confirm(tr("Remove \"{name}\"? Its value is cleared on every card.", { name: f.name }))) void deleteField(f.id);
+                }}
+                className="rounded-full p-0.5 text-muted-foreground hover:text-foreground"
+              >
+                <X className="size-3" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="flex flex-wrap items-center gap-1.5">
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (name.trim()) void add(); } }}
+          placeholder={tr("Field name")}
+          className="w-32 rounded-md border bg-background px-2 py-1 outline-none focus:border-ring"
+        />
+        <select value={type} onChange={(e) => setType(e.target.value as FieldType)} className="rounded-md border bg-background px-2 py-1">
+          {FIELD_TYPES.map((t) => <option key={t} value={t}>{tr(t)}</option>)}
+        </select>
+        {type === "select" && (
+          <input
+            value={options}
+            onChange={(e) => setOptions(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (name.trim()) void add(); } }}
+            placeholder={tr("Options: Small, Medium, Large")}
+            className="w-52 rounded-md border bg-background px-2 py-1 outline-none focus:border-ring"
+          />
+        )}
+        <button
+          type="button"
+          disabled={!name.trim()}
+          onClick={() => void add()}
+          className="flex items-center gap-1 rounded-md border px-2 py-1 transition-colors hover:bg-secondary disabled:opacity-50"
+        >
+          <Plus className="size-3" />
+          {tr("Add field")}
+        </button>
+      </div>
+      {error && <p className="mt-2 text-[11px] text-[var(--chart-7)]">{tr(error)}</p>}
+    </div>
+  );
+}
+
 /** 3725 → "1:02:05", for a running timer. */
 const clock = (s: number) => `${Math.floor(s / 3600)}:${String(Math.floor(s / 60) % 60).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 

@@ -3,7 +3,7 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { AlignLeft, Ban, CalendarDays, Flag, ListChecks, MessageSquare, Paperclip, Clock, Repeat, Tag, Timer } from "lucide-react";
-import { formatDuration, initials, labelsOf, PRIORITY_CFG, type Task } from "@/lib/board";
+import { formatDuration, initials, labelsOf, PRIORITY_CFG, type CustomField, type Task } from "@/lib/board";
 import type { TaskLinks } from "@/lib/github";
 import { Avatar } from "./avatar";
 import { PullBadge, primaryIssue, primaryPull } from "./views/github-view";
@@ -13,13 +13,15 @@ import { useT } from "@/components/i18n";
  * `stageLimit`: the column's day limit (null = none) to show the stage timer;
  * left out (done column) hides it.
  */
-export function TaskCard({ task, links, onOpen, overdue = false, overlay = false, stageLimit }: { task: Task; links?: TaskLinks; onOpen?: () => void; overdue?: boolean; overlay?: boolean; stageLimit?: number | null }) {
+export function TaskCard({ task, links, onOpen, overdue = false, overlay = false, stageLimit, fields = [] }: { task: Task; links?: TaskLinks; onOpen?: () => void; overdue?: boolean; overlay?: boolean; stageLimit?: number | null; fields?: CustomField[] }) {
   const tr = useT();
   const priority = PRIORITY_CFG[task.priority];
   const pull = primaryPull(links);
   const issue = pull ? undefined : primaryIssue(links);
   const labels = labelsOf(task.label);
   const waiting = task.blockedBy.filter((b) => !b.done).length;
+  // The first two custom fields this card has a value for.
+  const custom = fields.filter((f) => task.fields[f.id]).slice(0, 2);
   // No limit: only once a card has sat a day. With one: a countdown, red once over.
   const stage = stageLimit === undefined || (stageLimit === null && task.stageDays < 1) ? null
     : stageLimit === null ? { text: tr("{n}d", { n: task.stageDays }), over: false }
@@ -120,6 +122,15 @@ export function TaskCard({ task, links, onOpen, overdue = false, overlay = false
           {labels.length > 2 && <span className="text-[10px] text-muted-foreground" title={labels.slice(2).join(", ")}>+{labels.length - 2}</span>}
         </div>
       )}
+      {custom.length > 0 && (
+        <div className="mt-2 flex flex-col gap-0.5 text-[11px] text-muted-foreground">
+          {custom.map((f) => (
+            <span key={f.id} className="truncate">
+              {f.name}: <span className="text-foreground">{f.type === "date" ? shortDate(task.fields[f.id]) : task.fields[f.id]}</span>
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -130,7 +141,7 @@ const shortDate = (d: string) => `${MONTHS[Number(d.slice(5, 7)) - 1]} ${Number(
 
 export const imageUrl = (taskId: string, imageId: string) => `/api/tasks/${taskId}/images/${imageId}`;
 
-export function SortableTaskCard({ task, links, overdue, stageLimit, onOpen }: { task: Task; links?: TaskLinks; overdue?: boolean; stageLimit?: number | null; onOpen: () => void }) {
+export function SortableTaskCard({ task, links, overdue, stageLimit, fields, onOpen }: { task: Task; links?: TaskLinks; overdue?: boolean; stageLimit?: number | null; fields?: CustomField[]; onOpen: () => void }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
   return (
     <div
@@ -140,7 +151,7 @@ export function SortableTaskCard({ task, links, overdue, stageLimit, onOpen }: {
       {...attributes}
       {...listeners}
     >
-      <TaskCard task={task} links={links} overdue={overdue} stageLimit={stageLimit} onOpen={onOpen} />
+      <TaskCard task={task} links={links} overdue={overdue} stageLimit={stageLimit} fields={fields} onOpen={onOpen} />
     </div>
   );
 }

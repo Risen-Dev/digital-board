@@ -29,7 +29,39 @@ export type Task = {
   trackedSeconds: number;
   /** Someone's timer is running on it. */
   timing: boolean;
+  /** Custom field values by field id, as text; empty ones are absent. */
+  fields: Record<string, string>;
 };
+
+export const FIELD_TYPES = ["text", "number", "date", "select"] as const;
+export type FieldType = (typeof FIELD_TYPES)[number];
+/** A project's custom field; `options` only matters for select. */
+export type CustomField = { id: string; name: string; type: FieldType; options: string[] };
+
+/**
+ * Reads `cf:<fieldId>` form entries into stored values: trimmed text (≤200), a
+ * finite number, a YYYY-MM-DD date, or one of a select's options. Empty ones are
+ * left out; the first invalid one returns an error.
+ */
+export function fieldValuesOf(get: (name: string) => unknown, defs: CustomField[]): { values: Record<string, string> } | { error: string } {
+  const out: Record<string, string> = {};
+  for (const f of defs) {
+    const v = String(get(`cf:${f.id}`) ?? "").trim();
+    if (!v) continue;
+    const ok = f.type === "text" ? v.length <= 200
+      : f.type === "number" ? v.length <= 30 && Number.isFinite(Number(v))
+      : f.type === "date" ? /^\d{4}-\d{2}-\d{2}$/.test(v)
+      : f.options.includes(v);
+    // One fixed message so the UI can translate it; the inputs are typed, so this is rare.
+    if (!ok) return { error: "A custom field has an invalid value." };
+    out[f.id] = f.type === "number" ? String(Number(v)) : v;
+  }
+  return { values: out };
+}
+
+/** "Small, Medium, , Small" → ["Small", "Medium"]: trimmed, de-duplicated, at most 20 of ≤40 characters. */
+export const fieldOptionsOf = (raw: string) =>
+  [...new Set(raw.split(",").map((o) => o.trim()).filter((o) => o && o.length <= 40))].slice(0, 20);
 
 export type Blocker = { id: string; done: boolean };
 

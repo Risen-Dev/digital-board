@@ -9,7 +9,7 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CircleCheck, Pencil, Plus } from "lucide-react";
-import { columnOf, PALETTE, placeTask, type Column, type Task } from "@/lib/board";
+import { columnOf, PALETTE, placeTask, type Column, type CustomField, type Task } from "@/lib/board";
 import { addColumn, deleteColumn, moveColumn, moveTask, setDoneColumn, updateColumn } from "@/lib/actions";
 import type { TaskLinks } from "@/lib/github";
 import { SortableTaskCard, TaskCard } from "../task-card";
@@ -50,9 +50,11 @@ function DropZone({ id, children }: { id: string; children: React.ReactNode }) {
 }
 
 export function BoardView({
-  columns, projectId, doneColumnId, today, links = {}, onOpen, onAdd,
+  columns, fields, projectId, doneColumnId, today, links = {}, onOpen, onAdd,
 }: {
   columns: Column[];
+  /** The project's custom fields, to name the values a card shows. */
+  fields: CustomField[];
   projectId: string;
   /** The chosen done column; null means the last one. */
   doneColumnId: string | null;
@@ -207,7 +209,7 @@ export function BoardView({
               <div className="flex flex-1 flex-col gap-2 overflow-y-auto px-1 pb-4">
                 <SortableContext items={col.tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
                   {col.tasks.map((task) => (
-                    <SortableTaskCard key={task.id} task={task} links={task.key ? links[task.key] : undefined} overdue={overdue(task)} stageLimit={stageLimit(col)} onOpen={() => onOpen(task)} />
+                    <SortableTaskCard key={task.id} task={task} links={task.key ? links[task.key] : undefined} overdue={overdue(task)} stageLimit={stageLimit(col)} fields={fields} onOpen={() => onOpen(task)} />
                   ))}
                 </SortableContext>
                 {col.tasks.length === 0 && (
@@ -247,7 +249,7 @@ export function BoardView({
           </div>
         </div>
 
-        <DragOverlay>{activeTask ? <TaskCard task={activeTask} links={activeTask.key ? links[activeTask.key] : undefined} overdue={overdue(activeTask)} stageLimit={stageLimit(columnOf(view, activeTask.id))} overlay /> : null}</DragOverlay>
+        <DragOverlay>{activeTask ? <TaskCard task={activeTask} links={activeTask.key ? links[activeTask.key] : undefined} overdue={overdue(activeTask)} stageLimit={stageLimit(columnOf(view, activeTask.id))} fields={fields} overlay /> : null}</DragOverlay>
       </DndContext>
     </main>
   );

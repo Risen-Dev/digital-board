@@ -1,6 +1,6 @@
 // Run: node --experimental-strip-types lib/board.check.ts
 import assert from "node:assert/strict";
-import { applyFilters, branchNameOf, cleanFilters, pullRequestUrlOf, ciOf, columnOf, formatDuration, initials, joinLabels, labelsOf, nextDue, parseDuration, placeTask, projectKeyOf, reorder, sameFilters, TEMPLATES, templateOf, type Column } from "./board.ts";
+import { applyFilters, branchNameOf, cleanFilters, fieldOptionsOf, fieldValuesOf, pullRequestUrlOf, ciOf, columnOf, formatDuration, initials, joinLabels, labelsOf, nextDue, parseDuration, placeTask, projectKeyOf, reorder, sameFilters, TEMPLATES, templateOf, type Column } from "./board.ts";
 import { parseFlow } from "./canvas/flow.ts";
 import { columnFor, keysIn, planEvent } from "./github-events.ts";
 import { resolveActions } from "./board-agent.ts";
@@ -15,7 +15,7 @@ import examples from "./template-examples.json" with { type: "json" };
 const mk = (id: string, title: string, n: number): Column["tasks"][number] => ({
   id, columnId: title, title: `task ${n}`, description: n % 2 ? "Detail" : null, label: n % 2 ? "Design, Web" : "QA",
   priority: n % 2 ? "high" : "low", assignees: n === 1 ? [{ id: "u1", name: "Ada L", color: "#000" }] : [], dueDate: null, key: null,
-  checklist: [], repeat: null, comments: 0, images: [], blockedBy: [], stageDays: 0, trackedSeconds: 0, timing: false,
+  checklist: [], repeat: null, comments: 0, images: [], blockedBy: [], stageDays: 0, trackedSeconds: 0, timing: false, fields: {},
 });
 
 const board: Column[] = [
@@ -347,4 +347,22 @@ assert.equal(
   const cols = [{ id: "c", title: "C", color: "", limitDays: null, tasks: [mk("t1", "c", 1), mk("t2", "c", 2)] }];
   assert.deepEqual(applyFilters(cols, { assignee: "me" }, "u1")[0].tasks.map((t) => t.id), ["t1"], "me → the viewer");
   assert.deepEqual(applyFilters(cols, { assignee: "me" }, "u9")[0].tasks.map((t) => t.id), [], "someone else");
+}
+
+// Custom fields
+{
+  const defs = [
+    { id: "a", name: "Client", type: "text" as const, options: [] },
+    { id: "b", name: "Estimate", type: "number" as const, options: [] },
+    { id: "c", name: "Launch", type: "date" as const, options: [] },
+    { id: "d", name: "Size", type: "select" as const, options: ["S", "M"] },
+  ];
+  const form = (o: Record<string, string>) => (k: string) => o[k];
+  assert.deepEqual(fieldValuesOf(form({ "cf:a": " Acme ", "cf:b": "05", "cf:c": "2026-11-01", "cf:d": "M" }), defs), { values: { a: "Acme", b: "5", c: "2026-11-01", d: "M" } });
+  assert.deepEqual(fieldValuesOf(form({ "cf:a": "", "cf:x": "ignored" }), defs), { values: {} }, "empty and unknown left out");
+  assert.ok("error" in fieldValuesOf(form({ "cf:b": "five" }), defs));
+  assert.ok("error" in fieldValuesOf(form({ "cf:c": "1/11/2026" }), defs));
+  assert.ok("error" in fieldValuesOf(form({ "cf:d": "XL" }), defs));
+  assert.ok("error" in fieldValuesOf(form({ "cf:a": "x".repeat(201) }), defs));
+  assert.deepEqual(fieldOptionsOf("Small, Medium, , Small"), ["Small", "Medium"]);
 }
