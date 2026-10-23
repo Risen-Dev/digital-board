@@ -88,6 +88,8 @@ export function BoardView({
   );
 
   const activeTask = view.flatMap((c) => c.tasks).find((t) => t.id === activeId) ?? null;
+  // The stage timer shown on a card in `col`: none in the done column.
+  const stageLimit = (col: Column | undefined) => (!col || col.id === doneId ? undefined : col.limitDays);
 
   function onDragStart({ active }: DragStartEvent) {
     setActiveId(String(active.id));
@@ -186,7 +188,8 @@ export function BoardView({
                     submitLabel={tr("Save")}
                     title={col.title}
                     color={col.color}
-                    onSubmit={(t, c) => updateColumn(col.id, t, c).then((r) => { router.refresh(); return r; })}
+                    limitDays={col.limitDays}
+                    onSubmit={(t, c, l) => updateColumn(col.id, t, c, l).then((r) => { router.refresh(); return r; })}
                     onDelete={async () => {
                       const count = col.tasks.length;
                       if (count > 0 && !confirm(tr("Delete \"{name}\"? Its {n} task(s) will be deleted too.", { name: col.title, n: count }))) return;
@@ -204,7 +207,7 @@ export function BoardView({
               <div className="flex flex-1 flex-col gap-2 overflow-y-auto px-1 pb-4">
                 <SortableContext items={col.tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
                   {col.tasks.map((task) => (
-                    <SortableTaskCard key={task.id} task={task} links={task.key ? links[task.key] : undefined} overdue={overdue(task)} onOpen={() => onOpen(task)} />
+                    <SortableTaskCard key={task.id} task={task} links={task.key ? links[task.key] : undefined} overdue={overdue(task)} stageLimit={stageLimit(col)} onOpen={() => onOpen(task)} />
                   ))}
                 </SortableContext>
                 {col.tasks.length === 0 && (
@@ -237,14 +240,14 @@ export function BoardView({
                 heading={tr("New column")}
                 submitLabel={tr("Add column")}
                 color={PALETTE[columns.length % PALETTE.length]}
-                onSubmit={(t, c) => addColumn(projectId, t, c).then((r) => { router.refresh(); return r; })}
+                onSubmit={(t, c, l) => addColumn(projectId, t, c, l).then((r) => { router.refresh(); return r; })}
                 onClose={() => setAddingColumn(false)}
               />
             )}
           </div>
         </div>
 
-        <DragOverlay>{activeTask ? <TaskCard task={activeTask} links={activeTask.key ? links[activeTask.key] : undefined} overdue={overdue(activeTask)} overlay /> : null}</DragOverlay>
+        <DragOverlay>{activeTask ? <TaskCard task={activeTask} links={activeTask.key ? links[activeTask.key] : undefined} overdue={overdue(activeTask)} stageLimit={stageLimit(columnOf(view, activeTask.id))} overlay /> : null}</DragOverlay>
       </DndContext>
     </main>
   );

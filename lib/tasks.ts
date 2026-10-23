@@ -19,6 +19,7 @@ export async function relocateTask(taskId: string, fromColumnId: string, toColum
     for (const [i, sid] of siblings.entries()) await run("UPDATE tasks SET position = ? WHERE id = ?", i, sid);
 
     if (fromColumnId !== toColumnId) {
+      await run("UPDATE tasks SET column_since = ? WHERE id = ?", new Date().toISOString(), taskId);
       const rest = await all<{ id: string }>("SELECT id FROM tasks WHERE column_id = ? AND archived_at IS NULL ORDER BY position", fromColumnId);
       for (const [i, r] of rest.entries()) await run("UPDATE tasks SET position = ? WHERE id = ?", i, r.id);
     }

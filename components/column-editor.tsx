@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowLeft, ArrowRight, Check, CircleCheck, Trash2, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, CircleCheck, Timer, Trash2, X } from "lucide-react";
 import { PALETTE } from "@/lib/board";
 import { useT } from "@/components/i18n";
 
@@ -15,6 +15,7 @@ const SWATCHES = [NEUTRAL, ...PALETTE];
 export function ColumnEditor({
   title: initialTitle = "",
   color: initialColor = NEUTRAL,
+  limitDays: initialLimit = null,
   heading,
   submitLabel,
   onSubmit,
@@ -26,9 +27,10 @@ export function ColumnEditor({
 }: {
   title?: string;
   color?: string;
+  limitDays?: number | null;
   heading: string;
   submitLabel: string;
-  onSubmit: (title: string, color: string) => Promise<{ error?: string } | void>;
+  onSubmit: (title: string, color: string, limitDays: number | null) => Promise<{ error?: string } | void>;
   onDelete?: () => Promise<{ error?: string } | void>;
   onMove?: (direction: -1 | 1) => Promise<void>;
   /** Whether this is the project's done column; the toggle marks or unmarks it. */
@@ -39,13 +41,14 @@ export function ColumnEditor({
   const tr = useT();
   const [title, setTitle] = useState(initialTitle);
   const [color, setColor] = useState(initialColor);
+  const [limit, setLimit] = useState(initialLimit === null ? "" : String(initialLimit));
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   async function submit() {
     if (busy) return;
     setBusy(true);
-    const res = await onSubmit(title, color);
+    const res = await onSubmit(title, color, limit.trim() ? Number(limit) : null);
     setBusy(false);
     if (res?.error) return setError(res.error);
     onClose();
@@ -87,6 +90,21 @@ export function ColumnEditor({
           </button>
         ))}
       </div>
+
+      <label className="mb-3 flex items-center gap-1.5 text-xs text-muted-foreground" title={tr("Cards that stay longer than this turn red")}>
+        <Timer className="size-3.5 shrink-0" />
+        {tr("Day limit")}
+        <input
+          type="number"
+          min={1}
+          max={365}
+          value={limit}
+          onChange={(e) => setLimit(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") void submit(); }}
+          placeholder={tr("None")}
+          className="ml-auto w-16 rounded-md border bg-background px-2 py-1 text-xs text-foreground outline-none focus:border-ring"
+        />
+      </label>
 
       {onToggleDone && (
         <button

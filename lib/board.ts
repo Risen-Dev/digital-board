@@ -23,6 +23,8 @@ export type Task = {
   images: TaskImage[];
   /** Cards in the same project this one waits on; `done` = that card sits in the done column. */
   blockedBy: Blocker[];
+  /** Whole days since the card entered its current column. */
+  stageDays: number;
 };
 
 export type Blocker = { id: string; done: boolean };
@@ -50,7 +52,8 @@ export const labelsOf = (label: string | null) => (label ?? "").split(",").map((
 export const joinLabels = (raw: string) =>
   labelsOf(raw).filter((l, i, all) => all.findIndex((x) => x.toLowerCase() === l.toLowerCase()) === i).join(", ") || null;
 
-export type Column = { id: string; title: string; color: string; tasks: Task[] };
+/** `limitDays`: days a card may stay here before its stage timer turns red; null = no limit. */
+export type Column = { id: string; title: string; color: string; limitDays: number | null; tasks: Task[] };
 
 /** `atLabel` is formatted on the server — see lib/format.ts for why. */
 export type Entry = { at: string; atLabel: string; text: string; actor: string | null; kind: "event" | "comment"; agent?: boolean };

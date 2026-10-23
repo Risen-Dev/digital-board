@@ -19,6 +19,7 @@ type TaskRow = {
   comments: number;
   images: TaskImage[];
   blocked_by: Blocker[];
+  column_since: string;
 };
 
 const toTask = (r: TaskRow): Task => ({
@@ -36,6 +37,7 @@ const toTask = (r: TaskRow): Task => ({
   comments: r.comments,
   images: r.images,
   blockedBy: r.blocked_by,
+  stageDays: Math.floor((Date.now() - Date.parse(r.column_since)) / 86_400_000),
 });
 
 /** The project's done column for `p` (projects): the chosen one, else its last column. */
@@ -43,6 +45,7 @@ export const DONE_COLUMN = `COALESCE(p.done_column_id, (SELECT dc.id FROM column
 
 /** Card columns shared by the board and My Tasks; `t`, `p` are tasks and projects. */
 const TASK_COLS = `t.id, t.column_id, t.title, t.description, t.label, t.priority, t.due_date, t.checklist, t.repeat,
+            COALESCE(t.column_since, t.created_at) AS column_since,
             p.key || '-' || t.number AS task_key,
             COALESCE((SELECT json_agg(json_build_object('id', u.id, 'name', u.name, 'color', u.color) ORDER BY u.name)
                         FROM task_assignees ta JOIN users u ON u.id = ta.user_id WHERE ta.task_id = t.id), '[]') AS assignees,
@@ -94,8 +97,8 @@ export const projectMembers = (workspaceId: string) =>
   );
 
 export async function getBoard(projectId: string): Promise<Column[]> {
-  const columns = await all<{ id: string; title: string; color: string }>(
-    "SELECT id, title, color FROM columns WHERE project_id = ? ORDER BY position",
+  const columns = await all<{ id: string; title: string; color: string; limitDays: number | null }>(
+    `SELECT id, title, color, stage_limit_days AS "limitDays" FROM columns WHERE project_id = ? ORDER BY position`,
     projectId,
   );
   const rows = await all<TaskRow>(
