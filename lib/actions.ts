@@ -6,7 +6,7 @@ import { after } from "next/server";
 import { redirect } from "next/navigation";
 import { all, get, run, transaction } from "./db";
 import { createUser, createWorkspace, currentUser, endSession, login, passwordOf, setPassword, startSession, verifyPassword, type User } from "./auth";
-import { joinLabels, nextDue, projectKeyOf, PROJECT_KEY_RE, REPEATS, templateOf, PALETTE, PRIORITIES, reorder, type CheckItem, type Priority, type Repeat } from "./board";
+import { joinLabels, nextDue, parseDuration, projectKeyOf, PROJECT_KEY_RE, REPEATS, templateOf, PALETTE, PRIORITIES, reorder, type CheckItem, type Member, type Priority, type Repeat } from "./board";
 import { broadcast } from "./canvas/hub";
 import { projectRole } from "./canvas/guard";
 import { notify } from "./outgoing";
@@ -1016,6 +1016,65 @@ export async function fetchHistory(taskId: string) {
   if (!task || await projectRole(user, task.project_id) === null) return [];
   const { taskHistory } = await import("./queries");
   return taskHistory(taskId);
+}
+
+// ── Time tracking ───────────────────────────────────────────────────────────
+
+/** Seconds of an entry; a running one counts up to now. */
+const ELAPSED = "EXTRACT(EPOCH FROM COALESCE(te.ended_at, now()::text)::timestamptz - te.started_at::timestamptz)";
+
+/** Time logged on a card per person, plus the caller's id and when their running timer on it started. */
+export async function fetchTime(taskId: string) {
+  const user = await requireUser();
+  const task = await get<{ project_id: string }>(
+    "SELECT c.project_id FROM tasks t JOIN columns c ON c.id = t.column_id WHERE t.id = ?", taskId,
+  );
+  if (!task || await projectRole(user, task.project_id) === null) return null;
+  const people = await all<Member & { seconds: number }>(
+    `SELECT u.id, u.name, u.color, SUM(${ELAPSED})::int AS seconds
+       FROM time_entries te JOIN users u ON u.id = te.user_id
+      WHERE te.task_id = ? GROUP BY u.id ORDER BY seconds DESC`,
+    taskId,
+  );
+  const mine = await get<{ started_at: string }>(
+    "SELECT started_at FROM time_entries WHERE task_id = ? AND user_id = ? AND ended_at IS NULL", taskId, user.id,
+  );
+  return { people, me: user.id, since: mine?.started_at ?? null };
+}
+
+/** Starts the caller's timer on this card, stopping one running elsewhere — one at a time per person. */
+export async function startTimer(taskId: string) {
+  const user = await requireUser();
+  if (!await writableTask(user, taskId)) return { error: "You cannot edit this task." };
+  await transaction(async () => {
+    await run("UPDATE time_entries SET ended_at = ? WHERE user_id = ? AND ended_at IS NULL", now(), user.id);
+    await run("INSERT INTO time_entries (task_id, user_id, started_at) VALUES (?,?,?)", taskId, user.id, now());
+  });
+  revalidatePath("/board");
+  return { ok: true };
+}
+
+/** Stops the caller's own timer on this card; always allowed, even after losing edit access. */
+export async function stopTimer(taskId: string) {
+  const user = await requireUser();
+  await run("UPDATE time_entries SET ended_at = ? WHERE task_id = ? AND user_id = ? AND ended_at IS NULL", now(), taskId, user.id);
+  revalidatePath("/board");
+  return { ok: true };
+}
+
+/** Logs time after the fact ("1h 30m", "45m"), ending now. At most 24h per entry. */
+export async function logTime(taskId: string, text: string) {
+  const user = await requireUser();
+  if (!await writableTask(user, taskId)) return { error: "You cannot edit this task." };
+  const seconds = parseDuration(text);
+  if (seconds === null || seconds > 86_400) return { error: "Enter a time like 1h 30m or 45m, up to 24h." };
+  const end = Date.now();
+  await run(
+    "INSERT INTO time_entries (task_id, user_id, started_at, ended_at) VALUES (?,?,?,?)",
+    taskId, user.id, new Date(end - seconds * 1000).toISOString(), new Date(end).toISOString(),
+  );
+  revalidatePath("/board");
+  return { ok: true };
 }
 
 // ── Canvas sheets ───────────────────────────────────────────────────────────

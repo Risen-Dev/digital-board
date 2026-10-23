@@ -36,6 +36,7 @@ export async function GET() {
     tasks: await all(`SELECT * FROM tasks WHERE id IN ${T} ORDER BY created_at`, ws),
     task_assignees: await all(`SELECT * FROM task_assignees WHERE task_id IN ${T}`, ws),
     task_blockers: await all(`SELECT * FROM task_blockers WHERE task_id IN ${T}`, ws),
+    time_entries: await all(`SELECT * FROM time_entries WHERE task_id IN ${T} ORDER BY id`, ws),
     task_events: await all(`SELECT * FROM task_events WHERE task_id IN ${T} ORDER BY id`, ws),
     task_links: await all(`SELECT * FROM task_links WHERE task_id IN ${T}`, ws),
     task_images: await all(

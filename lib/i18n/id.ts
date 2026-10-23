@@ -526,6 +526,15 @@ const id: Record<string, string> = {
   "{n}d over": "lewat {n} hr",
   "{n} day in this column": "{n} hari di kolom ini",
   "{n} days in this column": "{n} hari di kolom ini",
+  "Time tracking": "Waktu kerja",
+  "Start timer": "Mulai timer",
+  "Stop timer": "Hentikan timer",
+  "Starting here stops your timer on any other card": "Memulai di sini menghentikan timer kamu di kartu lain",
+  "Log time, e.g. 1h 30m": "Catat waktu, mis. 1h 30m",
+  "Log": "Catat",
+  "Enter a time like 1h 30m or 45m, up to 24h.": "Masukkan waktu seperti 1h 30m atau 45m, maksimal 24 jam.",
+  "Timer running": "Timer berjalan",
+  "Time logged": "Waktu tercatat",
 };
 
 export default id;

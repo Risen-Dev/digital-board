@@ -25,6 +25,10 @@ export type Task = {
   blockedBy: Blocker[];
   /** Whole days since the card entered its current column. */
   stageDays: number;
+  /** Seconds logged on the card by everyone, running timers counted up to the load. */
+  trackedSeconds: number;
+  /** Someone's timer is running on it. */
+  timing: boolean;
 };
 
 export type Blocker = { id: string; done: boolean };
@@ -44,6 +48,21 @@ export function nextDue(date: string, repeat: Repeat) {
     return new Date(Date.UTC(y, m, Math.min(d, last))).toISOString().slice(0, 10);
   }
   return new Date(Date.UTC(y, m - 1, d + (repeat === "daily" ? 1 : 7))).toISOString().slice(0, 10);
+}
+
+/** 5400 → "1h 30m", 300 → "5m"; under a minute is "0m". */
+export function formatDuration(seconds: number) {
+  const m = Math.floor(seconds / 60), h = Math.floor(m / 60);
+  return h ? (m % 60 ? `${h}h ${m % 60}m` : `${h}h`) : `${m}m`;
+}
+
+/** "1h 30m", "1.5h", "90m", "90" (minutes) → seconds; null when unreadable or not above zero. */
+export function parseDuration(text: string) {
+  const s = text.trim().toLowerCase().replace(/\s+/g, "");
+  const m = /^(?:(\d+(?:\.\d+)?)h)?(?:(\d+)m?)?$/.exec(s);
+  if (!s || !m || (!m[1] && !m[2])) return null;
+  const seconds = Math.round(Number(m[1] ?? 0) * 3600 + Number(m[2] ?? 0) * 60);
+  return seconds > 0 ? seconds : null;
 }
 
 /** "Design, QA" → ["Design", "QA"]. */
