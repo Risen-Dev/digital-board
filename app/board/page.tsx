@@ -10,11 +10,31 @@ export default async function BoardPage({ searchParams }: PageProps<"/board">) {
   if (!user) redirect("/login");
   const ws = user.workspace_id;
 
-  const projects = await listProjects(ws, user.id, user.is_admin === 1);
-  const { project: wanted, sheet, tag, task } = await searchParams;
+  const [projects, { project: wanted, sheet, tag, task }] = await Promise.all([
+    listProjects(ws, user.id, user.is_admin === 1),
+    searchParams,
+  ]);
   const project = projects.find((p) => p.id === wanted) ?? projects[0] ?? null;
-  const workspace = await workspaceName(ws);
-  const ai = await aiConfig(ws);
+  // Independent reads, so they share the pool instead of queuing one after another.
+  const [workspace, ai, columns, members, assignments, presence, feed, notifications, unread, mine, meetings, stats, sheets, views, fields, tags] =
+    await Promise.all([
+      workspaceName(ws),
+      aiConfig(ws),
+      project ? getBoard(project.id) : [],
+      listMembers(ws),
+      projectMembers(ws),
+      listMembersWithPresence(ws),
+      activityFeed(ws, user.id, user.is_admin),
+      activityNotifications(ws, user.id, user.is_admin),
+      unreadCounts(ws, user.id),
+      myTasks(user.id),
+      listMeetings(ws),
+      project ? analytics(project.id) : null,
+      project ? listCanvases(project.id) : [],
+      project ? listViews(project.id) : [],
+      project ? listFields(project.id) : [],
+      listCanvasTags(projects.map((p) => p.id)),
+    ]);
 
   return (
     <Workspace
@@ -22,20 +42,20 @@ export default async function BoardPage({ searchParams }: PageProps<"/board">) {
       workspace={workspace}
       projects={projects}
       project={project}
-      columns={project ? await getBoard(project.id) : []}
-      members={await listMembers(ws)}
-      assignments={await projectMembers(ws)}
-      presence={await listMembersWithPresence(ws)}
-      feed={await activityFeed(ws, user.id, user.is_admin)}
-      notifications={await activityNotifications(ws, user.id, user.is_admin)}
-      unread={await unreadCounts(ws, user.id)}
-      mine={await myTasks(user.id)}
-      meetings={await listMeetings(ws)}
-      stats={project ? await analytics(project.id) : null}
-      sheets={project ? await listCanvases(project.id) : []}
-      views={project ? await listViews(project.id) : []}
-      fields={project ? await listFields(project.id) : []}
-      tags={await listCanvasTags(projects.map((p) => p.id))}
+      columns={columns}
+      members={members}
+      assignments={assignments}
+      presence={presence}
+      feed={feed}
+      notifications={notifications}
+      unread={unread}
+      mine={mine}
+      meetings={meetings}
+      stats={stats}
+      sheets={sheets}
+      views={views}
+      fields={fields}
+      tags={tags}
       focus={typeof sheet === "string" && typeof tag === "string" ? { sheetId: sheet, tag } : null}
       openTask={typeof task === "string" ? task : null}
       today={new Date().toISOString().slice(0, 10)}

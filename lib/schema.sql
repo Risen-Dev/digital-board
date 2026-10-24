@@ -383,3 +383,13 @@ CREATE TABLE IF NOT EXISTS custom_fields (
 );
 CREATE INDEX IF NOT EXISTS custom_fields_project ON custom_fields(project_id, position);
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS fields JSONB NOT NULL DEFAULT '{}';
+
+-- Canvas tag names (customData.tag of live elements), kept beside the snapshot by
+-- the canvas save so the board page doesn't parse every sheet's JSON per load.
+-- NULL = not computed yet; filled here once per sheet, later by each save.
+ALTER TABLE canvases ADD COLUMN IF NOT EXISTS tags JSONB;
+UPDATE canvases c SET tags = COALESCE(
+  (SELECT jsonb_agg(DISTINCT e->'customData'->>'tag')
+     FROM jsonb_array_elements(COALESCE(c.snapshot::jsonb->'elements', '[]'::jsonb)) e
+    WHERE e->'customData'->>'tag' IS NOT NULL AND e->>'isDeleted' IS DISTINCT FROM 'true'), '[]')
+ WHERE tags IS NULL;
