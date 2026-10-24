@@ -102,14 +102,13 @@ async function touch(userId: string, lastSeen: string | null) {
   await run("UPDATE users SET last_seen_at = ? WHERE id = ?", new Date().toISOString(), userId);
 }
 
-// ponytail: in-process counters, so the limit is per Node instance and resets on restart.
-// Fine for one self-hosted server; several instances behind a balancer would need a table.
-const WINDOW_MS = 15 * 60_000;
+// Counters live in login_failures so every app instance shares them.
+const WINDOW = "15 minutes";
 const MAX_PER_EMAIL = 5;
 const MAX_PER_IP = 20;
-const failures: Map<string, number[]> = ((globalThis as unknown as { loginFailures?: Map<string, number[]> }).loginFailures ??= new Map());
 
-const recent = (key: string) => (failures.get(key) ?? []).filter((t) => Date.now() - t < WINDOW_MS);
+const recent = async (key: string) =>
+  (await get<{ n: number }>(`SELECT COUNT(*) n FROM login_failures WHERE key = ? AND at > now() - interval '${WINDOW}'`, key))!.n;
 
 async function clientIp() {
   const h = await headers();
@@ -120,17 +119,16 @@ async function clientIp() {
 export async function login(email: string, password: string): Promise<string | null | "locked"> {
   email = email.toLowerCase().trim();
   const keys = [`e:${email}`, `ip:${await clientIp()}`];
-  if (recent(keys[0]).length >= MAX_PER_EMAIL || recent(keys[1]).length >= MAX_PER_IP) return "locked";
+  if (await recent(keys[0]) >= MAX_PER_EMAIL || await recent(keys[1]) >= MAX_PER_IP) return "locked";
 
   const row = await get<{ id: string; password_hash: string }>("SELECT id, password_hash FROM users WHERE email = ?", email);
   // Hash anyway on a miss so a bad email and a bad password take the same time.
   const ok = row ? verifyPassword(password, row.password_hash) : verifyPassword(password, hashPassword("decoy"));
   if (ok && row) {
-    failures.delete(keys[0]);
+    await run("DELETE FROM login_failures WHERE key = ?", keys[0]);
     return row.id;
   }
-  for (const key of keys) failures.set(key, [...recent(key), Date.now()]);
-  // Stale keys are only pruned on reuse; sweep once a spray of addresses piles them up.
-  if (failures.size > 10_000) for (const key of failures.keys()) if (!recent(key).length) failures.delete(key);
+  await run("INSERT INTO login_failures (key) VALUES (?), (?)", ...keys);
+  await run(`DELETE FROM login_failures WHERE at < now() - interval '${WINDOW}'`);
   return null;
 }

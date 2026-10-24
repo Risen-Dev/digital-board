@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { get, run, transaction } from "@/lib/db";
 import { mergeSnapshots, tagsOf, type Snapshot } from "@/lib/canvas/merge";
-import { broadcast, peers, type Peer } from "@/lib/canvas/hub";
+import { broadcast, listen, peers, type Peer } from "@/lib/canvas/hub";
 import { guard } from "@/lib/canvas/guard";
 
 /**
@@ -18,6 +18,7 @@ import { guard } from "@/lib/canvas/guard";
  * The snapshot POST stays the source of truth.
  */
 function liveStream(req: Request, canvasId: string, client: string) {
+  listen();
   const room = peers.get(canvasId) ?? new Set<Peer>();
   peers.set(canvasId, room);
   const encoder = new TextEncoder();
