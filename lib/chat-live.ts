@@ -1,22 +1,31 @@
 import "server-only";
+import { listen, onLive, publish } from "@/lib/live-bus";
 
 /**
  * Chat push: each open Chat tab holds an SSE stream (GET /api/chat/live) and
  * gets a content-free nudge whenever its workspace has a new or edited message;
  * it then refetches through the normal GET, which does the access checks.
+ * Nudges reach other app instances through lib/live-bus.ts.
  * On globalThis so dev hot reloads don't orphan open streams.
  */
-// ponytail: in-process like lib/canvas/hub.ts; with several Node instances the
-// chat view's slow fallback poll is what delivers across them.
 const hub = globalThis as unknown as { chatListeners?: Map<string, Set<(data: string) => void>> };
 const listeners = (hub.chatListeners ??= new Map());
 
-export function nudgeChat(workspaceId: string, type: "message" | "edit" = "message") {
+type Nudge = { workspaceId: string; type: "message" | "edit" };
+
+function deliver({ workspaceId, type }: Nudge) {
   const data = `data: ${JSON.stringify({ type })}\n\n`;
   for (const send of listeners.get(workspaceId) ?? []) send(data);
 }
+onLive("chat", deliver);
+
+export function nudgeChat(workspaceId: string, type: Nudge["type"] = "message") {
+  deliver({ workspaceId, type });
+  publish("chat", { workspaceId, type });
+}
 
 export function chatStream(req: Request, workspaceId: string) {
+  listen();
   const room = listeners.get(workspaceId) ?? new Set();
   listeners.set(workspaceId, room);
   const encoder = new TextEncoder();

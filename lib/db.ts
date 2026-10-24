@@ -91,6 +91,9 @@ export const run = async (sql: string, ...args: unknown[]) => {
   await query<pg.QueryResultRow>(sql, args);
 };
 
+/** Runs `fn` on the pool even inside `transaction()` — for fire-and-forget work that may outlive the tx. */
+export const outsideTx = <T>(fn: () => T) => tx.exit(fn);
+
 /**
  * Runs `fn` in a transaction. Rolls back on throw. Nested calls join the
  * outer transaction instead of opening a second one on another client.

@@ -334,9 +334,7 @@ these, plus lint, type-check and build, on every push and pull request.
 
 ## Known limits
 
-Self-service password reset needs SMTP. Chat pushes new messages over SSE from the
-process that stored them, so with several app instances a message from another one
-arrives on the 30-second fallback poll. Chat has no deletion, reactions or threads. The project agent's chat is
+Self-service password reset needs SMTP. Chat has no deletion, reactions or threads. The project agent's chat is
 not saved — it is gone after a reload. The inbound webhook only creates cards,
 the outgoing webhook does not retry failed deliveries, email-to-ticket sends
 no replies, and calendar apps refresh the iCal feed on

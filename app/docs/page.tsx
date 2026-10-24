@@ -247,8 +247,9 @@ pm2 startup       # print the command that re-runs pm2 at boot, then run it`}</C
           <p className="rounded-lg border border-[var(--chart-7)] bg-[rgba(239,68,68,0.06)] p-4 text-sm">
             <strong className="text-foreground">Raising <C>instances</C> is allowed.</strong> Postgres holds all
             application state. Raise <C>DATABASE_POOL_MAX</C> with care — each instance opens its own pool, so total
-            connections is instances × pool size. Live canvas cursors and edits are relayed in-process, so they
-            only reach people served by the same instance — keep <C>instances: 1</C> if you rely on them.
+            connections is instances × pool size, plus one listening connection per instance: live canvas
+            cursors and edits, chat nudges and the sign-in lockout are shared between instances through Postgres
+            (<C>LISTEN/NOTIFY</C> and a table).
           </p>
           <p className="text-sm text-muted-foreground">Day-to-day:</p>
           <Code>{`pm2 logs digital-board        # tail logs
@@ -462,8 +463,8 @@ git push -u origin feat/WEB-42-title`}</Code>
             <li>
               <strong className="text-foreground">Chat is pushed over SSE.</strong> Each open Chat tab holds a stream on{" "}
               <C>/api/chat/live</C> that gets a content-free nudge on every new or edited message, then refetches
-              through the normal access-checked GET. No WebSocket server; a 30-second poll covers dropped streams and
-              messages stored by another app instance.
+              through the normal access-checked GET. No WebSocket server; nudges from other app instances arrive
+              through Postgres <C>LISTEN/NOTIFY</C>, and a 30-second poll covers dropped streams.
             </li>
             <li>
               <strong className="text-foreground">Timestamps are formatted on the server</strong> and shipped as
@@ -532,7 +533,7 @@ pm2 restart digital-board        # or: systemctl restart digital-board`}</Code>
           <H id="limits">Known limits</H>
           <ul className="flex list-disc flex-col gap-1.5 pl-5 text-sm text-muted-foreground">
             <li>No self-service password reset. An admin creates a replacement account.</li>
-            <li>Chat has no deletion, reactions, threads or typing indicators. With several app instances, a message stored by another one arrives on the 30-second poll, not instantly.</li>
+            <li>Chat has no deletion, reactions, threads or typing indicators.</li>
             <li>Columns move one step at a time from the editor; there is no drag-to-reorder for columns themselves.</li>
             <li>The project agent&rsquo;s conversation lives in the browser tab and is gone after a reload. It sees up to 100 tasks per column. Each flow it draws goes on a new sheet, drawn when an editor first opens it.</li>
             <li>Project roles gate tasks, canvases and project structure. Chat is workspace-wide — it has no per-project scoping.</li>
