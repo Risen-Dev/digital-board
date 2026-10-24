@@ -18,7 +18,12 @@ type Element = {
   isDeleted?: boolean;
   updated?: number;
   fileId?: string | null;
+  customData?: { tag?: string };
 };
+
+/** Distinct tag names on live elements — what `canvases.tags` stores. */
+export const tagsOf = (snapshot: Snapshot) =>
+  [...new Set((snapshot.elements ?? []).filter((e) => !e.isDeleted && e.customData?.tag).map((e) => e.customData!.tag!))];
 
 export type Snapshot = {
   elements?: Element[];

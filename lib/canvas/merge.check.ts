@@ -1,6 +1,6 @@
 // Run: node --experimental-strip-types lib/canvas/merge.check.ts
 import assert from "node:assert/strict";
-import { mergeSnapshots, type Snapshot } from "./merge.ts";
+import { mergeSnapshots, tagsOf, type Snapshot } from "./merge.ts";
 
 const NOW = 1_000_000_000_000;
 const el = (id: string, version: number, extra: object = {}) => ({
@@ -42,5 +42,9 @@ assert.deepEqual(Object.keys(files).sort(), ["f1", "f2"]);
 
 // non-element fields (appState) come from the newest save
 assert.deepEqual(mergeSnapshots({ appState: { a: 1 } }, { appState: { a: 2 } }, NOW).appState, { a: 2 });
+
+// tags: distinct names of live elements only
+assert.deepEqual(tagsOf({ elements: [el("1", 1, { customData: { tag: "a" } }), el("2", 1, { customData: { tag: "a" } }),
+  el("3", 1, { customData: { tag: "gone" }, isDeleted: true }), el("4", 1)] }), ["a"]);
 
 console.log("merge.check: ok");

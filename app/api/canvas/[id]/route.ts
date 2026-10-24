@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { get, run, transaction } from "@/lib/db";
-import { mergeSnapshots, type Snapshot } from "@/lib/canvas/merge";
+import { mergeSnapshots, tagsOf, type Snapshot } from "@/lib/canvas/merge";
 import { broadcast, peers, type Peer } from "@/lib/canvas/hub";
 import { guard } from "@/lib/canvas/guard";
 
@@ -82,7 +82,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   await transaction(async () => {
     const row = await get<{ snapshot: string | null }>("SELECT snapshot FROM canvases WHERE id = ? FOR UPDATE", id);
     const merged = mergeSnapshots(row?.snapshot ? JSON.parse(row.snapshot) : null, incoming);
-    await run("UPDATE canvases SET snapshot = ?, updated_at = ? WHERE id = ?", JSON.stringify(merged), new Date().toISOString(), id);
+    await run("UPDATE canvases SET snapshot = ?, tags = ?, updated_at = ? WHERE id = ?",
+      JSON.stringify(merged), JSON.stringify(tagsOf(merged)), new Date().toISOString(), id);
   });
   return new NextResponse(null, { status: 204 });
 }

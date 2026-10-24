@@ -262,10 +262,10 @@ export type CanvasTag = { tag: string; sheetId: string; projectId: string; proje
  */
 export const listCanvasTags = (projectIds: string[]) =>
   all<CanvasTag>(
-    `SELECT DISTINCT e->'customData'->>'tag' AS tag, c.id AS "sheetId", p.id AS "projectId", p.name AS project
+    `SELECT DISTINCT tag, c.id AS "sheetId", p.id AS "projectId", p.name AS project
      FROM canvases c JOIN projects p ON p.id = c.project_id,
-       jsonb_array_elements(COALESCE(c.snapshot::jsonb->'elements', '[]'::jsonb)) e
-     WHERE c.project_id = ANY(?) AND e->'customData'->>'tag' IS NOT NULL AND e->>'isDeleted' IS DISTINCT FROM 'true'
+       jsonb_array_elements_text(COALESCE(c.tags, '[]'::jsonb)) tag
+     WHERE c.project_id = ANY(?)
      ORDER BY tag`,
     projectIds,
   );
