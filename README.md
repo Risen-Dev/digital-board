@@ -13,7 +13,9 @@ with multiple sheets, and workspace chat with direct messages. Multi-user,
 with per-project roles.
 Runs on your own machine against your own PostgreSQL — no per-seat billing.
 
-![The board](public/screenshots/board.png)
+[![The board — click to watch the demo video](public/screenshots/board.png)](https://risen-dev.github.io/digital-board/screenshots/demo.webm)
+
+▶ **[Watch the 2-minute demo](https://risen-dev.github.io/digital-board/screenshots/demo.webm)**: board, views, GitHub, search, the AI agents, canvas and chat.
 
 <table>
   <tr>
