@@ -401,12 +401,12 @@ export function Workspace({
   };
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
+    <div className="theme-backdrop flex h-screen overflow-hidden bg-background">
       {/* Sidebar */}
       {drawer && <div className="fixed inset-0 z-30 bg-black/40 md:hidden" onClick={() => setDrawer(false)} />}
       <aside
         style={{ width: slim ? 54 : 220, transition: "width 200ms cubic-bezier(0.4,0,0.2,1), transform 200ms cubic-bezier(0.4,0,0.2,1)" }}
-        className={`fixed inset-y-0 left-0 z-40 flex shrink-0 flex-col overflow-hidden border-r bg-background md:static md:z-auto md:translate-x-0 ${
+        className={`theme-backdrop fixed inset-y-0 left-0 z-40 flex shrink-0 flex-col overflow-hidden border-r bg-background md:static md:z-auto md:translate-x-0 ${
           drawer ? "translate-x-0" : "-translate-x-full"
         }`}
       >

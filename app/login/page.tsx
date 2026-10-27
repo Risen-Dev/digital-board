@@ -14,7 +14,7 @@ export default async function LoginPage() {
   if (await currentUser()) redirect("/board");
 
   return (
-    <main className="flex flex-1 items-center justify-center px-6 py-12">
+    <main className="theme-backdrop flex flex-1 items-center justify-center px-6 py-12">
       <div className="w-full max-w-sm">
         <div className="mb-8 flex items-center gap-3">
           <LogoMark />

@@ -50,7 +50,8 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-:root {
+:root,
+[data-theme="graphite"] {
   --background: oklch(1 0 0);
   --foreground: oklch(0.141 0.005 285.823);
   --card: oklch(1 0 0);
@@ -87,7 +88,8 @@
   --sidebar-ring: oklch(0.705 0.015 286.067);
 }
 
-.dark {
+.dark,
+.dark [data-theme="graphite"] {
   --background: oklch(0.141 0.005 285.823);
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.179 0.006 285.885);
@@ -123,6 +125,285 @@
   --sidebar-ring: oklch(0.442 0.017 285.786);
 }
 
+/* ── Themes ─────────────────────────────────────────────────────────────────
+   Each palette restates the tokens above under `data-theme` (set on <html> from
+   the `palette` cookie). The attribute also works on any element, which is how
+   the Appearance tab draws every theme's preview side by side. */
+
+/* Harbor: cobalt on cool slate, square-ish cards. */
+[data-theme="harbor"] {
+  --background: #f1f4f8;
+  --foreground: #172b4d;
+  --card: #ffffff;
+  --card-foreground: #172b4d;
+  --popover: #ffffff;
+  --popover-foreground: #172b4d;
+  --primary: #0c66e4;
+  --primary-foreground: #ffffff;
+  --secondary: #e4eaf2;
+  --secondary-foreground: #172b4d;
+  --muted: #e4eaf2;
+  --muted-foreground: #55637a;
+  --accent: #e9f2ff;
+  --accent-foreground: #0c4fb0;
+  --destructive: #c9372c;
+  --border: #d3dbe6;
+  --input: #d3dbe6;
+  --ring: #579dff;
+  --radius: 0.375rem;
+}
+
+.dark[data-theme="harbor"],
+.dark [data-theme="harbor"] {
+  --background: #0f1722;
+  --foreground: #dee4ea;
+  --card: #18212e;
+  --card-foreground: #dee4ea;
+  --popover: #18212e;
+  --popover-foreground: #dee4ea;
+  --primary: #579dff;
+  --primary-foreground: #0b1a2e;
+  --secondary: #212c3a;
+  --secondary-foreground: #dee4ea;
+  --muted: #212c3a;
+  --muted-foreground: #96a3b5;
+  --accent: #1c2b41;
+  --accent-foreground: #85b8ff;
+  --destructive: #f87168;
+  --border: #2a3646;
+  --input: #2a3646;
+  --ring: #579dff;
+}
+
+/* Iris: soft violet, rounder corners, a rounder face. */
+[data-theme="iris"] {
+  --background: #f7f6fb;
+  --foreground: #1f1d2b;
+  --card: #ffffff;
+  --card-foreground: #1f1d2b;
+  --popover: #ffffff;
+  --popover-foreground: #1f1d2b;
+  --primary: #6a55e8;
+  --primary-foreground: #ffffff;
+  --secondary: #eeebfa;
+  --secondary-foreground: #1f1d2b;
+  --muted: #eeebfa;
+  --muted-foreground: #63607a;
+  --accent: #eeebfa;
+  --accent-foreground: #4b37c9;
+  --destructive: #e5484d;
+  --border: #e3e0f0;
+  --input: #e3e0f0;
+  --ring: #a89bf5;
+  --radius: 0.75rem;
+}
+
+/* body carries `font-sans` itself, so it needs naming too. */
+[data-theme="iris"],
+[data-theme="iris"] body {
+  font-family: var(--font-jakarta), var(--font-sans), sans-serif;
+}
+
+.dark[data-theme="iris"],
+.dark [data-theme="iris"] {
+  --background: #15141c;
+  --foreground: #eceaf5;
+  --card: #1d1c27;
+  --card-foreground: #eceaf5;
+  --popover: #1d1c27;
+  --popover-foreground: #eceaf5;
+  --primary: #9b8cff;
+  --primary-foreground: #15122b;
+  --secondary: #262434;
+  --secondary-foreground: #eceaf5;
+  --muted: #262434;
+  --muted-foreground: #a19eb6;
+  --accent: #2a2640;
+  --accent-foreground: #c4bbff;
+  --destructive: #ff6369;
+  --border: #302e40;
+  --input: #302e40;
+  --ring: #7b68ee;
+}
+
+/* Shanshui: Wang Ximeng's mineral blue-green. Silk by day, ink by night. */
+[data-theme="shanshui"] {
+  --background: #ece2cb;
+  --foreground: #231c12;
+  --card: #f6efdd;
+  --card-foreground: #231c12;
+  --popover: #f6efdd;
+  --popover-foreground: #231c12;
+  --primary: #1f5c9e;
+  --primary-foreground: #f6efdd;
+  --secondary: #e2d5b6;
+  --secondary-foreground: #231c12;
+  --muted: #e2d5b6;
+  --muted-foreground: #66563e;
+  --accent: #d3e1cf;
+  --accent-foreground: #1e4d3e;
+  --destructive: #a8392a;
+  --border: #d2c199;
+  --input: #d2c199;
+  --ring: #3a8f76;
+  --radius: 0.25rem;
+  --chart-1: #1f5c9e;
+  --chart-2: #2f8a6c;
+  --chart-3: #b07d22;
+  --chart-4: #a8392a;
+  --chart-5: #2a8794;
+  --chart-6: #6a5a9a;
+  --chart-7: #b5432f;
+}
+
+.dark[data-theme="shanshui"],
+.dark [data-theme="shanshui"] {
+  --background: #15120d;
+  --foreground: #ede3cc;
+  --card: #1f1a13;
+  --card-foreground: #ede3cc;
+  --popover: #1f1a13;
+  --popover-foreground: #ede3cc;
+  --primary: #4fa58a;
+  --primary-foreground: #10140f;
+  --secondary: #2a2318;
+  --secondary-foreground: #ede3cc;
+  --muted: #2a2318;
+  --muted-foreground: #a8997c;
+  --accent: #1f3a33;
+  --accent-foreground: #bfe3d3;
+  --destructive: #d0604a;
+  --border: #362d20;
+  --input: #362d20;
+  --ring: #4fa58a;
+  --chart-1: #4f8fd6;
+  --chart-2: #4fa58a;
+  --chart-3: #c99a45;
+  --chart-4: #d0604a;
+  --chart-5: #4aa9b5;
+  --chart-6: #9a8ad0;
+  --chart-7: #d8674f;
+}
+
+[data-theme="shanshui"] :is(h1, h2, h3) {
+  font-family: var(--font-serif), serif;
+  letter-spacing: 0.01em;
+}
+
+/* Blue-green ridges along the foot of the page and the sidebar, over silk grain.
+   Cards and columns stay opaque, so the range only shows in the gaps.
+   `:not([data-theme])` keeps a backdrop to its nearest theme: an Appearance
+   preview carries its own `data-theme` and must not take the page's. */
+[data-theme="shanshui"] .theme-backdrop:not([data-theme]),
+.theme-backdrop[data-theme="shanshui"] {
+  background-image:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 240' preserveAspectRatio='none'><defs><linearGradient id='g' x1='0' y1='0' x2='0' y2='1'><stop offset='0' stop-color='%234fa58a'/><stop offset='.8' stop-color='%231f5c9e'/></linearGradient></defs><path fill='%231f5c9e' opacity='.14' d='M0 240V175L24 175C62 175 69 140.0212495033362 87 140.0212495033362S112 175 150 175L60 175C109 175 119 129.31292181046032 142 129.31292181046032S175 175 224 175L137 175C176 175 184 139.14179320113078 202 139.14179320113078S228 175 268 175L515 175C547 175 553 141.5457098465185 568 141.5457098465185S589 175 620 175L543 175C585 175 593 114.41955230034216 613 114.41955230034216S641 175 683 175L610 175C640 175 645 148.18666978540887 659 148.18666978540887S679 175 708 175L903 175C932 175 938 132.0628215804054 951 132.0628215804054S971 175 1000 175L920 175C964 175 972 148.594444695172 993 148.594444695172S1022 175 1065 175L983 175C1034 175 1044 127.12246467115071 1067 127.12246467115071S1101 175 1152 175L1200 175V240z'/><path fill='url(%23g)' opacity='.4' d='M0 240V205L118 205C160 205 169 126.23784541251254 189 126.23784541251254S217 205 260 205L204 205C234 205 241 151.03742814741352 255 151.03742814741352S275 205 306 205L247 205C286 205 294 164.18563707222566 313 164.18563707222566S339 205 379 205L297 205C328 205 335 151.73738931734908 349 151.73738931734908S370 205 402 205L334 205C362 205 367 136.5864730215108 380 136.5864730215108S399 205 426 205L695 205C732 205 740 110.7543484786102 757 110.7543484786102S782 205 820 205L748 205C787 205 795 90.07155847788023 813 90.07155847788023S840 205 879 205L807 205C846 205 854 123.03781944848238 872 123.03781944848238S898 205 937 205L864 205C902 205 910 149.2653820979398 928 149.2653820979398S953 205 991 205L956 205C1007 205 1017 100.2940454569644 1041 100.2940454569644S1075 205 1126 205L1200 205V240z'/><path fill='%231f5c9e' opacity='.4' d='M0 240V230L-40 230C33 230 48 205.2594268130369 82 205.2594268130369S131 230 204 230L130 230C187 230 199 213.8660137710577 226 213.8660137710577S264 230 322 230L300 230C357 230 368 216.73597700792132 394 216.73597700792132S432 230 489 230L470 230C541 230 555 210.79280351146716 588 210.79280351146716S636 230 707 230L640 230C713 230 728 211.04275642929318 762 211.04275642929318S811 230 885 230L810 230C887 230 902 202.7484240805495 938 202.7484240805495S989 230 1066 230L980 230C1028 230 1038 214.225086534867 1060 214.225086534867S1092 230 1140 230L1150 230C1225 230 1240 209.540229031754 1276 209.540229031754S1326 230 1401 230L1200 230V240z'/></svg>"),
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .45 0 0 0 0 .35 0 0 0 0 .2 0 0 0 .08 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  background-repeat: no-repeat, repeat;
+  background-position: bottom, 0 0;
+  background-size: max(100%, 1100px) 100%, 160px;
+}
+
+/* Kanagawa: Hokusai's Prussian blue on washi by day, the print-room black by night. */
+[data-theme="kanagawa"] {
+  --background: #f1eadb;
+  --foreground: #1a1f2b;
+  --card: #faf6ec;
+  --card-foreground: #1a1f2b;
+  --popover: #faf6ec;
+  --popover-foreground: #1a1f2b;
+  --primary: #1d3f73;
+  --primary-foreground: #faf6ec;
+  --secondary: #e6dcc7;
+  --secondary-foreground: #1a1f2b;
+  --muted: #e6dcc7;
+  --muted-foreground: #5a5e6c;
+  --accent: #dfe6ef;
+  --accent-foreground: #1d3f73;
+  --destructive: #b5462e;
+  --border: #d6cbb3;
+  --input: #d6cbb3;
+  --ring: #4a74a8;
+  --radius: 0.125rem;
+  --chart-1: #1d3f73;
+  --chart-2: #4d7c8a;
+  --chart-3: #c49a4a;
+  --chart-4: #b5462e;
+  --chart-5: #c98a7c;
+  --chart-6: #6f8a4e;
+  --chart-7: #b5462e;
+}
+
+.dark[data-theme="kanagawa"],
+.dark [data-theme="kanagawa"] {
+  --background: #121110;
+  --foreground: #ece6d8;
+  --card: #1b1a18;
+  --card-foreground: #ece6d8;
+  --popover: #1b1a18;
+  --popover-foreground: #ece6d8;
+  --primary: #7ea6d8;
+  --primary-foreground: #0e1a2c;
+  --secondary: #24221f;
+  --secondary-foreground: #ece6d8;
+  --muted: #24221f;
+  --muted-foreground: #a29d92;
+  --accent: #1a2638;
+  --accent-foreground: #b9d0ee;
+  --destructive: #e0765c;
+  --border: #2e2b27;
+  --input: #2e2b27;
+  --ring: #7ea6d8;
+  --chart-1: #7ea6d8;
+  --chart-2: #6fa3b0;
+  --chart-3: #d4ab5e;
+  --chart-4: #e0765c;
+  --chart-5: #dba293;
+  --chart-6: #93ad70;
+  --chart-7: #e0765c;
+}
+
+[data-theme="kanagawa"] :is(h1, h2, h3) {
+  font-family: var(--font-mincho), serif;
+  font-weight: 700;
+}
+
+/* Seigaiha (wave scales) over the whole surface, fading out toward the top,
+   like the Appearance preview. Cards cover much of it; the waves show between.
+   The scales are filled with the page colour to overlap, so each mode has its
+   own tile; the fade uses --background so it matches whichever theme is nearest. */
+[data-theme="kanagawa"] .theme-backdrop:not([data-theme]),
+.theme-backdrop[data-theme="kanagawa"] {
+  background-image: linear-gradient(var(--background), transparent 45%), url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='40' height='40'><g stroke-width='1.2' stroke-opacity='.3'><circle cx='20' cy='0' r='20' fill='%23f1eadb' stroke='%231d3f73'/><circle cx='20' cy='0' r='15' fill='none' stroke='%231d3f73'/><circle cx='20' cy='0' r='10' fill='none' stroke='%231d3f73'/><circle cx='20' cy='0' r='5' fill='none' stroke='%231d3f73'/><circle cx='0' cy='20' r='20' fill='%23f1eadb' stroke='%231d3f73'/><circle cx='0' cy='20' r='15' fill='none' stroke='%231d3f73'/><circle cx='0' cy='20' r='10' fill='none' stroke='%231d3f73'/><circle cx='0' cy='20' r='5' fill='none' stroke='%231d3f73'/><circle cx='40' cy='20' r='20' fill='%23f1eadb' stroke='%231d3f73'/><circle cx='40' cy='20' r='15' fill='none' stroke='%231d3f73'/><circle cx='40' cy='20' r='10' fill='none' stroke='%231d3f73'/><circle cx='40' cy='20' r='5' fill='none' stroke='%231d3f73'/><circle cx='20' cy='40' r='20' fill='%23f1eadb' stroke='%231d3f73'/><circle cx='20' cy='40' r='15' fill='none' stroke='%231d3f73'/><circle cx='20' cy='40' r='10' fill='none' stroke='%231d3f73'/><circle cx='20' cy='40' r='5' fill='none' stroke='%231d3f73'/></g></svg>");
+  background-repeat: no-repeat, repeat;
+  background-size: 100% 100%, 40px 40px;
+  background-position: 0 0, center bottom;
+}
+
+.dark[data-theme="kanagawa"] .theme-backdrop:not([data-theme]),
+.dark .theme-backdrop[data-theme="kanagawa"] {
+  background-image: linear-gradient(var(--background), transparent 45%), url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='40' height='40'><g stroke-width='1.2' stroke-opacity='.75'><circle cx='20' cy='0' r='20' fill='%23121110' stroke='%232c4a72'/><circle cx='20' cy='0' r='15' fill='none' stroke='%232c4a72'/><circle cx='20' cy='0' r='10' fill='none' stroke='%232c4a72'/><circle cx='20' cy='0' r='5' fill='none' stroke='%232c4a72'/><circle cx='0' cy='20' r='20' fill='%23121110' stroke='%232c4a72'/><circle cx='0' cy='20' r='15' fill='none' stroke='%232c4a72'/><circle cx='0' cy='20' r='10' fill='none' stroke='%232c4a72'/><circle cx='0' cy='20' r='5' fill='none' stroke='%232c4a72'/><circle cx='40' cy='20' r='20' fill='%23121110' stroke='%232c4a72'/><circle cx='40' cy='20' r='15' fill='none' stroke='%232c4a72'/><circle cx='40' cy='20' r='10' fill='none' stroke='%232c4a72'/><circle cx='40' cy='20' r='5' fill='none' stroke='%232c4a72'/><circle cx='20' cy='40' r='20' fill='%23121110' stroke='%232c4a72'/><circle cx='20' cy='40' r='15' fill='none' stroke='%232c4a72'/><circle cx='20' cy='40' r='10' fill='none' stroke='%232c4a72'/><circle cx='20' cy='40' r='5' fill='none' stroke='%232c4a72'/></g></svg>");
+}
+
+/* The user's own picture (Settings → Appearance) replaces any theme motif behind
+   the page. The sidebar (<aside>) keeps the theme's own look unless the user
+   switches it on (`data-bg-sidebar`). `fixed` pins the picture to the viewport,
+   so page and sidebar read as one picture and nothing shifts on collapse.
+   The veil is the theme's own background laid over it, so text keeps its contrast.
+   Listed last and matching the motif rules' specificity, so it wins over them. */
+[data-bg] .theme-backdrop:not([data-theme], aside),
+.dark[data-bg] .theme-backdrop:not([data-theme], aside),
+[data-bg][data-bg-sidebar] aside.theme-backdrop,
+.dark[data-bg][data-bg-sidebar] aside.theme-backdrop {
+  background-image:
+    linear-gradient(color-mix(in oklab, var(--background) var(--bg-veil, 60%), transparent)),
+    var(--user-bg);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -132,6 +413,16 @@
   }
   html {
     @apply font-sans;
+  }
+
+  /* Every button gives a little under the pointer. In the base layer so a
+     button's own transition utility still wins; `scale` composes with the
+     transforms dnd-kit and Tailwind set. */
+  button:not(:disabled) {
+    transition: scale 120ms ease-out;
+  }
+  button:not(:disabled):active {
+    scale: 0.97;
   }
 }
 
@@ -151,6 +442,34 @@
 
 ::view-transition-new(root) {
   animation: theme-wipe 420ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Shanshui arrives the way a handscroll is read: opened from the right edge. */
+[data-wipe="scroll"]::view-transition-new(root) {
+  animation: scroll-unroll 900ms cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+/* Kanagawa comes in like the tide: from the bottom edge up. */
+[data-wipe="tide"]::view-transition-new(root) {
+  animation: tide-rise 700ms cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+@keyframes tide-rise {
+  from {
+    clip-path: inset(100% 0 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+@keyframes scroll-unroll {
+  from {
+    clip-path: inset(0 0 0 100%);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
 }
 
 @keyframes theme-wipe {

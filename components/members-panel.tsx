@@ -2,7 +2,7 @@
 
 import { startTransition, useActionState, useEffect, useEffectEvent, useRef, useState, useSyncExternalStore, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, ChevronRight, Download, FolderKanban, FolderPlus, KeyRound, Plus, Settings2, Sparkles, Trash2, UserRound, Users, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, FolderKanban, Palette, FolderPlus, KeyRound, Plus, Settings2, Sparkles, Trash2, UserRound, Users, X } from "lucide-react";
 import { OUTGOING_EVENTS } from "@/lib/outgoing-events";
 import { changeMyPassword, fetchAiModels, importIntoProject, rotateGithubWebhook, rotateInboundToken, saveGithub, saveOutgoing, testOutgoing, setProjectKey, saveAiConfig, deleteProject, inviteMember, renameProject, renameWorkspace, setMemberPassword, setProjectMember } from "@/lib/actions";
 import { initials } from "@/lib/board";
@@ -17,6 +17,7 @@ import { Modal } from "./modal";
 import { NewProjectDialog } from "./new-project-dialog";
 import { REASONING_OPTIONS } from "./canvas-agent";
 import { LanguageSelect, useT } from "@/components/i18n";
+import { ThemePicker } from "./theme-toggle";
 
 const ago = (iso: string | null) => {
   if (!iso) return "never signed in";
@@ -36,6 +37,7 @@ const TABS = [
   { id: "members", label: "Members", Icon: Users, adminOnly: false },
   { id: "projects", label: "Projects", Icon: FolderKanban, adminOnly: false },
   { id: "ai", label: "AI agent", Icon: Sparkles, adminOnly: true },
+  { id: "appearance", label: "Appearance", Icon: Palette, adminOnly: false },
   { id: "account", label: "Account", Icon: UserRound, adminOnly: false },
 ] as const;
 type Tab = (typeof TABS)[number]["id"];
@@ -117,6 +119,12 @@ export function MembersPanel({
             <>
               <TabHeader title={tr("AI agent")} hint={tr("Powers the Agent chat on the canvas. The API key is never shown again after saving.")} />
               <AiSettingsForm ai={ai} />
+            </>
+          )}
+          {tab === "appearance" && (
+            <>
+              <TabHeader title={tr("Appearance")} hint={tr("Pick a mode and a theme. The whole workspace follows.")} />
+              <ThemePicker />
             </>
           )}
           {tab === "account" && (
