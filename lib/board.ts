@@ -14,6 +14,10 @@ export type Task = {
   priority: Priority;
   assignees: Member[];
   dueDate: string | null;
+  /** The sprint the card is planned in; null = backlog. */
+  sprintId: string | null;
+  /** When work starts, for the timeline; never after dueDate. */
+  startDate: string | null;
   /** "WEB-42": the project key plus this task's number in the project. */
   key: string | null;
   checklist: CheckItem[];
@@ -208,10 +212,55 @@ export function reorder<T>(ids: T[], from: number, to: number): T[] {
 }
 
 /** `assignee` is a user id, or "me" for whoever is looking (so a shared view works for each person). */
-export type Filters = { q?: string; assignee?: string; priority?: string; label?: string };
+/**
+ * `group` splits the board into swimlanes (see lanesOf); the rest narrow the cards.
+ * `sprint`: a sprint id, "current" (resolved by the caller, so a saved view follows
+ * the sprints) or "none" for the backlog.
+ */
+export type Filters = { q?: string; assignee?: string; priority?: string; label?: string; group?: Group; sprint?: string };
 
-/** Layouts a saved view can open in; the first three of the workspace's view tabs. */
-export const LAYOUTS = ["board", "list", "calendar"] as const;
+/** `total`/`done` count the sprint's unarchived cards and those in the done column. */
+export type Sprint = { id: string; name: string; startDate: string; endDate: string; closed: boolean; total: number; done: number };
+
+/** The open sprint running on `today`, else the earliest open one. */
+export const currentSprint = (sprints: Sprint[], today: string) =>
+  sprints.find((s) => !s.closed && s.startDate <= today && today <= s.endDate) ?? sprints.find((s) => !s.closed);
+
+export const GROUPS = ["assignee", "label", "priority"] as const;
+export type Group = (typeof GROUPS)[number];
+export type Lane = { key: string; name: string; columns: Column[] };
+
+/**
+ * Swimlanes: the board once per assignee, label or priority, each with every
+ * column. A card with two assignees or labels shows in both lanes; key "" holds
+ * the cards with none (never for priority). People and labels sort by name,
+ * priorities high first.
+ */
+export function lanesOf(columns: Column[], group: Group): Lane[] {
+  const keysOf = (t: Task) =>
+    group === "assignee" ? t.assignees.map((a) => ({ key: a.id, name: a.name }))
+    : group === "label" ? labelsOf(t.label).map((l) => ({ key: l, name: l }))
+    : [{ key: t.priority, name: PRIORITY_CFG[t.priority].label }];
+  const names = new Map<string, string>();
+  let none = false;
+  for (const t of columns.flatMap((c) => c.tasks)) {
+    const keys = keysOf(t);
+    if (!keys.length) none = true;
+    for (const k of keys) names.set(k.key, k.name);
+  }
+  const keys = group === "priority"
+    ? [...PRIORITIES].reverse().filter((p) => names.has(p))
+    : [...names.keys()].sort((a, b) => names.get(a)!.localeCompare(names.get(b)!));
+  if (none) keys.push("");
+  return keys.map((key) => ({
+    key,
+    name: names.get(key) ?? "",
+    columns: columns.map((c) => ({ ...c, tasks: c.tasks.filter((t) => key ? keysOf(t).some((k) => k.key === key) : !keysOf(t).length) })),
+  }));
+}
+
+/** Layouts a saved view can open in; the first four of the workspace's view tabs, in order. */
+export const LAYOUTS = ["board", "list", "calendar", "timeline"] as const;
 export type Layout = (typeof LAYOUTS)[number];
 export type SavedView = { id: string; name: string; filters: Filters; layout: Layout };
 
@@ -219,11 +268,13 @@ export type SavedView = { id: string; name: string; filters: Filters; layout: La
 export function cleanFilters(raw: unknown): Filters {
   const out: Filters = {};
   if (!raw || typeof raw !== "object") return out;
-  for (const key of ["q", "assignee", "priority", "label"] as const) {
+  for (const key of ["q", "assignee", "priority", "label", "sprint"] as const) {
     const v = (raw as Record<string, unknown>)[key];
     if (typeof v === "string" && v.trim() && v.length <= 100) out[key] = v.trim();
   }
   if (out.priority && !PRIORITIES.includes(out.priority as Priority)) delete out.priority;
+  const group = (raw as Record<string, unknown>).group;
+  if (GROUPS.includes(group as Group)) out.group = group as Group;
   return out;
 }
 
@@ -232,7 +283,9 @@ export const sameFilters = (a: Filters, b: Filters) =>
   JSON.stringify(Object.entries(cleanFilters(a)).sort()) === JSON.stringify(Object.entries(cleanFilters(b)).sort());
 
 /** Filtering runs client-side over the already-loaded board. `me` resolves the "me" assignee. */
-export function applyFilters(columns: Column[], f: Filters, me?: string): Column[] {
+export function applyFilters(columns: Column[], f: Filters, me?: string, current?: string): Column[] {
+  // "current" with no open sprint shows nothing rather than everything.
+  const sprint = f.sprint === "current" ? current ?? "-" : f.sprint;
   const q = f.q?.toLowerCase().trim();
   const assignee = f.assignee === "me" ? me : f.assignee;
   return columns.map((c) => ({
@@ -242,7 +295,8 @@ export function applyFilters(columns: Column[], f: Filters, me?: string): Column
         (!q || t.title.toLowerCase().includes(q) || (t.label ?? "").toLowerCase().includes(q)) &&
         (!assignee || t.assignees.some((a) => a.id === assignee)) &&
         (!f.priority || t.priority === f.priority) &&
-        (!f.label || labelsOf(t.label).includes(f.label)),
+        (!f.label || labelsOf(t.label).includes(f.label)) &&
+        (!sprint || (sprint === "none" ? !t.sprintId : t.sprintId === sprint)),
     ),
   }));
 }
@@ -274,4 +328,29 @@ export function ciOf(runs: { status: string; conclusion: string | null }[]): CiS
   if (runs.some((r) => ["failure", "timed_out", "cancelled", "action_required", "startup_failure"].includes(r.conclusion ?? ""))) return "failure";
   if (runs.some((r) => r.status !== "completed")) return "pending";
   return "success";
+}
+
+/** Days since the epoch for a YYYY-MM-DD date (UTC, so no time zone shifts a bar); NaN if malformed. */
+export const dayNumber = (d: string) =>
+  /^\d{4}-\d{2}-\d{2}$/.test(d) ? Date.UTC(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10)) / 86_400_000 : NaN;
+export const dateOfDay = (n: number) => new Date(n * 86_400_000).toISOString().slice(0, 10);
+
+export type TimelineRow = { task: Task; start: number; end: number };
+/**
+ * The timeline's rows: every card with a start or due date, as a span of day
+ * numbers (one date alone is a one-day bar), earliest first. The range runs from
+ * three days before the first bar (or today) to a week after the last.
+ */
+export function timelineOf(tasks: Task[], today: string) {
+  const rows: TimelineRow[] = tasks
+    .flatMap((task) => {
+      const start = dayNumber(task.startDate ?? task.dueDate ?? "");
+      const end = dayNumber(task.dueDate ?? task.startDate ?? "");
+      return Number.isFinite(start) && Number.isFinite(end) ? [{ task, start, end: Math.max(start, end) }] : [];
+    })
+    .sort((a, b) => a.start - b.start || a.end - b.end);
+  const now = dayNumber(today);
+  const from = Math.min(now, ...rows.map((r) => r.start)) - 3;
+  const to = Math.max(now, ...rows.map((r) => r.end)) + 7;
+  return { from, days: to - from + 1, today: now, rows, undated: tasks.length - rows.length };
 }

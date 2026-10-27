@@ -1,6 +1,6 @@
 import "server-only";
 import { all, get, run } from "./db";
-import type { Blocker, CheckItem, Column, CustomField, Entry, Member, Priority, Repeat, SavedView, Task, TaskImage } from "./board";
+import type { Blocker, CheckItem, Column, CustomField, Entry, Member, Priority, Repeat, SavedView, Sprint, Task, TaskImage } from "./board";
 import { day, stamp } from "./format";
 import type { Meeting } from "./meetings";
 
@@ -12,6 +12,8 @@ type TaskRow = {
   label: string | null;
   priority: Priority;
   due_date: string | null;
+  start_date: string | null;
+  sprint_id: string | null;
   task_key: string | null;
   assignees: Member[];
   checklist: CheckItem[];
@@ -35,6 +37,8 @@ const toTask = (r: TaskRow): Task => ({
   label: r.label,
   priority: r.priority,
   dueDate: r.due_date,
+  startDate: r.start_date,
+  sprintId: r.sprint_id,
   key: r.task_key,
   assignees: r.assignees,
   checklist: r.checklist,
@@ -54,7 +58,7 @@ const toTask = (r: TaskRow): Task => ({
 export const DONE_COLUMN = `COALESCE(p.done_column_id, (SELECT dc.id FROM columns dc WHERE dc.project_id = p.id ORDER BY dc.position DESC LIMIT 1))`;
 
 /** Card columns shared by the board and My Tasks; `t`, `p` are tasks and projects. */
-const TASK_COLS = `t.id, t.column_id, t.title, t.description, t.label, t.priority, t.due_date, t.checklist, t.repeat, t.fields,
+const TASK_COLS = `t.id, t.column_id, t.title, t.description, t.label, t.priority, t.due_date, t.start_date, t.sprint_id, t.checklist, t.repeat, t.fields,
             COALESCE(t.column_since, t.created_at) AS column_since,
             (SELECT COALESCE(SUM(EXTRACT(EPOCH FROM COALESCE(te.ended_at, now()::text)::timestamptz - te.started_at::timestamptz)), 0)::int
                FROM time_entries te WHERE te.task_id = t.id) AS tracked,
@@ -248,6 +252,18 @@ export async function analytics(projectId: string) {
 /** The project's custom fields, in order. */
 export const listFields = (projectId: string) =>
   all<CustomField>("SELECT id, name, type, options FROM custom_fields WHERE project_id = ? ORDER BY position, id", projectId);
+
+/** The project's sprints: open ones first, each by start date. */
+export const listSprints = (projectId: string) =>
+  all<Sprint>(
+    `SELECT s.id, s.name, s.start_date AS "startDate", s.end_date AS "endDate", s.closed_at IS NOT NULL AS closed,
+            (SELECT COUNT(*)::int FROM tasks t WHERE t.sprint_id = s.id AND t.archived_at IS NULL) AS total,
+            (SELECT COUNT(*)::int FROM tasks t WHERE t.sprint_id = s.id AND t.archived_at IS NULL AND t.column_id = ${DONE_COLUMN}) AS done
+       FROM sprints s JOIN projects p ON p.id = s.project_id
+      WHERE s.project_id = ?
+      ORDER BY s.closed_at IS NOT NULL, s.start_date, s.created_at`,
+    projectId,
+  );
 
 /** The project's saved views, oldest first. */
 export const listViews = (projectId: string) =>

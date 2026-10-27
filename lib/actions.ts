@@ -123,9 +123,16 @@ async function seedProject(projectId: string, templateId: unknown, titles: strin
       id, projectId, title, template.columns.find((c) => c.title === title)?.color ?? "var(--muted-foreground)", i,
     );
   }
+  // The Tech template is a sprint board: it starts with a two-week sprint.
+  const sprintId = template.id === "tech" ? randomUUID() : null;
+  if (sprintId) {
+    const day = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
+    await run("INSERT INTO sprints (id, project_id, name, start_date, end_date, created_at) VALUES (?,?,?,?,?,?)", sprintId, projectId, "Sprint 1", day(0), day(13), now());
+  }
   if (!examples) return;
 
   const { tasks, canvas } = (examplesData as TemplateExamples)[template.id];
+  const firstColumn = columnIds.values().next().value;
   const positions = new Map<string, number>();
   for (const t of tasks) {
     const columnId = columnIds.get(t.column);
@@ -135,9 +142,10 @@ async function seedProject(projectId: string, templateId: unknown, titles: strin
     const due = t.dueInDays === undefined ? null : new Date(Date.now() + t.dueInDays * 86_400_000).toLocaleDateString("en-CA");
     const id = randomUUID();
     await run(
-      `INSERT INTO tasks (id, column_id, title, description, label, priority, assignee_id, due_date, position, number, created_at)
-       VALUES (?,?,?,?,?,?,NULL,?,?,?,?)`,
+      `INSERT INTO tasks (id, column_id, title, description, label, priority, assignee_id, due_date, position, number, created_at, sprint_id)
+       VALUES (?,?,?,?,?,?,NULL,?,?,?,?,?)`,
       id, columnId, t.title, t.description ?? null, t.label, t.priority, due, position, await nextTaskNumber(projectId), now(),
+      columnId === firstColumn ? null : sprintId, // backlog cards wait outside the sprint
     );
     await logEvent(id, actorId, "Task created");
   }
@@ -290,9 +298,21 @@ const taskFieldsOf = (form: FormData) => ({
   description: String(form.get("description") ?? "").trim() || null,
   label: joinLabels(String(form.get("label") ?? "")),
   dueDate: String(form.get("dueDate") ?? "").trim() || null,
+  startDate: String(form.get("startDate") ?? "").trim() || null,
+  sprintId: String(form.get("sprintId") ?? "").trim() || null,
   assignees: [...new Set(form.getAll("assigneeIds").map(String).filter(Boolean))],
   repeat: String(form.get("repeat") ?? "").trim() || null,
 });
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+/** An error for dates the timeline can't draw: not YYYY-MM-DD, or a start after the due date. */
+const badDates = (start: string | null, due: string | null) =>
+  (start && !DATE_RE.test(start)) || (due && !DATE_RE.test(due)) ? "Dates must be YYYY-MM-DD."
+  : start && due && start > due ? "The start date must be on or before the due date." : null;
+
+/** The sprint's name when it is an open sprint of `projectId`; undefined otherwise. */
+const openSprintName = async (projectId: string, sprintId: string) =>
+  (await get<{ name: string }>("SELECT name FROM sprints WHERE id = ? AND project_id = ? AND closed_at IS NULL", sprintId, projectId))?.name;
 
 async function setAssignees(taskId: string, userIds: string[]) {
   await run("DELETE FROM task_assignees WHERE task_id = ?", taskId);
@@ -319,9 +339,10 @@ export async function createTask(_prev: unknown, form: FormData) {
   if (!await writableColumn(user, columnId)) return { error: "You cannot edit this project." };
 
   const priority = String(form.get("priority") ?? "medium") as Priority;
-  const { description, label, dueDate, assignees, repeat } = taskFieldsOf(form);
-  const invalid = await invalidTaskFields(user, priority, assignees, repeat);
+  const { description, label, dueDate, startDate, sprintId, assignees, repeat } = taskFieldsOf(form);
+  const invalid = badDates(startDate, dueDate) ?? await invalidTaskFields(user, priority, assignees, repeat);
   if (invalid) return { error: invalid };
+  if (sprintId && !await openSprintName((await projectOfColumn(columnId))!, sprintId)) return { error: "Pick an open sprint of this project." };
   const read = fieldValuesOf((k) => form.get(k), await fieldsOfColumn(columnId));
   if ("error" in read) return { error: read.error };
   const fields = read.values;
@@ -331,9 +352,9 @@ export async function createTask(_prev: unknown, form: FormData) {
     const { project_id } = (await get<{ project_id: string }>("SELECT project_id FROM columns WHERE id = ?", columnId))!;
     const next = ((await get<{ n: number }>("SELECT COALESCE(MAX(position) + 1, 0) n FROM tasks WHERE column_id = ?", columnId)))!.n;
     await run(
-      `INSERT INTO tasks (id, column_id, title, description, label, priority, due_date, repeat, position, number, created_at, fields)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
-      id, columnId, title, description, label, priority, dueDate, repeat, next, await nextTaskNumber(project_id), now(), JSON.stringify(fields),
+      `INSERT INTO tasks (id, column_id, title, description, label, priority, due_date, start_date, sprint_id, repeat, position, number, created_at, fields)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      id, columnId, title, description, label, priority, dueDate, startDate, sprintId, repeat, next, await nextTaskNumber(project_id), now(), JSON.stringify(fields),
     );
     await setAssignees(id, assignees);
     await logEvent(id, user.id, "Task created");
@@ -409,8 +430,8 @@ export async function updateTask(_prev: unknown, form: FormData) {
   const user = await requireUser();
   const id = String(form.get("id") ?? "");
   const before = await get<{ column_id: string; title: string; description: string | null; label: string | null; priority: string;
-    due_date: string | null; repeat: string | null; assignees: string[]; fields: Record<string, string> }>(
-    `SELECT column_id, title, description, label, priority, due_date, repeat, fields,
+    due_date: string | null; start_date: string | null; sprint_id: string | null; repeat: string | null; assignees: string[]; fields: Record<string, string> }>(
+    `SELECT column_id, title, description, label, priority, due_date, start_date, sprint_id, repeat, fields,
             ARRAY(SELECT user_id FROM task_assignees WHERE task_id = t.id) AS assignees
        FROM tasks t WHERE id = ?`,
     id,
@@ -420,9 +441,12 @@ export async function updateTask(_prev: unknown, form: FormData) {
   const title = String(form.get("title") ?? "").trim();
   if (!title) return { error: "Title is required." };
   const priority = String(form.get("priority") ?? before.priority);
-  const { description, label, dueDate, assignees, repeat } = taskFieldsOf(form);
-  const invalid = await invalidTaskFields(user, priority, assignees, repeat);
+  const { description, label, dueDate, startDate, sprintId, assignees, repeat } = taskFieldsOf(form);
+  const invalid = badDates(startDate, dueDate) ?? await invalidTaskFields(user, priority, assignees, repeat);
   if (invalid) return { error: invalid };
+  // A card may stay in its (now closed) sprint; joining one needs it open.
+  const sprintName = sprintId && sprintId !== before.sprint_id ? await openSprintName((await projectOfColumn(before.column_id))!, sprintId) : null;
+  if (sprintId && sprintId !== before.sprint_id && !sprintName) return { error: "Pick an open sprint of this project." };
   const read = fieldValuesOf((k) => form.get(k), await fieldsOfColumn(before.column_id));
   if ("error" in read) return { error: read.error };
   const fields = read.values;
@@ -430,8 +454,8 @@ export async function updateTask(_prev: unknown, form: FormData) {
   const assigneesChanged = [...assignees].sort().join() !== [...before.assignees].sort().join();
   await transaction(async () => {
     await run(
-      "UPDATE tasks SET title = ?, description = ?, label = ?, priority = ?, due_date = ?, repeat = ?, fields = ? WHERE id = ?",
-      title, description, label, priority, dueDate, repeat, JSON.stringify(fields), id,
+      "UPDATE tasks SET title = ?, description = ?, label = ?, priority = ?, due_date = ?, start_date = ?, sprint_id = ?, repeat = ?, fields = ? WHERE id = ?",
+      title, description, label, priority, dueDate, startDate, sprintId, repeat, JSON.stringify(fields), id,
     );
     if (assigneesChanged) await setAssignees(id, assignees);
   });
@@ -444,6 +468,8 @@ export async function updateTask(_prev: unknown, form: FormData) {
     const names = (await all<{ name: string }>("SELECT name FROM users WHERE id = ANY(?::text[]) ORDER BY name", assignees)).map((u) => u.name);
     changes.push(names.length ? `Assigned to ${names.join(", ")}` : "Assignees cleared");
   }
+  if (before.sprint_id !== sprintId) changes.push(sprintId ? `Added to ${sprintName}` : "Moved to the backlog");
+  if (before.start_date !== startDate) changes.push(startDate ? `Start date set to ${startDate}` : "Start date cleared");
   if (before.due_date !== dueDate) changes.push(dueDate ? `Due date set to ${dueDate}` : "Due date cleared");
   if (before.repeat !== repeat) changes.push(repeat ? `Repeats ${repeat}` : "Repeat turned off");
   if (JSON.stringify(Object.entries(before.fields).sort()) !== JSON.stringify(Object.entries(fields).sort())) changes.push("Custom fields updated");
@@ -1369,4 +1395,56 @@ export async function fetchAiModels(provider: string, baseUrl: string, apiKey: s
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Could not load models." };
   }
+}
+
+// ── Sprints ─────────────────────────────────────────────────────────────────
+
+/** Creates a sprint, or renames/redates it when `id` is given. Editors plan sprints. */
+export async function saveSprint(projectId: string, name: string, startDate: string, endDate: string, id?: string) {
+  const user = await requireUser();
+  if (!await canEdit(user, projectId)) return { error: "You cannot edit this project." };
+  const clean = name.trim().slice(0, 100);
+  if (!clean) return { error: "Name the sprint." };
+  const bad = !DATE_RE.test(startDate) || !DATE_RE.test(endDate) ? "Dates must be YYYY-MM-DD."
+    : startDate > endDate ? "The sprint must end on or after its start." : null;
+  if (bad) return { error: bad };
+  if (id) await run("UPDATE sprints SET name = ?, start_date = ?, end_date = ? WHERE id = ? AND project_id = ?", clean, startDate, endDate, id, projectId);
+  else await run("INSERT INTO sprints (id, project_id, name, start_date, end_date, created_at) VALUES (?,?,?,?,?,?)", randomUUID(), projectId, clean, startDate, endDate, now());
+  changed(user);
+  return { ok: true };
+}
+
+/**
+ * Closes a sprint. Its unfinished cards (not in the done column) move to
+ * `moveTo`, another open sprint of the project, or to the backlog when null;
+ * finished cards keep the sprint as their record.
+ */
+export async function completeSprint(id: string, moveTo: string | null) {
+  const user = await requireUser();
+  const sprint = await get<{ project_id: string; name: string }>("SELECT project_id, name FROM sprints WHERE id = ? AND closed_at IS NULL", id);
+  if (!sprint || !await canEdit(user, sprint.project_id)) return { error: "Nothing to complete." };
+  const target = moveTo && moveTo !== id ? await openSprintName(sprint.project_id, moveTo) : null;
+  if (moveTo && !target) return { error: "Pick an open sprint of this project." };
+  await transaction(async () => {
+    const open = await all<{ id: string }>(
+      `UPDATE tasks t SET sprint_id = ? FROM columns c JOIN projects p ON p.id = c.project_id
+        WHERE c.id = t.column_id AND t.sprint_id = ? AND t.archived_at IS NULL AND t.column_id <> ${DONE_COLUMN}
+        RETURNING t.id`,
+      target ? moveTo : null, id,
+    );
+    for (const t of open) await logEvent(t.id, user.id, target ? `Carried over from ${sprint.name} to ${target}` : `Moved to the backlog when ${sprint.name} ended`);
+    await run("UPDATE sprints SET closed_at = ? WHERE id = ?", now(), id);
+  });
+  changed(user);
+  return { ok: true };
+}
+
+/** Deletes a sprint; its cards go back to the backlog (ON DELETE SET NULL). */
+export async function deleteSprint(id: string) {
+  const user = await requireUser();
+  const sprint = await get<{ project_id: string }>("SELECT project_id FROM sprints WHERE id = ?", id);
+  if (!sprint || !await canEdit(user, sprint.project_id)) return { error: "You cannot edit this project." };
+  await run("DELETE FROM sprints WHERE id = ?", id);
+  changed(user);
+  return { ok: true };
 }

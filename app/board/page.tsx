@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { currentUser } from "@/lib/auth";
-import { activityFeed, activityNotifications, analytics, getBoard, listCanvases, listCanvasTags, listMembers, listFields, listMembersWithPresence, listMeetings, listProjects, listViews, myTasks, projectMembers, unreadCounts, workspaceName } from "@/lib/queries";
+import { activityFeed, activityNotifications, analytics, getBoard, listCanvases, listCanvasTags, listMembers, listFields, listMembersWithPresence, listMeetings, listProjects, listSprints, listViews, myTasks, projectMembers, unreadCounts, workspaceName } from "@/lib/queries";
 import { Workspace } from "@/components/workspace";
 import { aiConfig, aiSettings } from "@/lib/ai";
 
@@ -16,7 +16,7 @@ export default async function BoardPage({ searchParams }: PageProps<"/board">) {
   ]);
   const project = projects.find((p) => p.id === wanted) ?? projects[0] ?? null;
   // Independent reads, so they share the pool instead of queuing one after another.
-  const [workspace, ai, columns, members, assignments, presence, feed, notifications, unread, mine, meetings, stats, sheets, views, fields, tags] =
+  const [workspace, ai, columns, members, assignments, presence, feed, notifications, unread, mine, meetings, stats, sheets, views, fields, tags, sprints] =
     await Promise.all([
       workspaceName(ws),
       aiConfig(ws),
@@ -34,6 +34,7 @@ export default async function BoardPage({ searchParams }: PageProps<"/board">) {
       project ? listViews(project.id) : [],
       project ? listFields(project.id) : [],
       listCanvasTags(projects.map((p) => p.id)),
+      project ? listSprints(project.id) : [],
     ]);
 
   return (
@@ -55,6 +56,7 @@ export default async function BoardPage({ searchParams }: PageProps<"/board">) {
       sheets={sheets}
       views={views}
       fields={fields}
+      sprints={sprints}
       tags={tags}
       focus={typeof sheet === "string" && typeof tag === "string" ? { sheetId: sheet, tag } : null}
       openTask={typeof task === "string" ? task : null}

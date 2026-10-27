@@ -1,10 +1,10 @@
 "use client";
 
-import { useActionState, useCallback, useEffect, useRef, useState } from "react";
+import { startTransition, useActionState, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlignLeft, Archive, CalendarDays, Check, CircleDot, Clock, Flag, Hash, List as ListIcon, Plus, Settings2, Type, GitBranch, GitPullRequest, History, Image as ImageIcon, ImagePlus, ListChecks, ListTree, Ban, Pause, Play, Repeat, Sparkles, Tag, Trash2, Users, X, type LucideIcon } from "lucide-react";
 import { addComment, addField, addSubtask, archiveTask, askCardAgent, createGithubIssue, createTask, deleteField, deleteTask, fetchHistory, fetchTime, logTime, setBlocker, setChecklist, startTimer, stopTimer, updateTask } from "@/lib/actions";
-import { branchNameOf, FIELD_TYPES, formatDuration, initials, pullRequestUrlOf, PRIORITIES, PRIORITY_CFG, REPEATS, type CheckItem, type Column, type CustomField, type Entry, type FieldType, type Member, type Task, type TaskImage } from "@/lib/board";
+import { branchNameOf, FIELD_TYPES, formatDuration, initials, pullRequestUrlOf, PRIORITIES, PRIORITY_CFG, REPEATS, type CheckItem, type Column, type CustomField, type Entry, type Sprint, type FieldType, type Member, type Task, type TaskImage } from "@/lib/board";
 import { Avatar } from "./avatar";
 import { imageUrl } from "./task-card";
 import type { TaskLinks } from "@/lib/github";
@@ -34,6 +34,9 @@ type Props = {
   doneColumnId: string | null;
   /** The project's custom fields. */
   fields: CustomField[];
+  sprints: Sprint[];
+  /** A new card's sprint: the one the board is narrowed to. */
+  defaultSprintId: string | null;
   /** The project id when the viewer may add/remove custom fields, else null. */
   manageFields: string | null;
   /** A card in the Dependencies list was clicked. */
@@ -43,10 +46,10 @@ type Props = {
   onDeleted: (undo: string, name: string) => void;
 };
 
-export function TaskDialog({ task, columns, members, mentionable, defaultColumnId, links, repo, tags, onTag, doneColumnId, fields, manageFields, onOpenTask, onClose, onDeleted }: Props) {
+export function TaskDialog({ task, columns, members, mentionable, defaultColumnId, links, repo, tags, onTag, doneColumnId, fields, manageFields, sprints, defaultSprintId, onOpenTask, onClose, onDeleted }: Props) {
   const tr = useT();
   const editing = task !== null;
-  const [state, action] = useActionState(editing ? updateTask : createTask, null);
+  const [state, action, saving] = useActionState(editing ? updateTask : createTask, null);
   const [history, setHistory] = useState<Entry[]>([]);
   const [copied, setCopied] = useState(false);
   const linked = links ? links.pulls.length + links.issues.length + links.branches.length + links.commits.length : 0;
@@ -110,7 +113,16 @@ export function TaskDialog({ task, columns, members, mentionable, defaultColumnI
 
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto md:flex-row md:overflow-hidden">
           <div className="px-5 pb-6 pt-5 md:min-w-0 md:flex-1 md:overflow-y-auto md:px-8">
-            <form action={action} className="flex flex-col gap-5 pb-6">
+            {/* Submitted from onSubmit, not `action`: React resets a form after its action runs,
+                which wiped everything typed whenever the server answered with an error. */}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const data = new FormData(e.currentTarget);
+                startTransition(() => action(data));
+              }}
+              className="flex flex-col gap-5 pb-6"
+            >
               {editing && <input type="hidden" name="id" value={task.id} />}
               <textarea
                 name="title"
@@ -141,8 +153,18 @@ export function TaskDialog({ task, columns, members, mentionable, defaultColumnI
                     ))}
                   </select>
                 </Prop>
+                <Prop icon={CalendarDays} label={tr("Start date")}>
+                  <input type="date" name="startDate" defaultValue={task?.startDate ?? ""} className={bare} />
+                </Prop>
                 <Prop icon={CalendarDays} label={tr("Due date")}>
                   <input type="date" name="dueDate" defaultValue={task?.dueDate ?? ""} className={bare} />
+                </Prop>
+                <Prop icon={Flag} label={tr("Sprint")}>
+                  <select name="sprintId" defaultValue={task ? task.sprintId ?? "" : defaultSprintId ?? ""} className={bare}>
+                    <option value="">{tr("No sprint")}</option>
+                    {/* Open sprints, plus the closed one a card may still sit in. */}
+                    {sprints.filter((s) => !s.closed || s.id === task?.sprintId).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
                 </Prop>
                 <Prop icon={Repeat} label={tr("Repeat")} title={tr("Repeating cards get their next copy when moved to the done column.")}>
                   <select name="repeat" defaultValue={task?.repeat ?? ""} className={bare}>
@@ -210,7 +232,7 @@ export function TaskDialog({ task, columns, members, mentionable, defaultColumnI
               <FormError error={state?.error} />
 
               <div className="flex items-center gap-2">
-                <SubmitButton>{editing ? tr("Save") : tr("Create task")}</SubmitButton>
+                <SubmitButton pending={saving}>{editing ? tr("Save") : tr("Create task")}</SubmitButton>
                 {editing && (
                   <button
                     type="button"

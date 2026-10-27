@@ -425,3 +425,22 @@ CREATE TABLE IF NOT EXISTS trash (
 -- (lib/actions.ts addSubtask). Deleting the parent leaves its subtasks as cards.
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS parent_id TEXT REFERENCES tasks(id) ON DELETE SET NULL;
 CREATE INDEX IF NOT EXISTS tasks_parent ON tasks(parent_id) WHERE parent_id IS NOT NULL;
+
+-- Optional start of a card's work, YYYY-MM-DD like due_date; the timeline view
+-- draws a bar from start_date to due_date. Never after due_date (lib/actions.ts).
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS start_date TEXT;
+
+-- Sprints (cycles): a dated batch of a project's cards. Completing one moves its
+-- unfinished cards to another sprint or the backlog (lib/actions.ts completeSprint).
+CREATE TABLE IF NOT EXISTS sprints (
+  id         TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  name       TEXT NOT NULL,
+  start_date TEXT NOT NULL,
+  end_date   TEXT NOT NULL,
+  closed_at  TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS sprints_project ON sprints(project_id, start_date);
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS sprint_id TEXT REFERENCES sprints(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS tasks_sprint ON tasks(sprint_id) WHERE sprint_id IS NOT NULL;

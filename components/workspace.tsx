@@ -4,10 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  Archive, BarChart3, Bell, Calendar, CalendarClock, Check, CheckSquare, Filter, Home, Inbox,
+  Archive, BarChart3, ChartGantt, Flag as SprintIcon, Bell, Calendar, CalendarClock, Check, CheckSquare, Filter, Home, Inbox,
   GitPullRequest, LayoutGrid, List, LogOut, Menu, MessageSquare, PenLine, Plus, Search, Settings, Sparkles, X,
 } from "lucide-react";
-import { applyFilters, initials, labelsOf, LAYOUTS, type Column, type CustomField, type Filters, type Member, type SavedView, type Task } from "@/lib/board";
+import { applyFilters, currentSprint, GROUPS, initials, labelsOf, LAYOUTS, type Sprint, type Column, type CustomField, type Filters, type Member, type SavedView, type Task } from "@/lib/board";
 import { SavedViews } from "./saved-views";
 import { archiveTask, fetchArchived, logoutAction, renameProject, renameWorkspace, restoreDeleted } from "@/lib/actions";
 import { Modal } from "./modal";
@@ -20,6 +20,9 @@ import { ThemeToggle } from "./theme-toggle";
 import { TaskDialog } from "./task-dialog";
 import { HomeView } from "./views/home-view";
 import { BoardView } from "./views/board-view";
+import { Swimlanes } from "./views/swimlanes";
+import { TimelineView } from "./views/timeline-view";
+import { SprintsDialog } from "./sprints-dialog";
 import { ListView } from "./views/list-view";
 import { CalendarView } from "./views/calendar-view";
 import { CanvasView } from "./views/canvas-view";
@@ -41,8 +44,10 @@ const VIEWS = [
   { Icon: LayoutGrid, label: "Board" },
   { Icon: List, label: "List" },
   { Icon: Calendar, label: "Calendar" },
+  { Icon: ChartGantt, label: "Timeline" },
   { Icon: BarChart3, label: "Analytics" },
 ];
+const GROUP_LABEL = { assignee: "Lanes by assignee", label: "Lanes by label", priority: "Lanes by priority" } as const;
 /** Only offered when the project is linked to a repo (Settings → Projects). */
 const GITHUB_VIEW = { Icon: GitPullRequest, label: "GitHub" };
 
@@ -90,7 +95,7 @@ async function dropPush() {
 }
 
 export function Workspace({
-  user, workspace, projects, project, columns, members, assignments, presence, feed, notifications: initialNotifications, unread: initialUnread, mine, meetings: initialMeetings, stats, sheets, views, fields, tags: allTags, focus, openTask, today, dark, aiEnabled, ai,
+  user, workspace, projects, project, columns, members, assignments, presence, feed, notifications: initialNotifications, unread: initialUnread, mine, meetings: initialMeetings, stats, sheets, views, fields, sprints, tags: allTags, focus, openTask, today, dark, aiEnabled, ai,
 }: {
   user: User;
   workspace: string;
@@ -107,6 +112,7 @@ export function Workspace({
   stats: Stats | null;
   sheets: CanvasMeta[];
   views: SavedView[];
+  sprints: Sprint[];
   fields: CustomField[];
   tags: CanvasTag[];
   /** From `?sheet=&tag=`: an @tag clicked in another project lands here. */
@@ -134,6 +140,7 @@ export function Workspace({
   const [editing, setEditing] = useState<Task | null>(null);
   const [creating, setCreating] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
+  const [showSprints, setShowSprints] = useState(false);
   const [notifications, setNotifications] = useState(initialNotifications);
   const [showNotifications, setShowNotifications] = useState(false);
   const [chatChannel, setChatChannel] = useState("all");
@@ -183,7 +190,10 @@ export function Workspace({
   const audio = useRef<AudioContext | null>(null);
   const alertTimer = useRef<number | undefined>(undefined);
 
-  const filtered = useMemo(() => applyFilters(columns, filters, user.id), [columns, filters, user.id]);
+  const current = currentSprint(sprints, today);
+  const filtered = useMemo(() => applyFilters(columns, filters, user.id, current?.id), [columns, filters, user.id, current?.id]);
+  // The sprint the board is narrowed to, for its progress line and as new cards' default.
+  const sprint = filters.sprint === "current" ? current : sprints.find((s) => s.id === filters.sprint);
   const readOnly = !!project && user.is_admin !== 1 && assignments.find((item) => item.user_id === user.id && item.project_id === project.id)?.role === "viewer";
   // Project admins (and workspace admins) define custom fields.
   const manages = !!project && (user.is_admin === 1 || assignments.some((a) => a.user_id === user.id && a.project_id === project.id && a.role === "admin"));
@@ -664,6 +674,19 @@ export function Workspace({
               readOnly={readOnly}
               onApply={(v) => { setFilters(v.filters); setView(LAYOUTS.indexOf(v.layout)); }}
             />
+            {view === 0 && (
+              <select
+                value={filters.group ?? ""}
+                onChange={(e) => setFilters((f) => ({ ...f, group: (e.target.value || undefined) as Filters["group"] }))}
+                aria-label={tr("Swimlanes")}
+                className="rounded-md border bg-background px-2 py-1"
+              >
+                <option value="">{tr("No swimlanes")}</option>
+                {GROUPS.map((g) => (
+                  <option key={g} value={g}>{tr(GROUP_LABEL[g])}</option>
+                ))}
+              </select>
+            )}
             <select
               value={filters.assignee ?? ""}
               onChange={(e) => setFilters((f) => ({ ...f, assignee: e.target.value || undefined }))}
@@ -703,6 +726,34 @@ export function Workspace({
             >
               <X className="size-3" />
               {tr("Reset")}
+            </button>
+            <select
+              value={filters.sprint ?? ""}
+              onChange={(e) => setFilters((f) => ({ ...f, sprint: e.target.value || undefined }))}
+              aria-label={tr("Sprint")}
+              className="rounded-md border bg-background px-2 py-1"
+            >
+              <option value="">{tr("All sprints")}</option>
+              <option value="current">{tr("Current sprint")}{current ? ` (${current.name})` : ""}</option>
+              {sprints.filter((s) => !s.closed).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              <option value="none">{tr("Backlog (no sprint)")}</option>
+              {sprints.some((s) => s.closed) && (
+                <optgroup label={tr("Completed sprints")}>
+                  {sprints.filter((s) => s.closed).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </optgroup>
+              )}
+            </select>
+            {sprint && (
+              <span className="text-muted-foreground">
+                {tr("{done}/{total} done", { done: sprint.done, total: sprint.total })} · {sprint.startDate} → {sprint.endDate}
+              </span>
+            )}
+            <button
+              onClick={() => setShowSprints(true)}
+              className="flex items-center gap-1 rounded-md border px-2 py-1 text-muted-foreground transition-colors hover:bg-secondary"
+            >
+              <SprintIcon className="size-3" />
+              {tr("Sprints")}
             </button>
             <button
               onClick={() => setShowArchived(true)}
@@ -758,11 +809,17 @@ export function Workspace({
         ) : view === VIEWS.length && project.repo ? (
           <GithubView key={project.id} projectId={project.id} repo={project.repo} />
         ) : view === 0 ? (
-          <BoardView columns={filtered} fields={fields} projectId={project.id} doneColumnId={project.doneColumnId} today={today} links={links} onOpen={setEditing} onAdd={setCreating} onDeleted={deleted} />
+          filters.group ? (
+            <Swimlanes group={filters.group} columns={filtered} fields={fields} projectId={project.id} doneColumnId={project.doneColumnId} today={today} links={links} onOpen={setEditing} onAdd={setCreating} onDeleted={deleted} />
+          ) : (
+            <BoardView columns={filtered} fields={fields} projectId={project.id} doneColumnId={project.doneColumnId} today={today} links={links} onOpen={setEditing} onAdd={setCreating} onDeleted={deleted} />
+          )
         ) : view === 1 ? (
           <ListView columns={filtered} members={members} readOnly={readOnly} onOpen={setEditing} />
         ) : view === 2 ? (
           <CalendarView columns={filtered} projectId={project.id} onOpen={setEditing} />
+        ) : view === 3 ? (
+          <TimelineView columns={filtered} doneColumnId={project.doneColumnId} today={today} onOpen={setEditing} />
         ) : (
           stats && <AnalyticsView stats={stats} />
         )}
@@ -796,12 +853,17 @@ export function Workspace({
           fields={fields}
           manageFields={manages && project ? project.id : null}
           onOpenTask={setEditing}
+          sprints={sprints}
+          defaultSprintId={sprint && !sprint.closed ? sprint.id : null}
           onClose={close}
           onDeleted={deleted}
         />
       )}
       {showArchived && project && (
         <ArchivedDialog projectId={project.id} readOnly={readOnly} onClose={() => setShowArchived(false)} />
+      )}
+      {showSprints && project && (
+        <SprintsDialog projectId={project.id} sprints={sprints} today={today} readOnly={readOnly} onClose={() => setShowSprints(false)} />
       )}
       {searching && (
         <SearchPalette

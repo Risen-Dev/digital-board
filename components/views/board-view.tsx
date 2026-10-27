@@ -70,9 +70,9 @@ const columnUnderPointer = () =>
 
 /** A column: a drop target for cards, and itself sortable by the header `children` renders with `handle`. */
 type Handle = React.HTMLAttributes<HTMLElement> & { ref: (node: HTMLElement | null) => void };
-function DropZone({ id, children }: { id: string; children: (handle: Handle) => React.ReactNode }) {
+function DropZone({ id, fixed, children }: { id: string; fixed?: boolean; children: (handle: Handle) => React.ReactNode }) {
   const { setNodeRef: setDropRef, isOver } = useDroppable({ id });
-  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: COL + id });
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: COL + id, disabled: fixed });
   return (
     <div
       ref={(node) => { setDropRef(node); setNodeRef(node); }}
@@ -88,7 +88,7 @@ function DropZone({ id, children }: { id: string; children: (handle: Handle) => 
 }
 
 export function BoardView({
-  columns, fields, projectId, doneColumnId, today, links = {}, onOpen, onAdd, onDeleted,
+  columns, fields, projectId, doneColumnId, today, links = {}, onOpen, onAdd, onDeleted, lane,
 }: {
   columns: Column[];
   /** The project's custom fields, to name the values a card shows. */
@@ -104,6 +104,12 @@ export function BoardView({
   onAdd: (columnId: string) => void;
   /** A column was deleted; `undo` restores it with its cards. */
   onDeleted: (undo: string, name: string) => void;
+  /**
+   * One swimlane: `columns` are this lane's cards, `all` the whole (filtered) board,
+   * to place a dropped card among the cards of other lanes. The page scrolls, not
+   * the lane; columns don't drag or get added here.
+   */
+  lane?: { key: string; all: Column[] };
 }) {
   const tr = useT();
   const router = useRouter();
@@ -180,7 +186,15 @@ export function BoardView({
 
     const final = reordered ? placeTask(local, id, to.id, newIndex) : local;
     setLocal(final);
-    const index = final.find((c) => c.id === to.id)!.tasks.findIndex((t) => t.id === id);
+    const laneIds = final.find((c) => c.id === to.id)!.tasks.map((t) => t.id);
+    let index = laneIds.indexOf(id);
+    if (lane) {
+      // Before the next card of this lane, else after the previous one, in the whole column.
+      const full = (lane.all.find((c) => c.id === to.id)?.tasks ?? []).map((t) => t.id).filter((t) => t !== id);
+      const next = laneIds.slice(index + 1).find((t) => full.includes(t));
+      const prev = laneIds.slice(0, index).reverse().find((t) => full.includes(t));
+      index = next ? full.indexOf(next) : prev ? full.indexOf(prev) + 1 : full.length;
+    }
     // moveTask revalidates /board, so its response carries the new tree already —
     // a router.refresh() here is a second round trip for the same data.
     await moveTask(id, to.id, index);
@@ -195,11 +209,11 @@ export function BoardView({
   }
 
   return (
-    <main className="flex-1 overflow-x-auto overflow-y-hidden">
+    <main className={lane ? "" : "flex-1 overflow-x-auto overflow-y-hidden"}>
       <DndContext
         // A fixed id: dnd-kit otherwise numbers its aria-describedby from a global
         // counter, which differs between the server render and hydration.
-        id="board"
+        id={lane ? `board-lane-${lane.key}` : "board"}
         sensors={sensors}
         collisionDetection={collisionDetection}
         // Re-measure on every drag. Without this, droppable rects are captured
@@ -216,14 +230,14 @@ export function BoardView({
           setLocal(null);
         }}
       >
-        <div className="flex h-full w-max gap-4 p-5">
+        <div className={`flex w-max gap-4 ${lane ? "px-5 pb-5" : "h-full p-5"}`}>
           <SortableContext items={view.map((c) => COL + c.id)} strategy={horizontalListSortingStrategy}>
           {view.map((col) => (
-            <DropZone key={col.id} id={col.id}>
+            <DropZone key={col.id} id={col.id} fixed={!!lane}>
               {(handle) => (<>
               <div className="relative mb-1">
               {/* Only the header row drags the column; the editor below must keep its own keys and clicks. */}
-              <div {...handle} className="flex cursor-grab items-center justify-between px-1 active:cursor-grabbing">
+              <div {...handle} className={`flex items-center justify-between px-1 ${lane ? "" : "cursor-grab active:cursor-grabbing"}`}>
                 <div className="flex min-w-0 items-center gap-2">
                   <div className="size-2 shrink-0 rounded-full" style={{ background: col.color }} />
                   <button
@@ -271,7 +285,7 @@ export function BoardView({
                   />
                 )}
               </div>
-              <div className="flex flex-1 flex-col gap-2 overflow-y-auto px-1 pb-4">
+              <div className={`flex flex-col gap-2 px-1 ${lane ? "" : "flex-1 overflow-y-auto pb-4"}`}>
                 <SortableContext items={col.tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
                   {col.tasks.map((task) => (
                     <SortableTaskCard key={task.id} task={task} links={task.key ? links[task.key] : undefined} overdue={overdue(task)} stageLimit={stageLimit(col)} fields={fields} onOpen={() => onOpen(task)} />
@@ -296,6 +310,7 @@ export function BoardView({
           </SortableContext>
 
           {/* Add a column */}
+          {!lane && (
           <div className="relative w-52 shrink-0 pt-0.5">
             <button
               onClick={() => setAddingColumn(true)}
@@ -314,6 +329,7 @@ export function BoardView({
               />
             )}
           </div>
+          )}
         </div>
 
         {/* Cards and columns both drag as an overlay, so a drop animates into place instead of jumping. */}

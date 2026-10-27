@@ -48,9 +48,11 @@ export function FormError({ error }: { error?: string }) {
   );
 }
 
-export function SubmitButton({ children }: { children: React.ReactNode }) {
+/** `pending` overrides the form status, for forms submitted from onSubmit (see TaskDialog). */
+export function SubmitButton({ children, pending: busy }: { children: React.ReactNode; pending?: boolean }) {
   const tr = useT();
-  const { pending } = useFormStatus();
+  const status = useFormStatus();
+  const pending = busy ?? status.pending;
   return (
     <button
       type="submit"

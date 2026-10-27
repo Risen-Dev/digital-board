@@ -1,6 +1,6 @@
 // Run: node --experimental-strip-types lib/board.check.ts
 import assert from "node:assert/strict";
-import { applyFilters, branchNameOf, cleanFilters, fieldOptionsOf, fieldValuesOf, pullRequestUrlOf, ciOf, columnOf, formatDuration, initials, joinLabels, labelsOf, nextDue, parseDuration, placeTask, projectKeyOf, reorder, sameFilters, TEMPLATES, templateOf, type Column } from "./board.ts";
+import { applyFilters, branchNameOf, cleanFilters, fieldOptionsOf, fieldValuesOf, pullRequestUrlOf, ciOf, columnOf, formatDuration, initials, joinLabels, labelsOf, nextDue, parseDuration, placeTask, lanesOf, timelineOf, dateOfDay, projectKeyOf, reorder, sameFilters, TEMPLATES, templateOf, type Column } from "./board.ts";
 import { parseFlow } from "./canvas/flow.ts";
 import { columnFor, keysIn, planEvent } from "./github-events.ts";
 import { resolveActions } from "./board-agent.ts";
@@ -341,6 +341,8 @@ assert.equal(
 {
   assert.deepEqual(cleanFilters({ q: "  bug ", assignee: "me", priority: "urgent", label: "", extra: "x", sort: 1 }), { q: "bug", assignee: "me" });
   assert.deepEqual(cleanFilters(null), {});
+  assert.deepEqual(cleanFilters({ group: "label" }), { group: "label" });
+  assert.deepEqual(cleanFilters({ group: "colour" }), {}, "unknown group dropped");
   assert.deepEqual(cleanFilters({ q: "x".repeat(101) }), {});
   assert.ok(sameFilters({ priority: "high", q: "a" }, { q: "a", priority: "high", label: "" }));
   assert.ok(!sameFilters({ q: "a" }, { q: "b" }));
@@ -365,4 +367,24 @@ assert.equal(
   assert.ok("error" in fieldValuesOf(form({ "cf:d": "XL" }), defs));
   assert.ok("error" in fieldValuesOf(form({ "cf:a": "x".repeat(201) }), defs));
   assert.deepEqual(fieldOptionsOf("Small, Medium, , Small"), ["Small", "Medium"]);
+}
+
+// swimlanes: every lane keeps every column; multi-label cards show in each lane; "" = none
+{
+  const lane = (lanes: ReturnType<typeof lanesOf>) => lanes.map((l) => `${l.key}:${l.columns.flatMap((c) => c.tasks.map((t) => t.id)).join(",")}`);
+  assert.deepEqual(lane(lanesOf(board, "assignee")), ["u1:t1", ":t2,t3"]);
+  assert.deepEqual(lane(lanesOf(board, "label")), ["Design:t1,t3", "QA:t2", "Web:t1,t3"]);
+  assert.deepEqual(lane(lanesOf(board, "priority")), ["high:t1,t3", "low:t2"]);
+  assert.ok(lanesOf(board, "label").every((l) => l.columns.length === 3), "columns kept per lane");
+  assert.equal(lanesOf(board, "priority")[0].name, "High");
+}
+
+// timeline: one date alone is a one-day bar, undated cards are counted, range pads around today
+{
+  const at = (t: Column["tasks"][number], start: string | null, due: string | null) => ({ ...t, startDate: start, dueDate: due });
+  const tl = timelineOf([at(mk("x", "a", 1), "2026-10-20", "2026-10-25"), at(mk("y", "a", 2), null, "2026-10-22"), at(mk("z", "a", 3), null, null), at(mk("w", "a", 4), null, "nope")], "2026-10-27");
+  assert.deepEqual(tl.rows.map((r) => [r.task.id, dateOfDay(r.start), dateOfDay(r.end)]), [["x", "2026-10-20", "2026-10-25"], ["y", "2026-10-22", "2026-10-22"]]);
+  assert.equal(tl.undated, 2, "no dates or a malformed one");
+  assert.equal(dateOfDay(tl.from), "2026-10-17");
+  assert.equal(dateOfDay(tl.from + tl.days - 1), "2026-11-03", "a week after today, the latest point");
 }
