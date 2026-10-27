@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -65,7 +65,7 @@ const SECTIONS: { key: SectionKey; Icon: typeof Home; label: string }[] = [
 ];
 
 /** `undo` = a trash id: the toast offers to restore what was just deleted. */
-type Alert = { title: string; body: string; undo?: string };
+type Alert = { title: string; body: string; undo?: string; open?: () => void };
 
 /**
  * Registers the service worker and saves this browser's push subscription, so
@@ -95,7 +95,7 @@ async function dropPush() {
 }
 
 export function Workspace({
-  user, workspace, projects, project, columns, members, assignments, presence, feed, notifications: initialNotifications, unread: initialUnread, mine, meetings: initialMeetings, stats, sheets, views, fields, sprints, tags: allTags, focus, openTask, today, dark, aiEnabled, ai,
+  user, workspace, projects, project, columns, members, assignments, presence, feed, notifications: initialNotifications, unread: initialUnread, mine, meetings: initialMeetings, stats, sheets, views, fields, sprints, tags: allTags, focus, openTask, openSection, today, dark, aiEnabled, ai,
 }: {
   user: User;
   workspace: string;
@@ -119,6 +119,8 @@ export function Workspace({
   focus: { sheetId: string; tag: string } | null;
   /** From `?task=`: a card picked in search from another project opens here. */
   openTask: string | null;
+  /** From `?section=` (and `?chat=`): where a push notification leads. */
+  openSection: { section: string; chat: string | null } | null;
   presence: MemberPresence[];
   today: string;
   dark: boolean;
@@ -164,6 +166,16 @@ export function Workspace({
     if (task) {
       setEditing(task);
       setSection("board");
+    }
+  }
+  // `?section=` opens that section (a chat push also names its channel), like `?task=` above.
+  const sectionKey = openSection ? `${openSection.section}:${openSection.chat}` : null;
+  const [prevSectionKey, setPrevSectionKey] = useState<string | null>(null);
+  if (sectionKey !== prevSectionKey) {
+    setPrevSectionKey(sectionKey);
+    if (openSection && SECTIONS.some((s) => s.key === openSection.section)) {
+      setSection(openSection.section as SectionKey);
+      if (openSection.chat) setChatChannel(openSection.chat);
     }
   }
   // Alerts already allowed: keep this browser's push subscription saved (it can rotate).
@@ -236,12 +248,17 @@ export function Workspace({
     [user.name],
   );
 
-  const announce = useCallback((title: string, body: string) => {
-    setAlert({ title, body });
+  const announce = useCallback((title: string, body: string, open?: () => void) => {
+    setAlert({ title, body, open });
     clearTimeout(alertTimer.current);
     alertTimer.current = window.setTimeout(() => setAlert(null), 5000);
     if (typeof Notification !== "undefined" && Notification.permission === "granted") {
-      new Notification(title, { body, tag: "digital-board" });
+      const n = new Notification(title, { body, tag: "digital-board" });
+      if (open) n.onclick = () => {
+        window.focus();
+        n.close();
+        open();
+      };
     }
     const context = audio.current;
     if (!context) return;
@@ -276,6 +293,9 @@ export function Workspace({
     setLive(presence);
   }
   const [unread, setUnread] = useState<Unread[]>(initialUnread);
+  // The live poll below opens these from its alerts.
+  const alertCard = useEffectEvent((item: FeedItem) => openCardNotification(item));
+  const alertChat = useEffectEvent((channel: string) => openChat(channel));
   useEffect(() => {
     let alive = true;
     // `refresh`: board data changed, reload the page props even without new card activity.
@@ -292,8 +312,8 @@ export function Workspace({
         // New card activity may come from outside this tab (another member, the GitHub webhook): reload the board.
         if (card || refresh) router.refresh();
         seenChats.current = new Map(data.unread.map((item) => [item.channel, item.n]));
-        if (card) announce(mentionsMe(card) ? tr("{name} mentioned you", { name: card.actor ?? tr("Someone") }) : tr("Card updated"), `${card.taskTitle} · ${card.text}`);
-        else if (chat) announce(tr("New chat message"), chatName(chat.channel, user.id, data.members));
+        if (card) announce(mentionsMe(card) ? tr("{name} mentioned you", { name: card.actor ?? tr("Someone") }) : tr("Card updated"), `${card.taskTitle} · ${card.text}`, () => alertCard(card));
+        else if (chat) announce(tr("New chat message"), chatName(chat.channel, user.id, data.members), () => alertChat(chat.channel));
         setLive(data.members);
         setUnread(data.unread);
         setNotifications(data.notifications);
@@ -344,6 +364,42 @@ export function Workspace({
   function markNotificationItemsRead(ids: number[]) {
     setNotifications((items) => items.filter((item) => !ids.includes(item.id)));
     void fetch("/api/presence", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ids }) });
+  }
+
+  // A card notification leads to the card itself: switch to its board, then blink it.
+  const flashing = useRef<number>(undefined);
+  function openCardNotification(item: FeedItem) {
+    markNotificationItemsRead([item.id]);
+    goToCard(item.projectId, item.taskId);
+  }
+  function goToCard(projectId: string, taskId: string) {
+    setShowNotifications(false);
+    setAlert(null);
+    setSection("board");
+    if (projectId !== project?.id) router.push(`/board?project=${projectId}`);
+    // The card shows up once the section (and maybe the project) has rendered; look for it a few seconds.
+    clearInterval(flashing.current);
+    const until = Date.now() + 5000;
+    flashing.current = window.setInterval(() => {
+      const el = document.querySelector<HTMLElement>(`[data-task="${CSS.escape(taskId)}"]`);
+      if (!el && Date.now() < until) return;
+      clearInterval(flashing.current);
+      // Hidden by a filter or not on screen in this layout: open the card instead.
+      if (!el) return router.push(`/board?${new URLSearchParams({ project: projectId, task: taskId })}`);
+      el.scrollIntoView({ block: "center", behavior: "smooth" });
+      el.classList.remove("flash");
+      void el.offsetWidth; // restart the animation when the same card is picked twice
+      el.classList.add("flash");
+      el.addEventListener("animationend", () => el.classList.remove("flash"), { once: true });
+    }, 100);
+  }
+
+  function openChat(channel: string) {
+    setUnread((items) => items.filter((item) => item.channel !== channel));
+    setChatChannel(channel);
+    setShowNotifications(false);
+    setAlert(null);
+    setSection("chat");
   }
 
   async function enableAlerts() {
@@ -418,7 +474,8 @@ export function Workspace({
           >
             <LogoMark size={28} />
           </button>
-          {!slim && (
+          {!slim && user.is_admin !== 1 && <span className="min-w-0 truncate text-sm font-semibold tracking-tight">{workspace}</span>}
+          {!slim && user.is_admin === 1 && (
             <EditableTitle
               value={workspace}
               onSave={(name) => renameWorkspace(name).then((r) => { router.refresh(); return r; })}
@@ -613,24 +670,12 @@ export function Workspace({
                   }}
                   today={today}
                   mentionsMe={mentionsMe}
-                  onOpenMine={() => {
-                    setShowNotifications(false);
-                    setSection("mine");
-                  }}
                   unread={unread}
                   meId={user.id}
                   members={live}
-                  onOpenInbox={() => {
-                    markCardNotificationsRead();
-                    setShowNotifications(false);
-                    setSection("inbox");
-                  }}
-                  onOpenChat={(channel) => {
-                    setUnread((items) => items.filter((item) => item.channel !== channel));
-                    setChatChannel(channel);
-                    setShowNotifications(false);
-                    setSection("chat");
-                  }}
+                  onOpenCard={openCardNotification}
+                  onOpenDue={(t) => goToCard(t.projectId, t.id)}
+                  onOpenChat={openChat}
                   onMarkRead={markAllNotificationsRead}
                   onOpenInboxPage={() => {
                     setShowNotifications(false);
@@ -803,7 +848,7 @@ export function Workspace({
             focus={canvasFocus}
           />
         ) : section === "inbox" ? (
-          <FeedView feed={notifications} mentionsMe={mentionsMe} onMarkRead={markNotificationItemsRead} onMarkAll={markCardNotificationsRead} />
+          <FeedView feed={notifications} mentionsMe={mentionsMe} onMarkRead={markNotificationItemsRead} onMarkAll={markCardNotificationsRead} onOpen={openCardNotification} />
         ) : section === "mine" ? (
           <MyTasksView tasks={mine} onOpen={(id) => setEditing(columns.flatMap((c) => c.tasks).find((t) => t.id === id) ?? null)} />
         ) : view === VIEWS.length && project.repo ? (
@@ -905,7 +950,7 @@ export function Workspace({
           </button>
         </div>
       ) : alert && (
-        <button onClick={() => setAlert(null)} className="fixed bottom-5 right-5 z-50 w-80 rounded-lg border bg-card p-3 text-left shadow-lg animate-in fade-in slide-in-from-bottom-4 duration-300">
+        <button onClick={() => (alert.open ? alert.open() : setAlert(null))} className="fixed bottom-5 right-5 z-50 w-80 rounded-lg border bg-card p-3 text-left shadow-lg animate-in fade-in slide-in-from-bottom-4 duration-300">
           <p className="text-sm font-medium">{alert.title}</p>
           <p className="mt-0.5 text-xs text-muted-foreground">{alert.body}</p>
         </button>
@@ -962,8 +1007,8 @@ function EmptyProject() {
   );
 }
 
-function FeedView({ feed: all, mentionsMe, onMarkRead, onMarkAll }: {
-  feed: FeedItem[]; mentionsMe: (e: FeedItem) => boolean; onMarkRead: (ids: number[]) => void; onMarkAll: () => void;
+function FeedView({ feed: all, mentionsMe, onMarkRead, onMarkAll, onOpen }: {
+  feed: FeedItem[]; mentionsMe: (e: FeedItem) => boolean; onMarkRead: (ids: number[]) => void; onMarkAll: () => void; onOpen: (e: FeedItem) => void;
 }) {
   const tr = useT();
   const [selected, setSelected] = useState(new Set<number>());
@@ -1003,13 +1048,13 @@ function FeedView({ feed: all, mentionsMe, onMarkRead, onMarkAll }: {
             }`}>
               <Check className="size-3" strokeWidth={3} />
             </button>
-            <div className="min-w-0 flex-1">
+            <button type="button" onClick={() => onOpen(e)} className="min-w-0 flex-1 text-left hover:underline">
               <p className="text-sm font-medium leading-snug">
                 {e.taskTitle}
                 {mentionsMe(e) && <span className="ml-1.5 rounded bg-primary px-1 py-px text-[10px] font-semibold text-primary-foreground">{tr("@you")}</span>}
               </p>
               <p className="text-xs text-muted-foreground">{eventText(e.text, tr)}{e.actor ? ` · ${e.actor}` : ""}</p>
-            </div>
+            </button>
             <div className="flex shrink-0 items-center gap-2">
               <span className="flex items-center gap-1.5 rounded-full border bg-secondary px-2 py-0.5 text-[10px] text-muted-foreground"><span className="size-1.5 rounded-full" style={{ background: e.columnColor }} />{e.columnTitle}</span>
               <span className="w-28 text-right text-[11px] text-muted-foreground">{e.atLabel}</span>
@@ -1026,7 +1071,7 @@ const chatName = (channel: string, meId: string, members: { id: string; name: st
   channel === "all" ? "Workspace" : channel === meId ? "Agent" : members.find((m) => m.id === channel)?.name ?? "Direct message";
 
 function NotificationMenu({
-  cards, due, meetings, onOpenMeetings, today, mentionsMe, onOpenMine, unread, meId, members, onOpenInbox, onOpenChat, onMarkRead, onOpenInboxPage, onEnableAlerts,
+  cards, due, meetings, onOpenMeetings, today, mentionsMe, onOpenDue, unread, meId, members, onOpenCard, onOpenChat, onMarkRead, onOpenInboxPage, onEnableAlerts,
 }: {
   cards: FeedItem[];
   due: MyTask[];
@@ -1034,11 +1079,11 @@ function NotificationMenu({
   onOpenMeetings: () => void;
   today: string;
   mentionsMe: (e: FeedItem) => boolean;
-  onOpenMine: () => void;
+  onOpenDue: (task: MyTask) => void;
   unread: Unread[];
   meId: string;
   members: MemberPresence[];
-  onOpenInbox: () => void;
+  onOpenCard: (item: FeedItem) => void;
   onOpenChat: (channel: string) => void;
   onMarkRead: () => void;
   onOpenInboxPage: () => void;
@@ -1063,7 +1108,7 @@ function NotificationMenu({
           <>
             <p className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{tr("Due")}</p>
             {due.map((t) => (
-              <button key={t.id} role="menuitem" onClick={onOpenMine} className="w-full rounded-md px-2 py-2 text-left hover:bg-secondary">
+              <button key={t.id} role="menuitem" onClick={() => onOpenDue(t)} className="w-full rounded-md px-2 py-2 text-left hover:bg-secondary">
                 <p className="truncate text-xs font-medium">{t.title}</p>
                 <p className={`truncate text-[11px] ${t.dueDate! < today ? "font-medium text-[var(--chart-7)]" : "text-muted-foreground"}`}>
                   {t.dueDate! < today ? `Overdue since ${t.dueDate}` : tr("Due today")} · {t.projectName}
@@ -1076,7 +1121,7 @@ function NotificationMenu({
           <>
             <p className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{tr("Card notifications")}</p>
             {cards.map((item) => (
-              <button key={item.id} role="menuitem" onClick={onOpenInbox} className="w-full rounded-md px-2 py-2 text-left hover:bg-secondary">
+              <button key={item.id} role="menuitem" onClick={() => onOpenCard(item)} className="w-full rounded-md px-2 py-2 text-left hover:bg-secondary">
                 <p className="truncate text-xs font-medium">
                   {mentionsMe(item) && <span className="mr-1 font-semibold text-primary">{tr("@you")}</span>}
                   {item.taskTitle}

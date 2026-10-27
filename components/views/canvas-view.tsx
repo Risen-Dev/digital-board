@@ -208,6 +208,50 @@ function TagHighlights({ feedRef }: { feedRef: { current: ((...change: SceneChan
   );
 }
 
+/**
+ * Excalidraw's dark theme is a CSS `invert(93%) hue-rotate(180deg)` on the whole
+ * <canvas>, countered for pictures by pre-inverting them into their element cache
+ * (IMAGE_DARK). That round trip can't give back saturated colours, so photos came
+ * out washed or negative. globals.css drops the CSS filter from the static canvas;
+ * here the same filter goes on each draw instead (like Excalidraw's dark export),
+ * the pre-inversion is skipped, and a picture (or its cache) is drawn unfiltered,
+ * on screen and in a dark PNG export.
+ * Each frame of the static canvas starts with setTransform, then paints the
+ * background: Excalidraw's default white is cleared instead, so the app's theme
+ * and backdrop show through (stored and exported, it stays white).
+ * ponytail: patches the 2D context globally; drop it once Excalidraw stops inverting images.
+ */
+if (typeof window !== "undefined") {
+  const DARK = "invert(93%) hue-rotate(180deg)";
+  const IMAGE_DARK = "invert(100%) hue-rotate(180deg) saturate(1.25)";
+  const pictures = new WeakSet<HTMLCanvasElement>();
+  const proto = CanvasRenderingContext2D.prototype;
+  const setTransform = proto.setTransform as (...args: unknown[]) => void;
+  const drawImage = proto.drawImage as (...args: unknown[]) => void;
+  const fillRect = proto.fillRect;
+  proto.fillRect = function (this: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
+    if (x === 0 && y === 0 && this.fillStyle === "#ffffff" && this.canvas.classList?.contains("static")) return this.clearRect(x, y, w, h);
+    fillRect.call(this, x, y, w, h);
+  };
+  proto.setTransform = function (this: CanvasRenderingContext2D, ...args: unknown[]) {
+    setTransform.apply(this, args);
+    if (this.canvas.classList?.contains("static")) this.filter = this.canvas.closest(".excalidraw.theme--dark") ? DARK : "none";
+  } as CanvasRenderingContext2D["setTransform"];
+  proto.drawImage = function (this: CanvasRenderingContext2D, ...args: unknown[]) {
+    const picture = this.filter === IMAGE_DARK;
+    if (picture) pictures.add(this.canvas);
+    // A dark PNG export sets DARK on its whole canvas and draws pictures straight onto it.
+    const exported = this.filter === DARK && args.length === 9 && args[0] instanceof HTMLImageElement && !args[0].src.startsWith("data:image/svg");
+    if (!picture && !exported && !(this.filter === DARK && args[0] instanceof HTMLCanvasElement && pictures.has(args[0]))) {
+      return drawImage.apply(this, args);
+    }
+    const filter = this.filter;
+    this.filter = "none";
+    drawImage.apply(this, args);
+    this.filter = filter;
+  } as CanvasRenderingContext2D["drawImage"];
+}
+
 // The theme toggle only flips the <html> class; the `dark` prop (from the cookie)
 // is stale until the next request, so follow the class live.
 function subscribeTheme(onChange: () => void) {

@@ -4,7 +4,7 @@ import { PRIORITY_CFG, type Task } from "@/lib/board";
 import { Assignees } from "../task-card";
 import { useT } from "@/components/i18n";
 
-export type MyTask = Task & { columnTitle: string; columnColor: string; projectName: string; done: boolean };
+export type MyTask = Task & { columnTitle: string; columnColor: string; projectName: string; projectId: string; done: boolean };
 
 const overdue = (d: string | null) => !!d && d < new Date().toISOString().slice(0, 10);
 

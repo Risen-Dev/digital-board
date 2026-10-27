@@ -152,12 +152,12 @@ export const taskHistory = async (taskId: string): Promise<Entry[]> =>
   )).map((e) => ({ ...e, atLabel: stamp(e.at) }));
 
 /** `actorId`: the member who did it; null for webhooks and the AI agent. */
-export type FeedItem = Entry & { id: number; actorId: string | null; taskId: string; taskTitle: string; columnTitle: string; columnColor: string; dayLabel: string };
+export type FeedItem = Entry & { id: number; actorId: string | null; taskId: string; projectId: string; taskTitle: string; columnTitle: string; columnColor: string; dayLabel: string };
 type FeedRow = Omit<FeedItem, "atLabel" | "dayLabel">;
 
 /** Workspace admins see every project; members only the projects they are assigned to. */
 const FEED_FROM = `SELECT e.id, e.at, e.kind, CASE e.kind WHEN 'comment' THEN 'Commented: ' || e.text ELSE e.text END AS text, CASE WHEN e.agent THEN 'AI agent' ELSE u.name END AS actor,
-            CASE WHEN e.agent THEN NULL ELSE e.actor_id END AS "actorId", t.id AS "taskId", t.title AS "taskTitle",
+            CASE WHEN e.agent THEN NULL ELSE e.actor_id END AS "actorId", t.id AS "taskId", p.id AS "projectId", t.title AS "taskTitle",
             c.title AS "columnTitle", c.color AS "columnColor"
        FROM task_events e
        JOIN tasks t ON t.id = e.task_id
@@ -203,16 +203,16 @@ export async function markActivityItemsRead(userId: string, eventIds: number[]) 
 }
 
 export const myTasks = async (userId: string) =>
-  (await all<TaskRow & { column_title: string; column_color: string; project_name: string; done: boolean }>(
+  (await all<TaskRow & { column_title: string; column_color: string; project_name: string; project_id: string; done: boolean }>(
     `SELECT ${TASK_COLS},
-            c.title AS column_title, c.color AS column_color, p.name AS project_name, c.id = ${DONE_COLUMN} AS done
+            c.title AS column_title, c.color AS column_color, p.name AS project_name, p.id AS project_id, c.id = ${DONE_COLUMN} AS done
        FROM tasks t
        JOIN columns c ON c.id = t.column_id
        JOIN projects p ON p.id = c.project_id
       WHERE t.archived_at IS NULL AND EXISTS (SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id AND ta.user_id = ?)
       ORDER BY t.due_date IS NULL, t.due_date, t.position`,
     userId,
-  )).map((r) => ({ ...toTask(r), columnTitle: r.column_title, columnColor: r.column_color, projectName: r.project_name, done: r.done }));
+  )).map((r) => ({ ...toTask(r), columnTitle: r.column_title, columnColor: r.column_color, projectName: r.project_name, projectId: r.project_id, done: r.done }));
 
 export async function analytics(projectId: string) {
   const byColumn = await all<{ title: string; color: string; n: number }>(
