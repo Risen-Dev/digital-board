@@ -76,6 +76,7 @@ export function CalendarView({ columns, projectId, onOpen }: { columns: Column[]
                 {dayTasks.map((t) => (
                   <button
                     key={t.id}
+                    data-task={t.id}
                     onClick={() => onOpen(t)}
                     style={{ borderLeftColor: PRIORITY_CFG[t.priority].color }}
                     className="truncate rounded border border-l-2 bg-card px-1.5 py-1 text-left text-[11px] leading-tight transition-colors hover:bg-secondary"

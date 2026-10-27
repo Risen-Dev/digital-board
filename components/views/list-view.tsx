@@ -95,6 +95,7 @@ export function ListView({ columns, members, readOnly, onOpen }: { columns: Colu
             return (
               <tr
                 key={task.id}
+                data-task={task.id}
                 onClick={() => onOpen(task)}
                 className="cursor-pointer border-b transition-colors hover:bg-secondary"
               >

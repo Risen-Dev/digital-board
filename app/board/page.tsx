@@ -10,7 +10,7 @@ export default async function BoardPage({ searchParams }: PageProps<"/board">) {
   if (!user) redirect("/login");
   const ws = user.workspace_id;
 
-  const [projects, { project: wanted, sheet, tag, task }] = await Promise.all([
+  const [projects, { project: wanted, sheet, tag, task, section, chat }] = await Promise.all([
     listProjects(ws, user.id, user.is_admin === 1),
     searchParams,
   ]);
@@ -60,6 +60,7 @@ export default async function BoardPage({ searchParams }: PageProps<"/board">) {
       tags={tags}
       focus={typeof sheet === "string" && typeof tag === "string" ? { sheetId: sheet, tag } : null}
       openTask={typeof task === "string" ? task : null}
+      openSection={typeof section === "string" ? { section, chat: typeof chat === "string" ? chat : null } : null}
       today={new Date().toISOString().slice(0, 10)}
       aiEnabled={!!ai}
       // The key never leaves the server; only admins see the rest.

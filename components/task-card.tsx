@@ -29,6 +29,7 @@ export function TaskCard({ task, links, onOpen, overdue = false, overlay = false
     : { text: tr("{n}d left", { n: stageLimit - task.stageDays }), over: false };
   return (
     <div
+      data-task={overlay ? undefined : task.id}
       onClick={onOpen}
       className={`group overflow-hidden rounded-lg border bg-card p-3 shadow-sm transition-all ${
         overlay ? "rotate-1 cursor-grabbing shadow-lg" : "cursor-grab hover:-translate-y-px hover:shadow-md"

@@ -74,7 +74,7 @@ export function TimelineView({ columns, doneColumnId, today, onOpen }: {
         {tl.rows.map(({ task, start, end }) => {
           const done = task.columnId === doneId;
           return (
-            <div key={task.id} className="relative flex border-b border-border/60" style={{ height: ROW }}>
+            <div key={task.id} data-task={task.id} className="relative flex border-b border-border/60" style={{ height: ROW }}>
               <button
                 onClick={() => onOpen(task)}
                 className="sticky left-0 z-10 flex shrink-0 items-center gap-2 border-r bg-background px-4 text-left text-xs hover:bg-secondary"

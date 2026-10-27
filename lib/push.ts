@@ -96,7 +96,7 @@ export async function pushDueCards(now = new Date()) {
     await pushTo([r.user_id], {
       title: r.n === 1 ? "1 card due" : `${r.n} cards due`,
       body: r.n === 1 ? r.first : `${r.first} and ${r.n - 1} more`,
-      url: "/board",
+      url: "/board?section=mine",
     });
   }
 }
