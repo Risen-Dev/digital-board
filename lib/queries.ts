@@ -19,6 +19,8 @@ type TaskRow = {
   comments: number;
   images: TaskImage[];
   blocked_by: Blocker[];
+  parent_id: string | null;
+  subtasks: Blocker[];
   column_since: string;
   tracked: number;
   timing: boolean;
@@ -40,6 +42,8 @@ const toTask = (r: TaskRow): Task => ({
   comments: r.comments,
   images: r.images,
   blockedBy: r.blocked_by,
+  parentId: r.parent_id,
+  subtasks: r.subtasks,
   stageDays: Math.floor((Date.now() - Date.parse(r.column_since)) / 86_400_000),
   trackedSeconds: r.tracked,
   timing: r.timing,
@@ -63,7 +67,10 @@ const TASK_COLS = `t.id, t.column_id, t.title, t.description, t.label, t.priorit
                         FROM task_images ti WHERE ti.task_id = t.id), '[]') AS images,
             COALESCE((SELECT json_agg(json_build_object('id', bt.id, 'done', bt.column_id = ${DONE_COLUMN}) ORDER BY bt.number)
                         FROM task_blockers tb JOIN tasks bt ON bt.id = tb.blocker_id
-                       WHERE tb.task_id = t.id AND bt.archived_at IS NULL), '[]') AS blocked_by`;
+                       WHERE tb.task_id = t.id AND bt.archived_at IS NULL), '[]') AS blocked_by,
+            t.parent_id,
+            COALESCE((SELECT json_agg(json_build_object('id', st.id, 'done', st.column_id = ${DONE_COLUMN}) ORDER BY st.number)
+                        FROM tasks st WHERE st.parent_id = t.id AND st.archived_at IS NULL), '[]') AS subtasks`;
 
 /** `repo` / `tokenHint` describe the GitHub link; the token itself never leaves the server. */
 export type Project = { id: string; name: string; key: string; doneColumnId: string | null; repo: string | null; tokenHint: string | null; webhookHint: string | null; inbound: boolean;
@@ -140,11 +147,13 @@ export const taskHistory = async (taskId: string): Promise<Entry[]> =>
     taskId,
   )).map((e) => ({ ...e, atLabel: stamp(e.at) }));
 
-export type FeedItem = Entry & { id: number; taskId: string; taskTitle: string; columnTitle: string; columnColor: string; dayLabel: string };
+/** `actorId`: the member who did it; null for webhooks and the AI agent. */
+export type FeedItem = Entry & { id: number; actorId: string | null; taskId: string; taskTitle: string; columnTitle: string; columnColor: string; dayLabel: string };
 type FeedRow = Omit<FeedItem, "atLabel" | "dayLabel">;
 
 /** Workspace admins see every project; members only the projects they are assigned to. */
-const FEED_FROM = `SELECT e.id, e.at, e.kind, CASE e.kind WHEN 'comment' THEN 'Commented: ' || e.text ELSE e.text END AS text, CASE WHEN e.agent THEN 'AI agent' ELSE u.name END AS actor, t.id AS "taskId", t.title AS "taskTitle",
+const FEED_FROM = `SELECT e.id, e.at, e.kind, CASE e.kind WHEN 'comment' THEN 'Commented: ' || e.text ELSE e.text END AS text, CASE WHEN e.agent THEN 'AI agent' ELSE u.name END AS actor,
+            CASE WHEN e.agent THEN NULL ELSE e.actor_id END AS "actorId", t.id AS "taskId", t.title AS "taskTitle",
             c.title AS "columnTitle", c.color AS "columnColor"
        FROM task_events e
        JOIN tasks t ON t.id = e.task_id

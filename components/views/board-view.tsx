@@ -3,11 +3,12 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  closestCorners, DndContext, DragOverlay, KeyboardSensor, MeasuringStrategy, MouseSensor,
+  closestCenter, closestCorners, DndContext, DragOverlay, KeyboardSensor, MeasuringStrategy, MouseSensor,
   pointerWithin, rectIntersection, TouchSensor, useDroppable, useSensor, useSensors,
   type CollisionDetection, type DragEndEvent, type DragOverEvent, type DragStartEvent,
 } from "@dnd-kit/core";
-import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { arrayMove, horizontalListSortingStrategy, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { CircleCheck, Pencil, Plus } from "lucide-react";
 import { columnOf, PALETTE, placeTask, type Column, type CustomField, type Task } from "@/lib/board";
 import { addColumn, deleteColumn, moveColumn, moveTask, setDoneColumn, updateColumn } from "@/lib/actions";
@@ -24,33 +25,70 @@ import { useT } from "@/components/i18n";
  * Whatever is literally under the pointer wins; the rect tests are only fallbacks
  * for keyboard dragging, where there is no pointer.
  */
-const collisionDetection: CollisionDetection = (args) => {
+const cardCollision: CollisionDetection = (args) => {
   const pointer = pointerWithin(args);
   if (pointer.length > 0) return pointer;
   const intersections = rectIntersection(args);
   return intersections.length > 0 ? intersections : closestCorners(args);
 };
 
+/** Columns drag by their header; their sortable ids carry this prefix so cards and columns never hit each other. */
+const COL = "col:";
+const collisionDetection: CollisionDetection = (args) => {
+  const columnDrag = String(args.active.id).startsWith(COL);
+  const droppableContainers = args.droppableContainers.filter((c) => String(c.id).startsWith(COL) === columnDrag);
+  return (columnDrag ? closestCenter : cardCollision)({ ...args, droppableContainers });
+};
+
 /** Column/task ordering, for comparing the optimistic tree against the server's. */
 const shape = (cols: Column[]) =>
   cols.map((c) => `${c.id}:${c.tasks.map((t) => t.id).join(",")}`).join("|");
 
-function DropZone({ id, children }: { id: string; children: React.ReactNode }) {
-  const { setNodeRef, isOver } = useDroppable({ id });
+/**
+ * Where the pointer really is during a drag. dnd-kit's `over` only moves when React
+ * renders, so on a busy main thread a quick release can land before the render that
+ * saw the pointer reach the new column, and the card snapped back to where it started.
+ */
+let pointerAt: { x: number; y: number } | null = null;
+const trackPointer = (e: PointerEvent | TouchEvent) => {
+  const p = "touches" in e ? e.touches[0] : e;
+  if (p) pointerAt = { x: p.clientX, y: p.clientY };
+};
+function startTracking() {
+  window.addEventListener("pointermove", trackPointer);
+  window.addEventListener("touchmove", trackPointer);
+}
+function stopTracking() {
+  window.removeEventListener("pointermove", trackPointer);
+  window.removeEventListener("touchmove", trackPointer);
+  pointerAt = null;
+}
+const columnUnderPointer = () =>
+  pointerAt
+    ? (document.elementsFromPoint(pointerAt.x, pointerAt.y).find((el): el is HTMLElement => el instanceof HTMLElement && !!el.dataset.column)?.dataset.column ?? null)
+    : null;
+
+/** A column: a drop target for cards, and itself sortable by the header `children` renders with `handle`. */
+type Handle = React.HTMLAttributes<HTMLElement> & { ref: (node: HTMLElement | null) => void };
+function DropZone({ id, children }: { id: string; children: (handle: Handle) => React.ReactNode }) {
+  const { setNodeRef: setDropRef, isOver } = useDroppable({ id });
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: COL + id });
   return (
     <div
-      ref={setNodeRef}
+      ref={(node) => { setDropRef(node); setNodeRef(node); }}
+      data-column={id}
+      style={{ transform: CSS.Translate.toString(transform), transition }}
       className={`flex w-[272px] shrink-0 flex-col gap-2 rounded-lg transition-colors ${
         isOver ? "bg-secondary" : ""
-      }`}
+      } ${isDragging ? "opacity-40" : ""}`}
     >
-      {children}
+      {children({ ...attributes, ...listeners, ref: setActivatorNodeRef })}
     </div>
   );
 }
 
 export function BoardView({
-  columns, fields, projectId, doneColumnId, today, links = {}, onOpen, onAdd,
+  columns, fields, projectId, doneColumnId, today, links = {}, onOpen, onAdd, onDeleted,
 }: {
   columns: Column[];
   /** The project's custom fields, to name the values a card shows. */
@@ -64,6 +102,8 @@ export function BoardView({
   links?: Record<string, TaskLinks>;
   onOpen: (t: Task) => void;
   onAdd: (columnId: string) => void;
+  /** A column was deleted; `undo` restores it with its cards. */
+  onDeleted: (undo: string, name: string) => void;
 }) {
   const tr = useT();
   const router = useRouter();
@@ -90,10 +130,13 @@ export function BoardView({
   );
 
   const activeTask = view.flatMap((c) => c.tasks).find((t) => t.id === activeId) ?? null;
+  const activeColumn = activeId?.startsWith(COL) ? view.find((c) => COL + c.id === activeId) ?? null : null;
   // The stage timer shown on a card in `col`: none in the done column.
   const stageLimit = (col: Column | undefined) => (!col || col.id === doneId ? undefined : col.limitDays);
 
-  function onDragStart({ active }: DragStartEvent) {
+  function onDragStart({ active, activatorEvent }: DragStartEvent) {
+    // Keyboard drags have no pointer to trust.
+    if (!(activatorEvent instanceof KeyboardEvent)) startTracking();
     setActiveId(String(active.id));
     setBranchedFrom(shape(columns));
     setLocal(columns);
@@ -101,7 +144,7 @@ export function BoardView({
   }
 
   function onDragOver({ active, over }: DragOverEvent) {
-    if (!over || !local) return;
+    if (!over || !local || String(active.id).startsWith(COL)) return;
     const id = String(active.id);
     const overId = String(over.id);
     const from = columnOf(local, id);
@@ -113,17 +156,24 @@ export function BoardView({
 
   async function onDragEnd({ active, over }: DragEndEvent) {
     setActiveId(null);
+    const pointerColumn = columnUnderPointer();
+    stopTracking();
     const origin = originRef.current;
     originRef.current = null;
-    if (!over || !local || !origin) return setLocal(null);
+    if (!local) return setLocal(null);
+    if (String(active.id).startsWith(COL)) return over ? dropColumn(String(active.id).slice(COL.length), String(over.id).slice(COL.length)) : setLocal(null);
+    if (!origin) return setLocal(null);
 
     const id = String(active.id);
-    const overId = String(over.id);
-    const to = columnOf(local, overId);
+    const overId = over ? String(over.id) : null;
+    const hit = overId ? columnOf(local, overId) : undefined;
+    // The column under the pointer wins over a lagging `over` (see pointerAt).
+    const to = local.find((c) => c.id === (pointerColumn ?? hit?.id));
     if (!to) return setLocal(null);
 
     const oldIndex = to.tasks.findIndex((t) => t.id === id);
-    const newIndex = overId === to.id ? to.tasks.length - 1 : to.tasks.findIndex((t) => t.id === overId);
+    const newIndex = to.id !== hit?.id ? (oldIndex >= 0 ? oldIndex : to.tasks.length) // a column the render missed: keep or append
+      : overId === to.id ? to.tasks.length - 1 : to.tasks.findIndex((t) => t.id === overId);
     const moved = origin !== to.id;
     const reordered = newIndex >= 0 && newIndex !== oldIndex;
     if (!moved && !reordered) return setLocal(null);
@@ -134,6 +184,14 @@ export function BoardView({
     // moveTask revalidates /board, so its response carries the new tree already —
     // a router.refresh() here is a second round trip for the same data.
     await moveTask(id, to.id, index);
+  }
+
+  async function dropColumn(id: string, overId: string) {
+    const from = local!.findIndex((c) => c.id === id);
+    const to = local!.findIndex((c) => c.id === overId);
+    if (from < 0 || to < 0 || from === to) return setLocal(null);
+    setLocal(arrayMove(local!, from, to));
+    await moveColumn(id, to - from);
   }
 
   return (
@@ -152,15 +210,20 @@ export function BoardView({
         onDragOver={onDragOver}
         onDragEnd={onDragEnd}
         onDragCancel={() => {
+          stopTracking();
           setActiveId(null);
           setBranchedFrom(null);
           setLocal(null);
         }}
       >
         <div className="flex h-full w-max gap-4 p-5">
+          <SortableContext items={view.map((c) => COL + c.id)} strategy={horizontalListSortingStrategy}>
           {view.map((col) => (
             <DropZone key={col.id} id={col.id}>
-              <div className="relative mb-1 flex items-center justify-between px-1">
+              {(handle) => (<>
+              <div className="relative mb-1">
+              {/* Only the header row drags the column; the editor below must keep its own keys and clicks. */}
+              <div {...handle} className="flex cursor-grab items-center justify-between px-1 active:cursor-grabbing">
                 <div className="flex min-w-0 items-center gap-2">
                   <div className="size-2 shrink-0 rounded-full" style={{ background: col.color }} />
                   <button
@@ -183,6 +246,7 @@ export function BoardView({
                 >
                   <Plus className="size-3" />
                 </button>
+              </div>
 
                 {editingColumn === col.id && (
                   <ColumnEditor
@@ -197,6 +261,7 @@ export function BoardView({
                       if (count > 0 && !confirm(tr("Delete \"{name}\"? Its {n} task(s) will be deleted too.", { name: col.title, n: count }))) return;
                       const r = await deleteColumn(col.id);
                       router.refresh();
+                      if (r.undo) onDeleted(r.undo, col.title);
                       return r;
                     }}
                     onMove={async (d) => { await moveColumn(col.id, d); router.refresh(); }}
@@ -225,8 +290,10 @@ export function BoardView({
                   <span>{tr("Add task")}</span>
                 </button>
               </div>
+              </>)}
             </DropZone>
           ))}
+          </SortableContext>
 
           {/* Add a column */}
           <div className="relative w-52 shrink-0 pt-0.5">
@@ -249,7 +316,22 @@ export function BoardView({
           </div>
         </div>
 
-        <DragOverlay>{activeTask ? <TaskCard task={activeTask} links={activeTask.key ? links[activeTask.key] : undefined} overdue={overdue(activeTask)} stageLimit={stageLimit(columnOf(view, activeTask.id))} fields={fields} overlay /> : null}</DragOverlay>
+        {/* Cards and columns both drag as an overlay, so a drop animates into place instead of jumping. */}
+        <DragOverlay>
+          {activeTask ? <TaskCard task={activeTask} links={activeTask.key ? links[activeTask.key] : undefined} overdue={overdue(activeTask)} stageLimit={stageLimit(columnOf(view, activeTask.id))} fields={fields} overlay />
+          : activeColumn ? (
+            <div className="flex w-[272px] rotate-1 cursor-grabbing flex-col gap-2 rounded-lg bg-background/90 shadow-lg">
+              <div className="mb-1 flex items-center gap-2 px-1">
+                <div className="size-2 shrink-0 rounded-full" style={{ background: activeColumn.color }} />
+                <span className="truncate text-sm font-semibold">{activeColumn.title}</span>
+                <span className="shrink-0 rounded-full border bg-secondary px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">{activeColumn.tasks.length}</span>
+              </div>
+              <div className="flex max-h-[70vh] flex-col gap-2 overflow-hidden px-1 pb-4">
+                {activeColumn.tasks.map((task) => <TaskCard key={task.id} task={task} fields={fields} />)}
+              </div>
+            </div>
+          ) : null}
+        </DragOverlay>
       </DndContext>
     </main>
   );

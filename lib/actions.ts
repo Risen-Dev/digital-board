@@ -11,6 +11,7 @@ import { broadcast } from "./canvas/hub";
 import { projectRole } from "./canvas/guard";
 import { notify } from "./outgoing";
 import { AGENT_MENTION } from "./chat";
+import { nudgeBoard } from "./chat-live";
 import { answerOnCard } from "./card-agent";
 import { nextTaskNumber, relocateTask } from "./tasks";
 import { DONE_COLUMN } from "./queries";
@@ -34,6 +35,12 @@ async function requireUser() {
 }
 
 const now = () => new Date().toISOString();
+
+/** Re-renders this tab and nudges the rest of the workspace to refresh. */
+function changed(user: User) {
+  revalidatePath("/board");
+  nudgeBoard(user.workspace_id, user.id);
+}
 
 async function logEvent(taskId: string, actorId: string | null, text: string, kind: "event" | "comment" = "event") {
   await run("INSERT INTO task_events (task_id, actor_id, text, at, kind) VALUES (?,?,?,?,?)", taskId, actorId, text, now(), kind);
@@ -180,7 +187,7 @@ export async function inviteMember(_prev: unknown, form: FormData) {
       await run("INSERT INTO project_members (project_id, user_id, role) VALUES (?,?,?)", projectId, userId, role);
     }
   });
-  revalidatePath("/board");
+  changed(user);
   return { ok: true };
 }
 
@@ -219,7 +226,7 @@ export async function setMemberPassword(userId: string, password: string) {
 
   await setPassword(userId, password);
   if (userId === user.id) await startSession(user.id);
-  revalidatePath("/board");
+  changed(user);
   return { ok: true };
 }
 
@@ -332,7 +339,7 @@ export async function createTask(_prev: unknown, form: FormData) {
     await logEvent(id, user.id, "Task created");
   });
   await notify("task.created", id, "Task created", user.name);
-  revalidatePath("/board");
+  changed(user);
   return { ok: true };
 }
 
@@ -358,7 +365,7 @@ export async function moveTask(taskId: string, toColumnId: string, toIndex: numb
   if (fromColumnId !== toColumnId) await repeatTask(taskId, toColumnId, user);
   if (fromColumnId !== toColumnId) await announceUnblocked(taskId, toColumnId, user);
 
-  revalidatePath("/board");
+  changed(user);
 }
 
 /**
@@ -443,17 +450,98 @@ export async function updateTask(_prev: unknown, form: FormData) {
   for (const c of changes) await logEvent(id, user.id, c);
   if (changes.length) await notify("task.updated", id, changes.join("; "), user.name);
 
-  revalidatePath("/board");
+  changed(user);
   return { ok: true };
 }
 
 export async function deleteTask(id: string) {
   const user = await requireUser();
   const task = await get<{ column_id: string }>("SELECT column_id FROM tasks WHERE id = ?", id);
-  if (!task || !await writableColumn(user, task.column_id)) return;
+  const projectId = task && await projectOfColumn(task.column_id);
+  if (!projectId || !await canEdit(user, projectId)) return;
   await notify("task.deleted", id, "Task deleted", user.name); // before the row is gone
-  await run("DELETE FROM tasks WHERE id = ?", id);
-  revalidatePath("/board");
+  const undo = await transaction(async () => {
+    const undo = await trash(user, projectId, "id", id);
+    await run("DELETE FROM tasks WHERE id = ?", id);
+    return undo;
+  });
+  changed(user);
+  return { undo };
+}
+
+// Rows that hang off a card, restored in this order after `columns` and `tasks`.
+const TASK_CHILDREN = ["task_events", "task_links", "task_assignees", "task_images", "time_entries", "task_blockers"];
+
+/**
+ * Snapshots the cards with `by` = `id` (one card, or a whole column with its
+ * column row) and their child rows into `trash`, inside the database, so the
+ * deleter can undo. Returns the trash id. Run it in the deleting transaction.
+ */
+async function trash(user: User, projectId: string, by: "id" | "column_id", id: string) {
+  const trashId = randomUUID();
+  const children = TASK_CHILDREN.map((table) =>
+    `'${table}', (SELECT COALESCE(jsonb_agg(x), '[]') FROM ${table} x WHERE x.task_id IN (SELECT id FROM t)${table === "task_blockers" ? " OR x.blocker_id IN (SELECT id FROM t)" : ""})`,
+  ).join(",\n      ");
+  const column = by === "column_id" ? id : null;
+  await run(
+    `WITH t AS (SELECT * FROM tasks WHERE ${by} = ?)
+     INSERT INTO trash (id, user_id, project_id, payload)
+     SELECT ?, ?, ?, jsonb_build_object(
+      'columns', (SELECT COALESCE(jsonb_agg(c), '[]') FROM columns c WHERE c.id = ?),
+      'done', (SELECT done_column_id = ? FROM projects WHERE id = ?),
+      'tasks', (SELECT COALESCE(jsonb_agg(t), '[]') FROM t),
+      -- Subtasks left behind lose their parent (ON DELETE SET NULL); undo links them again.
+      'orphans', (SELECT COALESCE(jsonb_agg(jsonb_build_object('id', o.id, 'parent_id', o.parent_id)), '[]')
+                    FROM tasks o WHERE o.parent_id IN (SELECT id FROM t) AND o.id NOT IN (SELECT id FROM t)),
+      ${children})`,
+    id, trashId, user.id, projectId, column, column, projectId,
+  );
+  await run("DELETE FROM trash WHERE at < now() - interval '1 day'");
+  return trashId;
+}
+
+/** Puts back what deleteTask/deleteColumn removed; only for the person who deleted it. */
+export async function restoreDeleted(trashId: string) {
+  const user = await requireUser();
+  const row = await get<{ project_id: string; column: boolean }>(
+    "SELECT project_id, jsonb_array_length(payload->'columns') > 0 AS column FROM trash WHERE id = ? AND user_id = ?",
+    trashId, user.id,
+  );
+  if (!row || !await (row.column ? canManage : canEdit)(user, row.project_id)) return { error: "Nothing to undo." };
+  try {
+    await transaction(async () => {
+      for (const table of ["columns", "tasks", ...TASK_CHILDREN]) {
+        await run(`INSERT INTO ${table} SELECT * FROM jsonb_populate_recordset(NULL::${table}, (SELECT payload->'${table}' FROM trash WHERE id = ?))`, trashId);
+      }
+      await run(
+        `UPDATE tasks x SET parent_id = o.parent_id
+           FROM jsonb_populate_recordset(NULL::tasks, (SELECT payload->'orphans' FROM trash WHERE id = ?)) o WHERE x.id = o.id`,
+        trashId,
+      );
+      if (row.column) {
+        await run(
+          `UPDATE projects SET done_column_id = (SELECT payload->'columns'->0->>'id' FROM trash WHERE id = ?)
+            WHERE id = ? AND (SELECT (payload->>'done')::boolean FROM trash WHERE id = ?)`,
+          trashId, row.project_id, trashId,
+        );
+        // Other columns may have been renumbered since; the restored one goes back in front of its old neighbour.
+        await run(
+          `UPDATE columns c SET position = r.n FROM (
+             SELECT id, ROW_NUMBER() OVER (ORDER BY position, id = (SELECT payload->'columns'->0->>'id' FROM trash WHERE id = ?) DESC) - 1 AS n
+               FROM columns WHERE project_id = ?) r
+            WHERE c.id = r.id`,
+          trashId, row.project_id,
+        );
+      }
+      await run("DELETE FROM trash WHERE id = ?", trashId);
+    });
+  } catch (err) {
+    // Something it pointed at is gone or taken (its column, a blocker, a running timer).
+    console.error("restore failed", err);
+    return { error: "This can no longer be undone." };
+  }
+  changed(user);
+  return { ok: true };
 }
 
 export async function archiveTask(id: string, archived: boolean) {
@@ -470,7 +558,7 @@ export async function archiveTask(id: string, archived: boolean) {
     await logEvent(id, user.id, archived ? "Archived" : "Restored from the archive");
   });
   await notify("task.updated", id, archived ? "Archived" : "Restored from the archive", user.name);
-  revalidatePath("/board");
+  changed(user);
 }
 
 /** Adds one assignee and keeps the others (bulk assign in List view). */
@@ -482,7 +570,7 @@ export async function addAssignee(taskId: string, userId: string) {
   const name = (await get<{ name: string }>("SELECT name FROM users WHERE id = ?", userId))!.name;
   await logEvent(taskId, user.id, `Assigned to ${name}`);
   await notify("task.updated", taskId, `Assigned to ${name}`, user.name);
-  revalidatePath("/board");
+  changed(user);
 }
 
 /**
@@ -518,7 +606,7 @@ export async function addComment(taskId: string, body: string) {
     url: `/board?${new URLSearchParams({ project: task.project_id, task: taskId })}`,
   }));
   await notify("task.updated", taskId, `Comment: ${text}`, user.name);
-  revalidatePath("/board");
+  changed(user);
   return { ok: true, agent: AGENT_MENTION.test(text) };
 }
 
@@ -530,7 +618,7 @@ export async function askCardAgent(taskId: string) {
   );
   if (!task || await projectRole(user, task.project_id) === null) return;
   await answerOnCard(user, taskId);
-  revalidatePath("/board");
+  changed(user);
 }
 
 /** A card reached its done column: say so on every card that was waiting on it. */
@@ -578,7 +666,35 @@ export async function setBlocker(taskId: string, blockerId: string, blocked: boo
     await run("INSERT INTO task_blockers (task_id, blocker_id) VALUES (?,?) ON CONFLICT DO NOTHING", taskId, blockerId);
     await logEvent(taskId, user.id, `Blocked by ${blocker.key}`);
   }
-  revalidatePath("/board");
+  changed(user);
+  return { ok: true };
+}
+
+/** A new card under `parentId`, in the project's first column. One level deep: a subtask has no subtasks. */
+export async function addSubtask(parentId: string, title: string) {
+  const user = await requireUser();
+  const clean = title.trim().slice(0, 500);
+  const parent = await get<{ project_id: string; parent_id: string | null; key: string }>(
+    `SELECT c.project_id, t.parent_id, p.key || '-' || t.number AS key
+       FROM tasks t JOIN columns c ON c.id = t.column_id JOIN projects p ON p.id = c.project_id WHERE t.id = ?`,
+    parentId,
+  );
+  if (!clean) return { error: "Title is required." };
+  if (!parent || !await canEdit(user, parent.project_id)) return { error: "You cannot edit this task." };
+  if (parent.parent_id) return { error: "A subtask cannot have subtasks." };
+  const id = randomUUID();
+  await transaction(async () => {
+    const column = (await get<{ id: string }>("SELECT id FROM columns WHERE project_id = ? ORDER BY position LIMIT 1", parent.project_id))!;
+    await run(
+      `INSERT INTO tasks (id, column_id, title, priority, position, number, created_at, fields, parent_id)
+       VALUES (?,?,?,'medium',(SELECT COALESCE(MAX(position) + 1, 0) FROM tasks WHERE column_id = ?),?,?,'{}',?)`,
+      id, column.id, clean, column.id, await nextTaskNumber(parent.project_id), now(), parentId,
+    );
+    await logEvent(id, user.id, `Task created as a subtask of ${parent.key}`);
+    await logEvent(parentId, user.id, `Subtask added: ${clean}`);
+  });
+  await notify("task.created", id, "Task created", user.name);
+  changed(user);
   return { ok: true };
 }
 
@@ -591,7 +707,7 @@ export async function setChecklist(taskId: string, items: CheckItem[]) {
     .map((i) => ({ text: String(i?.text ?? "").trim().slice(0, 300), done: i?.done === true }))
     .filter((i) => i.text);
   await run("UPDATE tasks SET checklist = ?::jsonb WHERE id = ?", JSON.stringify(clean), taskId);
-  revalidatePath("/board");
+  changed(user);
 }
 
 export async function setProjectMember(projectId: string, userId: string, role: "admin" | "editor" | "viewer" | "") {
@@ -605,7 +721,7 @@ export async function setProjectMember(projectId: string, userId: string, role: 
      ON CONFLICT (project_id, user_id) DO UPDATE SET role = excluded.role`,
     projectId, userId, role,
   );
-  revalidatePath("/board");
+  changed(user);
   return { ok: true };
 }
 
@@ -671,7 +787,7 @@ export async function addProject(name: string, templateId?: string, examples = f
     if (data?.columns.length) await seedImport(id, data, user);
     else await seedProject(id, templateId, null, examples, user.id);
   });
-  revalidatePath("/board");
+  changed(user);
   return { ok: true, id };
 }
 
@@ -690,7 +806,7 @@ export async function importIntoProject(projectId: string, imported: Imported, r
     if (replace) await run("DELETE FROM columns WHERE project_id = ?", projectId);
     await seedImport(projectId, data, user);
   });
-  revalidatePath("/board");
+  changed(user);
   return { ok: true, cards: data.cards.length };
 }
 
@@ -702,7 +818,7 @@ export async function deleteProject(id: string) {
     return { error: "A workspace needs at least one project." };
   }
   await run("DELETE FROM projects WHERE id = ? AND workspace_id = ?", id, user.workspace_id);
-  revalidatePath("/board");
+  changed(user);
   return { ok: true };
 }
 
@@ -712,7 +828,7 @@ export async function renameWorkspace(name: string) {
   const clean = name.trim();
   if (!clean) return { error: "Workspace name is required." };
   await run("UPDATE workspaces SET name = ? WHERE id = ?", clean, user.workspace_id);
-  revalidatePath("/board");
+  changed(user);
   return { ok: true };
 }
 
@@ -728,7 +844,7 @@ export async function rotateGithubWebhook(projectId: string) {
   if (!saved) return { error: "Connect a repository first." };
   const webhookSecret = randomBytes(24).toString("hex");
   await run("UPDATE projects SET github = ? WHERE id = ?", JSON.stringify({ ...saved, webhookSecret }), projectId);
-  revalidatePath("/board");
+  changed(user);
   return { secret: webhookSecret };
 }
 
@@ -741,7 +857,7 @@ export async function rotateInboundToken(projectId: string) {
   if (!await canManage(user, projectId)) return { error: "You cannot manage this project." };
   const token = randomBytes(24).toString("hex");
   await run("UPDATE projects SET inbound_token = ? WHERE id = ?", createHash("sha256").update(token).digest("hex"), projectId);
-  revalidatePath("/board");
+  changed(user);
   return { token };
 }
 
@@ -770,7 +886,7 @@ export async function saveOutgoing(projectId: string, url: string, events: strin
   const clean = url.trim();
   if (!clean) {
     await run("UPDATE projects SET outgoing = NULL WHERE id = ?", projectId);
-    revalidatePath("/board");
+    changed(user);
     return { ok: "Turned off." };
   }
   if (!URL.canParse(clean) || !/^https?:$/.test(new URL(clean).protocol)) return { error: "URL must start with http:// or https://." };
@@ -781,7 +897,7 @@ export async function saveOutgoing(projectId: string, url: string, events: strin
   const saved = (await get<{ outgoing: { secret: string } | null }>("SELECT outgoing FROM projects WHERE id = ?", projectId))?.outgoing;
   const secret = !saved || rotate ? randomBytes(24).toString("hex") : saved.secret;
   await run("UPDATE projects SET outgoing = ? WHERE id = ?", JSON.stringify({ url: clean, secret, events: picked }), projectId);
-  revalidatePath("/board");
+  changed(user);
   return { ok: "Saved.", secret: secret === saved?.secret ? undefined : secret };
 }
 
@@ -797,7 +913,7 @@ export async function testOutgoing(projectId: string) {
   const { outgoingPayload } = await import("./outgoing-events");
   const body = JSON.stringify(outgoingPayload("ping", { id: projectId, name: p.name, key: p.key }, null, "Test delivery", user.name));
   const status = await deliver(projectId, p.outgoing, "ping", body);
-  revalidatePath("/board");
+  changed(user);
   return { status };
 }
 
@@ -808,7 +924,7 @@ export async function setProjectKey(projectId: string, key: string) {
   const clean = key.trim().toUpperCase();
   if (!PROJECT_KEY_RE.test(clean)) return { error: "2–10 letters or digits, starting with a letter." };
   await run("UPDATE projects SET key = ? WHERE id = ?", clean, projectId);
-  revalidatePath("/board");
+  changed(user);
   return { ok: true };
 }
 
@@ -864,7 +980,7 @@ export async function saveMeeting(_prev: unknown, form: FormData) {
     }
     for (const a of attendees) await run("INSERT INTO meeting_attendees (meeting_id, user_id) VALUES (?,?)", meetingId, a);
   });
-  revalidatePath("/board");
+  changed(user);
   return { ok: true };
 }
 
@@ -874,7 +990,7 @@ export async function deleteMeeting(id: string) {
   if (!row) return { error: "Meeting not found." };
   if (row.created_by !== user.id && !user.is_admin) return { error: "Only its creator or a workspace admin can delete this meeting." };
   await run("DELETE FROM meetings WHERE id = ?", id);
-  revalidatePath("/board");
+  changed(user);
   return { ok: true };
 }
 
@@ -895,7 +1011,7 @@ export async function createGithubIssue(taskId: string) {
     const issue = await createIssue(config, `[${task.key}] ${task.title}`, body);
     await logEvent(taskId, user.id, `Created GitHub issue #${issue.number}: ${issue.url}`);
     forgetGithub(task.project_id);
-    revalidatePath("/board");
+    changed(user);
     return { ok: true, url: issue.url };
   } catch (e) {
     return { error: e instanceof GithubError ? e.message : "Could not reach GitHub." };
@@ -910,7 +1026,7 @@ export async function saveGithub(projectId: string, repo: string, token: string)
   const clean = repo.trim().replace(/^https:\/\/github\.com\//, "").replace(/\.git$|\/$/g, "");
   if (!clean) {
     await run("UPDATE projects SET github = NULL WHERE id = ?", projectId);
-    revalidatePath("/board");
+    changed(user);
     return { ok: "Disconnected." };
   }
   if (!REPO_RE.test(clean)) return { error: "Repository must look like owner/name." };
@@ -926,7 +1042,7 @@ export async function saveGithub(projectId: string, repo: string, token: string)
   } catch (e) {
     return { error: e instanceof GithubError ? e.message : "Could not reach GitHub." };
   }
-  revalidatePath("/board");
+  changed(user);
   return { ok: "Connected.", repo: full };
 }
 
@@ -936,7 +1052,7 @@ export async function renameProject(id: string, name: string) {
   const clean = name.trim();
   if (!clean) return { error: "Project name is required." };
   await run("UPDATE projects SET name = ? WHERE id = ?", clean, id);
-  revalidatePath("/board");
+  changed(user);
   return { ok: true };
 }
 
@@ -955,7 +1071,7 @@ export async function addColumn(projectId: string, title: string, color: string,
     "INSERT INTO columns (id, project_id, title, color, position, stage_limit_days) VALUES (?,?,?,?,?,?)",
     randomUUID(), projectId, clean, color, next, limitDays,
   );
-  revalidatePath("/board");
+  changed(user);
   return { ok: true };
 }
 
@@ -967,11 +1083,11 @@ export async function updateColumn(id: string, title: string, color: string, lim
   if (!COLUMN_COLORS.includes(color)) return { error: "Invalid colour." };
   if (!validLimit(limitDays)) return { error: "Day limit must be a whole number from 1 to 365." };
   await run("UPDATE columns SET title = ?, color = ?, stage_limit_days = ? WHERE id = ?", clean, color, limitDays, id);
-  revalidatePath("/board");
+  changed(user);
   return { ok: true };
 }
 
-/** Deleting a column takes its tasks with it (FK cascade) — the UI confirms the count first. */
+/** Deleting a column takes its tasks with it (FK cascade) — the UI confirms the count first and offers undo after. */
 export async function deleteColumn(id: string) {
   const user = await requireUser();
   const projectId = await projectOfColumn(id);
@@ -979,9 +1095,13 @@ export async function deleteColumn(id: string) {
   if (!await canManage(user, projectId)) return { error: "You cannot manage this project." };
   const last = (await get<{ n: number }>("SELECT COUNT(*) n FROM columns WHERE project_id = ?", projectId))!.n;
   if (last <= 1) return { error: "A board needs at least one column." };
-  await run("DELETE FROM columns WHERE id = ?", id);
-  revalidatePath("/board");
-  return { ok: true };
+  const undo = await transaction(async () => {
+    const undo = await trash(user, projectId, "column_id", id);
+    await run("DELETE FROM columns WHERE id = ?", id);
+    return undo;
+  });
+  changed(user);
+  return { ok: true, undo };
 }
 
 /** Marks the column that counts as done; null goes back to "the last column". */
@@ -990,13 +1110,14 @@ export async function setDoneColumn(projectId: string, columnId: string | null) 
   if (!await canManage(user, projectId)) return { error: "You cannot manage this project." };
   if (columnId && await projectOfColumn(columnId) !== projectId) return { error: "Column not found." };
   await run("UPDATE projects SET done_column_id = ? WHERE id = ?", columnId, projectId);
-  revalidatePath("/board");
+  changed(user);
   return { ok: true };
 }
 
-/** Move a column left or right. Positions are renumbered densely afterwards. */
-export async function moveColumn(id: string, direction: -1 | 1) {
+/** Move a column `by` places (negative = left). Positions are renumbered densely afterwards. */
+export async function moveColumn(id: string, by: number) {
   const user = await requireUser();
+  if (!Number.isInteger(by)) return;
   const col = await get<{ project_id: string; position: number }>(
     "SELECT project_id, position FROM columns WHERE id = ?",
     id,
@@ -1006,12 +1127,12 @@ export async function moveColumn(id: string, direction: -1 | 1) {
     await all<{ id: string }>("SELECT id FROM columns WHERE project_id = ? ORDER BY position", col.project_id)
   ).map((r) => r.id);
   const from = ordered.indexOf(id);
-  const moved = reorder(ordered, from, from + direction);
+  const moved = reorder(ordered, from, from + by);
   if (moved === ordered) return;
   await transaction(async () => {
     for (const [i, cid] of moved.entries()) await run("UPDATE columns SET position = ? WHERE id = ?", i, cid);
   });
-  revalidatePath("/board");
+  changed(user);
 }
 
 
@@ -1049,7 +1170,7 @@ export async function addField(projectId: string, name: string, type: FieldType,
     "INSERT INTO custom_fields (id, project_id, name, type, options, position) VALUES (?,?,?,?,?,?)",
     randomUUID(), projectId, clean, type, JSON.stringify(opts), taken.length,
   );
-  revalidatePath("/board");
+  changed(user);
   return { ok: true };
 }
 
@@ -1062,7 +1183,7 @@ export async function deleteField(id: string) {
     await run("UPDATE tasks SET fields = fields - ? WHERE column_id IN (SELECT id FROM columns WHERE project_id = ?)", id, field.project_id);
     await run("DELETE FROM custom_fields WHERE id = ?", id);
   });
-  revalidatePath("/board");
+  changed(user);
   return { ok: true };
 }
 
@@ -1083,7 +1204,7 @@ export async function saveView(projectId: string, name: string, filters: Filters
       id, projectId, clean, JSON.stringify(cleanFilters(filters)), layout, user.id, now(),
     );
   });
-  revalidatePath("/board");
+  changed(user);
   return { ok: true, id };
 }
 
@@ -1092,7 +1213,7 @@ export async function deleteView(id: string) {
   const view = await get<{ project_id: string }>("SELECT project_id FROM saved_views WHERE id = ?", id);
   if (!view || !await canEdit(user, view.project_id)) return { error: "You cannot edit this project." };
   await run("DELETE FROM saved_views WHERE id = ?", id);
-  revalidatePath("/board");
+  changed(user);
   return { ok: true };
 }
 
@@ -1128,7 +1249,7 @@ export async function startTimer(taskId: string) {
     await run("UPDATE time_entries SET ended_at = ? WHERE user_id = ? AND ended_at IS NULL", now(), user.id);
     await run("INSERT INTO time_entries (task_id, user_id, started_at) VALUES (?,?,?)", taskId, user.id, now());
   });
-  revalidatePath("/board");
+  changed(user);
   return { ok: true };
 }
 
@@ -1136,7 +1257,7 @@ export async function startTimer(taskId: string) {
 export async function stopTimer(taskId: string) {
   const user = await requireUser();
   await run("UPDATE time_entries SET ended_at = ? WHERE task_id = ? AND user_id = ? AND ended_at IS NULL", now(), taskId, user.id);
-  revalidatePath("/board");
+  changed(user);
   return { ok: true };
 }
 
@@ -1151,7 +1272,7 @@ export async function logTime(taskId: string, text: string) {
     "INSERT INTO time_entries (task_id, user_id, started_at, ended_at) VALUES (?,?,?,?)",
     taskId, user.id, new Date(end - seconds * 1000).toISOString(), new Date(end).toISOString(),
   );
-  revalidatePath("/board");
+  changed(user);
   return { ok: true };
 }
 
@@ -1170,7 +1291,7 @@ export async function createCanvas(projectId: string, name: string) {
     "INSERT INTO canvases (id, project_id, name, position, snapshot, updated_at) VALUES (?,?,?,?,NULL,?)",
     id, projectId, clean, next, now(),
   );
-  revalidatePath("/board");
+  changed(user);
   return id;
 }
 
@@ -1180,7 +1301,7 @@ export async function renameCanvas(id: string, name: string) {
   const clean = name.trim();
   if (!clean) return;
   await run("UPDATE canvases SET name = ? WHERE id = ?", clean, id);
-  revalidatePath("/board");
+  changed(user);
 }
 
 export async function deleteCanvas(id: string) {
@@ -1189,7 +1310,7 @@ export async function deleteCanvas(id: string) {
   await run("DELETE FROM canvases WHERE id = ?", id);
   // Anyone else on this sheet would keep drawing into a row that no longer exists.
   broadcast(id, "", { type: "deleted" });
-  revalidatePath("/board");
+  changed(user);
 }
 
 // ── AI agent ────────────────────────────────────────────────────────────────
@@ -1208,7 +1329,7 @@ export async function saveAiConfig(_prev: unknown, form: FormData) {
 
   if (form.get("disable")) {
     await run("UPDATE workspaces SET ai_config = NULL WHERE id = ?", user.workspace_id);
-    revalidatePath("/board");
+    changed(user);
     return { ok: "AI agent turned off." };
   }
   if (!AI_PROVIDERS.includes(provider)) return { error: "Pick a provider." };
@@ -1225,7 +1346,7 @@ export async function saveAiConfig(_prev: unknown, form: FormData) {
     "UPDATE workspaces SET ai_config = ? WHERE id = ?",
     JSON.stringify({ provider, model, baseUrl: provider === "openai" ? baseUrl : "", apiKey: key, reasoning }), user.workspace_id,
   );
-  revalidatePath("/board");
+  changed(user);
   return { ok: "Saved." };
 }
 

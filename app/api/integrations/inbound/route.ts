@@ -6,6 +6,7 @@ import { keysIn } from "@/lib/github-events";
 import { addressOf, emailOf, parseInbound } from "@/lib/inbound";
 import { notify } from "@/lib/outgoing";
 import { nextTaskNumber } from "@/lib/tasks";
+import { nudgeBoard } from "@/lib/chat-live";
 
 const sha256 = (s: string) => createHash("sha256").update(s).digest();
 
@@ -28,7 +29,7 @@ export async function POST(req: Request) {
   // Basic auth (https://x:<token>@host/…) is the only header some mail services can send.
   const basic = /^Basic\s+/i.test(auth) && Buffer.from(auth.replace(/^Basic\s+/i, ""), "base64").toString().split(":").slice(1).join(":");
   const given = basic || auth.replace(/^Bearer\s+/i, "") || url.searchParams.get("token") || "";
-  const row = await get<{ inbound_token: string | null; key: string }>("SELECT inbound_token, key FROM projects WHERE id = ?", projectId);
+  const row = await get<{ inbound_token: string | null; key: string; workspace_id: string }>("SELECT inbound_token, key, workspace_id FROM projects WHERE id = ?", projectId);
   if (!row?.inbound_token || !given || !timingSafeEqual(sha256(given), Buffer.from(row.inbound_token, "hex"))) {
     return NextResponse.json({ error: "Bad token." }, { status: 401 });
   }
@@ -62,6 +63,7 @@ export async function POST(req: Request) {
       });
       await notify("task.updated", card.id, `Email reply from ${email.from}`, null);
       revalidatePath("/board");
+      nudgeBoard(row.workspace_id);
       return NextResponse.json({ ok: true, id: card.id, key: card.key, replied: true });
     }
     body = { title: email.subject, description: [`From: ${email.from}`, email.text].filter(Boolean).join("\n\n") };
@@ -90,5 +92,6 @@ export async function POST(req: Request) {
   });
   await notify("task.created", id, email ? `Created from email by ${email.from}` : "Created by inbound webhook", null);
   revalidatePath("/board");
+  nudgeBoard(row.workspace_id);
   return NextResponse.json({ ok: true, id, key: `${row.key}-${number}`, column: column.title }, { status: 201 });
 }

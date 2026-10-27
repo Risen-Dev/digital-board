@@ -2,8 +2,8 @@
 
 import { useActionState, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlignLeft, Archive, CalendarDays, Check, CircleDot, Clock, Flag, Hash, List as ListIcon, Plus, Settings2, Type, GitBranch, GitPullRequest, History, Image as ImageIcon, ImagePlus, ListChecks, Ban, Pause, Play, Repeat, Sparkles, Tag, Trash2, Users, X, type LucideIcon } from "lucide-react";
-import { addComment, addField, archiveTask, askCardAgent, createGithubIssue, createTask, deleteField, deleteTask, fetchHistory, fetchTime, logTime, setBlocker, setChecklist, startTimer, stopTimer, updateTask } from "@/lib/actions";
+import { AlignLeft, Archive, CalendarDays, Check, CircleDot, Clock, Flag, Hash, List as ListIcon, Plus, Settings2, Type, GitBranch, GitPullRequest, History, Image as ImageIcon, ImagePlus, ListChecks, ListTree, Ban, Pause, Play, Repeat, Sparkles, Tag, Trash2, Users, X, type LucideIcon } from "lucide-react";
+import { addComment, addField, addSubtask, archiveTask, askCardAgent, createGithubIssue, createTask, deleteField, deleteTask, fetchHistory, fetchTime, logTime, setBlocker, setChecklist, startTimer, stopTimer, updateTask } from "@/lib/actions";
 import { branchNameOf, FIELD_TYPES, formatDuration, initials, pullRequestUrlOf, PRIORITIES, PRIORITY_CFG, REPEATS, type CheckItem, type Column, type CustomField, type Entry, type FieldType, type Member, type Task, type TaskImage } from "@/lib/board";
 import { Avatar } from "./avatar";
 import { imageUrl } from "./task-card";
@@ -39,9 +39,11 @@ type Props = {
   /** A card in the Dependencies list was clicked. */
   onOpenTask: (task: Task) => void;
   onClose: () => void;
+  /** The card was deleted; `undo` restores it. */
+  onDeleted: (undo: string, name: string) => void;
 };
 
-export function TaskDialog({ task, columns, members, mentionable, defaultColumnId, links, repo, tags, onTag, doneColumnId, fields, manageFields, onOpenTask, onClose }: Props) {
+export function TaskDialog({ task, columns, members, mentionable, defaultColumnId, links, repo, tags, onTag, doneColumnId, fields, manageFields, onOpenTask, onClose, onDeleted }: Props) {
   const tr = useT();
   const editing = task !== null;
   const [state, action] = useActionState(editing ? updateTask : createTask, null);
@@ -227,8 +229,9 @@ export function TaskDialog({ task, columns, members, mentionable, defaultColumnI
                     type="button"
                     onClick={async () => {
                       if (!confirm(tr("Delete \"{name}\" and its history? Archive keeps it restorable.", { name: task.title }))) return;
-                      await deleteTask(task.id);
+                      const r = await deleteTask(task.id);
                       onClose();
+                      if (r?.undo) onDeleted(r.undo, task.title);
                     }}
                     className="flex items-center gap-1.5 rounded-md border px-3 py-2 text-xs text-[#ef4444] transition-colors hover:bg-[rgba(239,68,68,0.08)]"
                   >
@@ -246,6 +249,17 @@ export function TaskDialog({ task, columns, members, mentionable, defaultColumnI
             {editing && (
               <Dependencies
                 key={`deps-${task.id}`}
+                task={task}
+                columns={columns}
+                doneColumnId={doneColumnId ?? columns.at(-1)?.id ?? null}
+                onOpen={onOpenTask}
+                onChange={loadHistory}
+              />
+            )}
+
+            {editing && (
+              <Subtasks
+                key={`subtasks-${task.id}`}
                 task={task}
                 columns={columns}
                 doneColumnId={doneColumnId ?? columns.at(-1)?.id ?? null}
@@ -626,6 +640,79 @@ function TimeTracking({ taskId }: { taskId: string }) {
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+/** The card's parent, or its subtasks plus a quick add. Subtasks come from `columns`, so they follow every refresh. */
+function Subtasks({ task, columns, doneColumnId, onOpen, onChange }: {
+  task: Task; columns: Column[]; doneColumnId: string | null; onOpen: (task: Task) => void; onChange: () => void;
+}) {
+  const tr = useT();
+  const [title, setTitle] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const cards = columns.flatMap((c) => c.tasks);
+  const parent = task.parentId ? cards.find((t) => t.id === task.parentId) : undefined;
+  const children = cards.filter((t) => t.parentId === task.id);
+  const done = children.filter((t) => t.columnId === doneColumnId).length;
+
+  async function add() {
+    if (!title.trim() || busy) return;
+    setBusy(true);
+    setError(null);
+    const result = await addSubtask(task.id, title);
+    setBusy(false);
+    if ("error" in result) return setError(result.error ?? "Could not save.");
+    setTitle("");
+    onChange();
+  }
+
+  const open = (t: Task) => (
+    <button type="button" onClick={() => onOpen(t)} className="flex min-w-0 flex-1 items-center gap-2 text-left hover:underline">
+      <span className="shrink-0 font-mono text-muted-foreground">{t.key}</span>
+      <span className={`truncate ${t.columnId === doneColumnId ? "text-muted-foreground line-through" : ""}`}>{t.title}</span>
+    </button>
+  );
+
+  if (task.parentId) {
+    return parent ? (
+      <div className="flex items-center gap-2 border-t py-4 text-xs">
+        <span className="flex shrink-0 items-center gap-1.5 font-semibold text-muted-foreground"><ListTree className="size-3.5" />{tr("Subtask of")}</span>
+        {open(parent)}
+      </div>
+    ) : null;
+  }
+  return (
+    <div className="border-t py-4">
+      <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+        <ListTree className="size-3.5" />
+        {tr("Subtasks")}
+        {children.length > 0 && <span className="font-normal">{done}/{children.length}</span>}
+      </h3>
+      {children.length > 0 && (
+        <ul className="mb-3 flex flex-col gap-1">
+          {children.map((t) => (
+            <li key={t.id} className="flex items-center gap-2 text-xs">
+              {open(t)}
+              {t.columnId === doneColumnId && <Check className="size-3.5 shrink-0 text-[var(--chart-2)]" aria-label={tr("Done")} />}
+            </li>
+          ))}
+        </ul>
+      )}
+      <input
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key !== "Enter") return;
+          e.preventDefault(); // not the dialog's form
+          void add();
+        }}
+        disabled={busy}
+        placeholder={tr("Add a subtask… press Enter")}
+        className="w-full rounded-md border bg-background px-2.5 py-1.5 text-xs outline-none transition-colors focus:border-ring"
+      />
+      {error && <p className="mt-1 text-[11px] text-[#ef4444]">{tr(error)}</p>}
     </div>
   );
 }

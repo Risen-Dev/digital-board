@@ -23,6 +23,10 @@ export type Task = {
   images: TaskImage[];
   /** Cards in the same project this one waits on; `done` = that card sits in the done column. */
   blockedBy: Blocker[];
+  /** The card this one is a subtask of. */
+  parentId: string | null;
+  /** This card's subtasks; `done` as for blockedBy. */
+  subtasks: Blocker[];
   /** Whole days since the card entered its current column. */
   stageDays: number;
   /** Seconds logged on the card by everyone, running timers counted up to the load. */

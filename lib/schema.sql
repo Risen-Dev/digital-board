@@ -410,3 +410,18 @@ CREATE TABLE IF NOT EXISTS login_failures (
 );
 CREATE INDEX IF NOT EXISTS login_failures_key ON login_failures(key, at);
 CREATE INDEX IF NOT EXISTS login_failures_at ON login_failures(at);
+
+-- Deleted cards and columns with everything that hangs off them, so the person
+-- who deleted can undo (lib/actions.ts trash/restoreDeleted). Kept a day.
+CREATE TABLE IF NOT EXISTS trash (
+  id         TEXT PRIMARY KEY,
+  user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  payload    JSONB NOT NULL,
+  at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Subtasks: a card under another card of the same project, one level deep
+-- (lib/actions.ts addSubtask). Deleting the parent leaves its subtasks as cards.
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS parent_id TEXT REFERENCES tasks(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS tasks_parent ON tasks(parent_id) WHERE parent_id IS NOT NULL;

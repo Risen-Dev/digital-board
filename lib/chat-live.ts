@@ -2,27 +2,32 @@ import "server-only";
 import { listen, onLive, publish } from "@/lib/live-bus";
 
 /**
- * Chat push: each open Chat tab holds an SSE stream (GET /api/chat/live) and
- * gets a content-free nudge whenever its workspace has a new or edited message;
- * it then refetches through the normal GET, which does the access checks.
+ * Workspace push: each open tab holds an SSE stream (GET /api/chat/live) and
+ * gets a content-free nudge whenever its workspace has a new or edited message
+ * (Chat refetches through the normal GET, which does the access checks) or a
+ * board change (the workspace shell calls router.refresh()).
  * Nudges reach other app instances through lib/live-bus.ts.
  * On globalThis so dev hot reloads don't orphan open streams.
  */
 const hub = globalThis as unknown as { chatListeners?: Map<string, Set<(data: string) => void>> };
 const listeners = (hub.chatListeners ??= new Map());
 
-type Nudge = { workspaceId: string; type: "message" | "edit" };
+/** `by` = the user whose action it was; their own tab already revalidated. */
+type Nudge = { workspaceId: string; type: "message" | "edit" | "board"; by?: string | null };
 
-function deliver({ workspaceId, type }: Nudge) {
-  const data = `data: ${JSON.stringify({ type })}\n\n`;
+function deliver({ workspaceId, type, by }: Nudge) {
+  const data = `data: ${JSON.stringify({ type, by })}\n\n`;
   for (const send of listeners.get(workspaceId) ?? []) send(data);
 }
 onLive("chat", deliver);
 
-export function nudgeChat(workspaceId: string, type: Nudge["type"] = "message") {
-  deliver({ workspaceId, type });
-  publish("chat", { workspaceId, type });
+export function nudgeChat(workspaceId: string, type: Nudge["type"] = "message", by: string | null = null) {
+  deliver({ workspaceId, type, by });
+  publish("chat", { workspaceId, type, by });
 }
+
+/** Board data changed: other members' open tabs refresh. */
+export const nudgeBoard = (workspaceId: string, by: string | null = null) => nudgeChat(workspaceId, "board", by);
 
 export function chatStream(req: Request, workspaceId: string) {
   listen();

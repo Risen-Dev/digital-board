@@ -231,7 +231,10 @@ function Thread({
     const t = setInterval(() => void poll(), POLL_MS);
     // EventSource reconnects on its own; an edit needs a full refetch (see poll).
     const live = new EventSource("/api/chat/live");
-    live.onmessage = (e) => void poll((JSON.parse(e.data) as { type: string }).type === "edit");
+    live.onmessage = (e) => {
+      const { type } = JSON.parse(e.data) as { type: string };
+      if (type !== "board") void poll(type === "edit");
+    };
     return () => {
       clearInterval(t);
       live.close();

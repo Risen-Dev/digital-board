@@ -561,6 +561,16 @@ const id: Record<string, string> = {
   "A project can have at most 20 fields.": "Satu proyek maksimal 20 field.",
   "A field with that name already exists.": "Field dengan nama itu sudah ada.",
   "A custom field has an invalid value.": "Ada field kustom yang nilainya tidak valid.",
+  "Deleted \"{name}\"": "\"{name}\" dihapus",
+  "Undo brings it back with its history.": "Urungkan untuk mengembalikannya beserta riwayatnya.",
+  "Undo": "Urungkan",
+  "Undo failed": "Gagal mengurungkan",
+  "Nothing to undo.": "Tidak ada yang bisa diurungkan.",
+  "This can no longer be undone.": "Ini sudah tidak bisa diurungkan.",
+  "Subtasks": "Subtask",
+  "Subtask of": "Subtask dari",
+  "Add a subtask… press Enter": "Tambah subtask… tekan Enter",
+  "A subtask cannot have subtasks.": "Subtask tidak bisa punya subtask.",
 };
 
 export default id;

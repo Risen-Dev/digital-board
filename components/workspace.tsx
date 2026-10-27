@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { applyFilters, initials, labelsOf, LAYOUTS, type Column, type CustomField, type Filters, type Member, type SavedView, type Task } from "@/lib/board";
 import { SavedViews } from "./saved-views";
-import { archiveTask, fetchArchived, logoutAction, renameProject, renameWorkspace } from "@/lib/actions";
+import { archiveTask, fetchArchived, logoutAction, renameProject, renameWorkspace, restoreDeleted } from "@/lib/actions";
 import { Modal } from "./modal";
 import type { CanvasMeta, CanvasTag, FeedItem, MemberPresence, Project, ProjectMember, SearchCard, Unread } from "@/lib/queries";
 import type { User } from "@/lib/auth";
@@ -59,7 +59,8 @@ const SECTIONS: { key: SectionKey; Icon: typeof Home; label: string }[] = [
   { key: "settings", Icon: Settings, label: "Settings" },
 ];
 
-type Alert = { title: string; body: string };
+/** `undo` = a trash id: the toast offers to restore what was just deleted. */
+type Alert = { title: string; body: string; undo?: string };
 
 /**
  * Registers the service worker and saves this browser's push subscription, so
@@ -267,17 +268,19 @@ export function Workspace({
   const [unread, setUnread] = useState<Unread[]>(initialUnread);
   useEffect(() => {
     let alive = true;
-    const ping = async () => {
+    // `refresh`: board data changed, reload the page props even without new card activity.
+    const ping = async (refresh = false) => {
       try {
         const res = await fetch("/api/presence", { cache: "no-store" });
         if (!res.ok || !alive) return;
         const data = (await res.json()) as { members: MemberPresence[]; unread: Unread[]; notifications: FeedItem[]; meetings: Meeting[] };
-        const fresh = data.notifications.filter((item) => !seenCards.current.has(item.id));
+        // Your own moves and edits stay in the bell but don't alert you; this tab already shows them.
+        const fresh = data.notifications.filter((item) => !seenCards.current.has(item.id) && item.actorId !== user.id);
         const card = fresh.find(mentionsMe) ?? fresh[0];
         const chat = data.unread.find((item) => item.n > (seenChats.current.get(item.channel) ?? 0));
         seenCards.current = new Set(data.notifications.map((item) => item.id));
         // New card activity may come from outside this tab (another member, the GitHub webhook): reload the board.
-        if (card) router.refresh();
+        if (card || refresh) router.refresh();
         seenChats.current = new Map(data.unread.map((item) => [item.channel, item.n]));
         if (card) announce(mentionsMe(card) ? tr("{name} mentioned you", { name: card.actor ?? tr("Someone") }) : tr("Card updated"), `${card.taskTitle} · ${card.text}`);
         else if (chat) announce(tr("New chat message"), chatName(chat.channel, user.id, data.members));
@@ -291,9 +294,26 @@ export function Workspace({
     };
     void ping();
     const t = setInterval(ping, 45_000);
+    // Pushed nudges (lib/chat-live.ts) ping at once, so alerts and badges don't wait for the
+    // interval; a burst (bulk edit) collapses into one ping. Own board actions already revalidated.
+    let soon: number | undefined;
+    let refresh = false;
+    const source = new EventSource("/api/chat/live");
+    source.onmessage = (e) => {
+      const { type, by } = JSON.parse(e.data) as { type: string; by?: string | null };
+      if (by === user.id) return;
+      refresh ||= type === "board";
+      clearTimeout(soon);
+      soon = window.setTimeout(() => {
+        void ping(refresh);
+        refresh = false;
+      }, 400);
+    };
     return () => {
       alive = false;
       clearInterval(t);
+      clearTimeout(soon);
+      source.close();
     };
   }, [announce, router, mentionsMe, user.id, tr]);
 
@@ -321,21 +341,37 @@ export function Workspace({
       setAlert({ title: tr("Alerts unavailable"), body: tr("This browser does not support device alerts.") });
       return;
     }
+    // Unlock the alert sound while this click is still a user gesture (Safari's rule); after the
+    // permission prompt it no longer is, and awaiting resume() there never settled.
+    audio.current ??= new AudioContext();
+    void audio.current.resume().catch(() => {});
     const permission = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
     if (permission !== "granted") {
       setAlert({ title: tr("Alerts blocked"), body: tr("Allow notifications in your browser settings to enable device alerts.") });
       return;
     }
-    audio.current ??= new AudioContext();
-    if (audio.current.state === "suspended") await audio.current.resume();
-    const pushed = await subscribePush().catch(() => false);
-    setAlert({
-      title: tr("Alerts enabled"),
-      body: pushed
-        ? tr("Mentions, direct messages and due cards reach this device even with the tab closed.")
-        : tr("New card and chat notifications will show here while this tab is open."),
-    });
+    // In-tab alerts work from here. The first push subscription can take seconds (the browser's
+    // push service), so it upgrades the message afterwards instead of holding it back.
+    const enabled = { title: tr("Alerts enabled"), body: tr("New card and chat notifications will show here while this tab is open.") };
+    setAlert(enabled);
+    if (await subscribePush().catch(() => false)) {
+      setAlert((shown) => shown?.title === enabled.title
+        ? { ...enabled, body: tr("Mentions, direct messages and due cards reach this device even with the tab closed.") }
+        : shown);
+    }
   }
+
+  const deleted = (undo: string, name: string) => {
+    setAlert({ title: tr("Deleted \"{name}\"", { name }), body: tr("Undo brings it back with its history."), undo });
+    clearTimeout(alertTimer.current);
+    alertTimer.current = window.setTimeout(() => setAlert(null), 10_000);
+  };
+  const undoDelete = async (undo: string) => {
+    setAlert(null);
+    const r = await restoreDeleted(undo);
+    if (r.error) setAlert({ title: tr("Undo failed"), body: tr(r.error) });
+    router.refresh();
+  };
 
   const close = () => {
     setEditing(null);
@@ -722,7 +758,7 @@ export function Workspace({
         ) : view === VIEWS.length && project.repo ? (
           <GithubView key={project.id} projectId={project.id} repo={project.repo} />
         ) : view === 0 ? (
-          <BoardView columns={filtered} fields={fields} projectId={project.id} doneColumnId={project.doneColumnId} today={today} links={links} onOpen={setEditing} onAdd={setCreating} />
+          <BoardView columns={filtered} fields={fields} projectId={project.id} doneColumnId={project.doneColumnId} today={today} links={links} onOpen={setEditing} onAdd={setCreating} onDeleted={deleted} />
         ) : view === 1 ? (
           <ListView columns={filtered} members={members} readOnly={readOnly} onOpen={setEditing} />
         ) : view === 2 ? (
@@ -761,6 +797,7 @@ export function Workspace({
           manageFields={manages && project ? project.id : null}
           onOpenTask={setEditing}
           onClose={close}
+          onDeleted={deleted}
         />
       )}
       {showArchived && project && (
@@ -795,7 +832,17 @@ export function Workspace({
           }}
         />
       )}
-      {alert && (
+      {alert?.undo ? (
+        <div role="status" className="fixed bottom-5 right-5 z-50 flex w-80 items-center gap-3 rounded-lg border bg-card p-3 shadow-lg animate-in fade-in slide-in-from-bottom-4 duration-300">
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium">{alert.title}</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">{alert.body}</p>
+          </div>
+          <button onClick={() => void undoDelete(alert.undo!)} className="shrink-0 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-secondary">
+            {tr("Undo")}
+          </button>
+        </div>
+      ) : alert && (
         <button onClick={() => setAlert(null)} className="fixed bottom-5 right-5 z-50 w-80 rounded-lg border bg-card p-3 text-left shadow-lg animate-in fade-in slide-in-from-bottom-4 duration-300">
           <p className="text-sm font-medium">{alert.title}</p>
           <p className="mt-0.5 text-xs text-muted-foreground">{alert.body}</p>
