@@ -20,11 +20,12 @@ export async function loadCanvasSnapshot(
   return response.json();
 }
 
+/** `missing`: images the server hasn't got, which this save sent without their bytes. */
 export async function saveCanvasSnapshot(
   canvasId: string,
   body: string,
   keepalive = false,
-): Promise<void> {
+): Promise<{ missing: string[] }> {
   const response = await fetch(`/api/canvas/${canvasId}`, {
     method: "POST",
     headers: {
@@ -41,6 +42,8 @@ export async function saveCanvasSnapshot(
       `Failed to save canvas ${canvasId}: ${response.status} ${message}`,
     );
   }
+
+  return response.json().catch(() => ({ missing: [] }));
 }
 
 /** Takes a template sheet's example flow; only the first caller gets it (see the seed route). */

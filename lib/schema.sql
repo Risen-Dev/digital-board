@@ -444,3 +444,16 @@ CREATE TABLE IF NOT EXISTS sprints (
 CREATE INDEX IF NOT EXISTS sprints_project ON sprints(project_id, start_date);
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS sprint_id TEXT REFERENCES sprints(id) ON DELETE SET NULL;
 CREATE INDEX IF NOT EXISTS tasks_sprint ON tasks(sprint_id) WHERE sprint_id IS NOT NULL;
+
+-- Canvas images, out of the snapshot: Excalidraw keeps each pasted image as a
+-- data URL in `files`, so an image-heavy sheet made every save megabytes. The
+-- snapshot keeps the file's metadata; the canvas route puts the bytes back on
+-- load. `id` is Excalidraw's file id (a hash of the content), so rows never change.
+CREATE TABLE IF NOT EXISTS canvas_assets (
+  canvas_id  TEXT NOT NULL REFERENCES canvases(id) ON DELETE CASCADE,
+  id         TEXT NOT NULL,
+  mime       TEXT NOT NULL,
+  data       BYTEA NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (canvas_id, id)
+);

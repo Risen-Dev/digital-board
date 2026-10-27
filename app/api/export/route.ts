@@ -44,6 +44,10 @@ export async function GET() {
     custom_fields: await all(`SELECT * FROM custom_fields WHERE project_id IN ${P} ORDER BY project_id, position`, ws),
     saved_views: await all(`SELECT * FROM saved_views WHERE project_id IN ${P} ORDER BY project_id, created_at`, ws),
     canvases: await all(`SELECT * FROM canvases WHERE project_id IN ${P} ORDER BY project_id, position`, ws),
+    canvas_assets: await all(
+      `SELECT canvas_id, id, mime, created_at, encode(data, 'base64') AS data FROM canvas_assets
+        WHERE canvas_id IN (SELECT id FROM canvases WHERE project_id IN ${P})`, ws),
+    sprints: await all(`SELECT * FROM sprints WHERE project_id IN ${P} ORDER BY project_id, start_date`, ws),
     meetings: await all("SELECT * FROM meetings WHERE workspace_id = ? ORDER BY created_at", ws),
     meeting_attendees: await all("SELECT * FROM meeting_attendees WHERE meeting_id IN (SELECT id FROM meetings WHERE workspace_id = ?)", ws),
     messages: await all(`SELECT * FROM messages WHERE id IN ${M} ORDER BY id`, ws),

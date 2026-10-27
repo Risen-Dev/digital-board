@@ -90,6 +90,12 @@ export function useCanvasPersistence(
   /** sceneKey() of what each canvas has stored on the server. */
   const storedKeysRef = useRef(new Map<string, string>());
 
+  /**
+   * Image ids each canvas has on the server (canvas_assets). Those go out as
+   * metadata only, so a sheet full of images no longer saves megabytes.
+   */
+  const storedFilesRef = useRef(new Map<string, Set<string>>());
+
   useEffect(() => {
     if (!activeId || !loaded) {
       return;
@@ -97,6 +103,10 @@ export function useCanvasPersistence(
 
     void loaded
       .then((saved) => {
+        storedFilesRef.current.set(
+          activeId,
+          new Set(Object.keys((saved?.files ?? {}) as object)),
+        );
         storedKeysRef.current.set(
           activeId,
           sceneKey(
@@ -191,7 +201,31 @@ export function useCanvasPersistence(
        */
       data.elements = scene.elements;
 
-      const body = JSON.stringify(data);
+      const storedFiles =
+        storedFilesRef.current.get(scene.canvasId) ?? new Set<string>();
+      storedFilesRef.current.set(scene.canvasId, storedFiles);
+
+      const files = (data.files ?? {}) as Record<
+        string,
+        { dataURL?: string }
+      >;
+
+      /** The save body, with bytes only for images the server hasn't got. */
+      const encode = () => {
+        const sending: string[] = [];
+        const trimmed = Object.fromEntries(
+          Object.entries(files).map(([id, file]) => {
+            if (storedFiles.has(id)) {
+              return [id, { ...file, dataURL: undefined }];
+            }
+            if (file.dataURL) sending.push(id);
+            return [id, file];
+          }),
+        );
+        return { body: JSON.stringify({ ...data, files: trimmed }), sending };
+      };
+
+      let { body, sending } = encode();
 
       /**
        * Browser keepalive requests have a small payload limit.
@@ -210,11 +244,25 @@ export function useCanvasPersistence(
 
       const runSave = async () => {
         try {
-          await saveCanvasSnapshot(
+          let { missing } = await saveCanvasSnapshot(
             scene.canvasId,
             body,
             keepalive,
           );
+
+          for (const id of sending) storedFiles.add(id);
+          for (const id of missing) storedFiles.delete(id);
+
+          /**
+           * The server lacks an image this tab thought it had stored: send
+           * the scene once more, now with those bytes.
+           */
+          if (missing.some((id) => files[id]?.dataURL)) {
+            ({ body, sending } = encode());
+            ({ missing } = await saveCanvasSnapshot(scene.canvasId, body));
+            for (const id of sending) storedFiles.add(id);
+            for (const id of missing) storedFiles.delete(id);
+          }
 
           savedVersionsRef.current.set(
             scene.canvasId,

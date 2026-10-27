@@ -1,6 +1,6 @@
 // Run: node --experimental-strip-types lib/canvas/merge.check.ts
 import assert from "node:assert/strict";
-import { mergeSnapshots, tagsOf, type Snapshot } from "./merge.ts";
+import { mergeSnapshots, referencedFiles, splitFiles, tagsOf, type Snapshot } from "./merge.ts";
 
 const NOW = 1_000_000_000_000;
 const el = (id: string, version: number, extra: object = {}) => ({
@@ -48,3 +48,15 @@ assert.deepEqual(tagsOf({ elements: [el("1", 1, { customData: { tag: "a" } }), e
   el("3", 1, { customData: { tag: "gone" }, isDeleted: true }), el("4", 1)] }), ["a"]);
 
 console.log("merge.check: ok");
+
+// images leave the snapshot: base64 data URLs become blobs, metadata stays
+{
+  const snap = { elements: [{ id: "i", version: 1, versionNonce: 1, fileId: "f1" }, { id: "j", version: 2, versionNonce: 1, fileId: "f2", isDeleted: true }],
+    files: { f1: { id: "f1", mimeType: "image/png", dataURL: "data:image/png;base64,aGVsbG8=", created: 1 }, f2: { id: "f2", mimeType: "image/png", created: 2 } } };
+  const blobs = splitFiles(snap);
+  assert.deepEqual(blobs.map((b) => [b.id, b.mime, b.data.toString()]), [["f1", "image/png", "hello"]]);
+  assert.deepEqual(snap.files.f1, { id: "f1", mimeType: "image/png", created: 1 }, "dataURL removed, rest kept");
+  assert.deepEqual(splitFiles(snap), [], "a stripped snapshot has nothing left to split");
+  assert.deepEqual(splitFiles(null), []);
+  assert.deepEqual(referencedFiles(snap), ["f1", "f2"], "a deleted image still counts");
+}

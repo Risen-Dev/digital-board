@@ -66,3 +66,25 @@ export function mergeSnapshots(
 
   return { ...incoming, elements, files };
 }
+
+export type ImageBlob = { id: string; mime: string; data: Buffer };
+
+/**
+ * Takes the inline images out of a snapshot: every base64 `dataURL` in `files`
+ * becomes a blob for canvas_assets, and the file entry keeps only its metadata.
+ * Mutates `snapshot`. Non-base64 data URLs stay inline (Excalidraw doesn't make them).
+ */
+export function splitFiles(snapshot: Snapshot | null): ImageBlob[] {
+  const blobs: ImageBlob[] = [];
+  for (const [id, file] of Object.entries(snapshot?.files ?? {})) {
+    const match = /^data:([^;,]+);base64,([\s\S]*)$/.exec((file as { dataURL?: string })?.dataURL ?? "");
+    if (!match) continue;
+    blobs.push({ id, mime: match[1], data: Buffer.from(match[2], "base64") });
+    delete (file as { dataURL?: string }).dataURL;
+  }
+  return blobs;
+}
+
+/** Image ids any element still points at, deleted ones included (an undo can bring them back). */
+export const referencedFiles = (snapshot: Snapshot) =>
+  [...new Set((snapshot.elements ?? []).flatMap((e) => (e.fileId ? [e.fileId] : [])))];

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { get, run, transaction } from "@/lib/db";
-import { mergeSnapshots, tagsOf, type Snapshot } from "@/lib/canvas/merge";
+import { all, get, run, transaction } from "@/lib/db";
+import { mergeSnapshots, referencedFiles, splitFiles, tagsOf, type Snapshot } from "@/lib/canvas/merge";
 import { broadcast, listen, peers, type Peer } from "@/lib/canvas/hub";
 import { guard } from "@/lib/canvas/guard";
 
@@ -10,6 +10,10 @@ import { guard } from "@/lib/canvas/guard";
  * that as soon as a drawing gets real (pasted images are inlined as data URLs).
  * Route Handlers have no such cap, so raising `serverActions.bodySizeLimit`
  * would only move the failure, not remove it.
+ *
+ * Images live in canvas_assets, not the snapshot: a save moves any inline image
+ * there, the client only sends an image's bytes until the server has them, and
+ * GET puts them back so Excalidraw gets an ordinary scene.
  */
 
 /**
@@ -62,10 +66,16 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   if (!row || !await guard(row.project_id)) return new NextResponse("Not found", { status: 404 });
   if (live) return liveStream(req, id, live);
 
-  // Already JSON on disk — hand it back verbatim rather than parse-then-restringify.
-  return new NextResponse(row.snapshot ?? "null", {
-    headers: { "content-type": "application/json", "cache-control": "no-store" },
-  });
+  const snapshot: Snapshot | null = row.snapshot ? JSON.parse(row.snapshot) : null;
+  const files = (snapshot?.files ?? {}) as Record<string, { dataURL?: string }>;
+  const wanted = Object.keys(files).filter((f) => !files[f].dataURL);
+  if (wanted.length) {
+    const assets = await all<{ id: string; mime: string; data: Buffer }>(
+      "SELECT id, mime, data FROM canvas_assets WHERE canvas_id = ? AND id = ANY(?::text[])", id, wanted,
+    );
+    for (const a of assets) files[a.id].dataURL = `data:${a.mime};base64,${a.data.toString("base64")}`;
+  }
+  return NextResponse.json(snapshot, { headers: { "cache-control": "no-store" } });
 }
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -80,13 +90,23 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   // Merge, don't overwrite: with several tabs on one sheet, saves can land out
   // of order. The row lock keeps two concurrent merges from racing each other.
-  await transaction(async () => {
+  const missing = await transaction(async () => {
     const row = await get<{ snapshot: string | null }>("SELECT snapshot FROM canvases WHERE id = ? FOR UPDATE", id);
-    const merged = mergeSnapshots(row?.snapshot ? JSON.parse(row.snapshot) : null, incoming);
+    const stored: Snapshot | null = row?.snapshot ? JSON.parse(row.snapshot) : null;
+    // Before the merge, which keeps only one copy of each file entry. A snapshot
+    // saved before canvas_assets existed still has its images inline: they move now.
+    for (const blob of [...splitFiles(stored), ...splitFiles(incoming)]) {
+      await run("INSERT INTO canvas_assets (canvas_id, id, mime, data) VALUES (?,?,?,?) ON CONFLICT DO NOTHING", id, blob.id, blob.mime, blob.data);
+    }
+    const merged = mergeSnapshots(stored, incoming);
     await run("UPDATE canvases SET snapshot = ?, tags = ?, updated_at = ? WHERE id = ?",
       JSON.stringify(merged), JSON.stringify(tagsOf(merged)), new Date().toISOString(), id);
+    await run("DELETE FROM canvas_assets WHERE canvas_id = ? AND NOT (id = ANY(?::text[]))", id, referencedFiles(merged));
+    const have = new Set((await all<{ id: string }>("SELECT id FROM canvas_assets WHERE canvas_id = ?", id)).map((a) => a.id));
+    return Object.keys(merged.files ?? {}).filter((f) => !have.has(f));
   });
-  return new NextResponse(null, { status: 204 });
+  // Images the client sent as metadata only, believing they were stored: it sends their bytes again.
+  return NextResponse.json({ missing });
 }
 
 /** Relays one live message (cursor or changed elements) to the sheet's other tabs. */
