@@ -47,6 +47,10 @@ const EVENTS: [RegExp, string, string[]][] = [
   [/^No longer blocked by (.+)$/, "No longer blocked by {key}", ["key"]],
   [/^(\S+) is done$/, "{key} is done", ["key"]],
   [/^Commented: ([\s\S]*)$/, "Commented: {text}", ["text"]],
+  [/^Automation: assigned to (.+)$/, "Automation: assigned to {value}", ["value"]],
+  [/^Automation: priority set to (.+)$/, "Automation: priority set to {value}", ["value"]],
+  [/^Automation: label (.+) added$/, "Automation: label {value} added", ["value"]],
+  [/^Automation: due date set to (.+)$/, "Automation: due date set to {value}", ["value"]],
 ];
 
 export function eventText(text: string, tr: Translate) {

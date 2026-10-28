@@ -457,3 +457,6 @@ CREATE TABLE IF NOT EXISTS canvas_assets (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (canvas_id, id)
 );
+
+-- Automation rules: JSON array of {id, on, columnId, do, value}; see lib/automations.ts.
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS automations JSONB;

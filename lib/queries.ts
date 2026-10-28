@@ -3,6 +3,7 @@ import { all, get, run } from "./db";
 import type { Blocker, CheckItem, Column, CustomField, Entry, Member, Priority, Repeat, SavedView, Sprint, Task, TaskImage } from "./board";
 import { day, stamp } from "./format";
 import type { Meeting } from "./meetings";
+import type { Automation } from "./automations";
 
 type TaskRow = {
   id: string;
@@ -78,10 +79,12 @@ const TASK_COLS = `t.id, t.column_id, t.title, t.description, t.label, t.priorit
 
 /** `repo` / `tokenHint` describe the GitHub link; the token itself never leaves the server. */
 export type Project = { id: string; name: string; key: string; doneColumnId: string | null; repo: string | null; tokenHint: string | null; webhookHint: string | null; inbound: boolean;
-  outgoing: { url: string; events: string[]; last?: { status: number | string; event: string; at: string } } | null };
+  outgoing: { url: string; events: string[]; last?: { status: number | string; event: string; at: string } } | null;
+  automations: Automation[]; columns: { id: string; title: string }[] };
 const PROJECT_COLS = `p.id, p.name, p.key, p.done_column_id AS "doneColumnId", p.github::jsonb ->> 'repo' AS repo, right(p.github::jsonb ->> 'token', 4) AS "tokenHint",
   right(p.github::jsonb ->> 'webhookSecret', 4) AS "webhookHint", p.inbound_token IS NOT NULL AS inbound,
-  p.outgoing - 'secret' AS outgoing`;
+  p.outgoing - 'secret' AS outgoing, COALESCE(p.automations, '[]') AS automations,
+  COALESCE((SELECT json_agg(json_build_object('id', c.id, 'title', c.title) ORDER BY c.position) FROM columns c WHERE c.project_id = p.id), '[]') AS columns`;
 
 export const workspaceName = async (workspaceId: string) =>
   (await get<{ name: string }>("SELECT name FROM workspaces WHERE id = ?", workspaceId))?.name ?? "Workspace";

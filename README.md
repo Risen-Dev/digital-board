@@ -259,6 +259,7 @@ Each delivery is a `POST` with `Content-Type: application/json`:
 | `SMTP_URL` | unset | SMTP server for emailed password-reset links, e.g. `smtps://user:pass@smtp.example.com`. |
 | `APP_URL` | unset | Public address the reset link points at, e.g. `https://board.example.com`. Reset by email is on only when both are set. |
 | `MAIL_FROM` | `Digital Board <no-reply@localhost>` | Sender of those emails. |
+| `SECRET_KEY` | unset | Encrypts the AI agent's API key at rest (AES-256-GCM). Unset stores it as plain text. Changing it makes the saved key unreadable — re-enter it in Settings. Generate one with `openssl rand -hex 32`. |
 
 Session cookies are `secure` in production, so serve it over HTTPS or reach it on
 `localhost`. Sign-in locks for 15 minutes after 5 wrong passwords for one email or
@@ -326,6 +327,8 @@ Runnable checks, no test framework:
 ```bash
 node --experimental-strip-types lib/board.check.ts   # board helpers
 node --experimental-strip-types lib/chat.check.ts    # chat poll merge
+node --experimental-strip-types lib/secret.check.ts  # API key encryption
+node --experimental-strip-types lib/automations.check.ts  # automation rules
 node --experimental-strip-types lib/canvas/merge.check.ts  # canvas save merge
 DATABASE_URL=... node lib/postgres.check.mjs         # every app query, against real Postgres
 ```

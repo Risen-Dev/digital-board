@@ -200,6 +200,7 @@ npm start`}</Code>
               [<C>SMTP_URL</C>, <>unset</>, <>SMTP server for emailed password-reset links, e.g. <C>smtps://user:pass@smtp.example.com</C>.</>],
               [<C>APP_URL</C>, <>unset</>, <>Public address the reset link points at. Reset by email is on only when this and <C>SMTP_URL</C> are both set.</>],
               [<C>MAIL_FROM</C>, <><C>Digital Board &lt;no-reply@localhost&gt;</C></>, <>Sender of those emails.</>],
+              [<C>SECRET_KEY</C>, <>unset</>, <>Encrypts the AI agent&apos;s API key at rest (AES-256-GCM). Unset stores it as plain text. Changing it makes the saved key unreadable — re-enter it in Settings. Generate one with <C>openssl rand -hex 32</C>.</>],
               [<C>NODE_ENV</C>, <><C>production</C> via <C>npm start</C></>, <>Session cookies are marked <C>secure</C> in production, which means they require HTTPS.</>],
             ]}
           />
