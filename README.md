@@ -328,6 +328,7 @@ Runnable checks, no test framework:
 node --experimental-strip-types lib/board.check.ts   # board helpers
 node --experimental-strip-types lib/chat.check.ts    # chat poll merge
 node --experimental-strip-types lib/secret.check.ts  # API key encryption
+node --experimental-strip-types lib/automations.check.ts  # automation rules
 node --experimental-strip-types lib/canvas/merge.check.ts  # canvas save merge
 DATABASE_URL=... node lib/postgres.check.mjs         # every app query, against real Postgres
 ```

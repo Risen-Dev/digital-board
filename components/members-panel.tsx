@@ -4,7 +4,8 @@ import { startTransition, useActionState, useEffect, useEffectEvent, useRef, use
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, Download, FolderKanban, Palette, FolderPlus, KeyRound, Plus, Settings2, Sparkles, Trash2, UserRound, Users, X } from "lucide-react";
 import { OUTGOING_EVENTS } from "@/lib/outgoing-events";
-import { changeMyPassword, fetchAiModels, importIntoProject, rotateGithubWebhook, rotateInboundToken, saveGithub, saveOutgoing, testOutgoing, setProjectKey, saveAiConfig, deleteProject, inviteMember, renameProject, renameWorkspace, setMemberPassword, setProjectMember } from "@/lib/actions";
+import { MAX_AUTOMATIONS, type Automation, type AutomationAction } from "@/lib/automations";
+import { changeMyPassword, fetchAiModels, importIntoProject, rotateGithubWebhook, rotateInboundToken, saveAutomations, saveGithub, saveOutgoing, testOutgoing, setProjectKey, saveAiConfig, deleteProject, inviteMember, renameProject, renameWorkspace, setMemberPassword, setProjectMember } from "@/lib/actions";
 import { initials } from "@/lib/board";
 import { parseImport, type Imported } from "@/lib/trello";
 import type { MemberPresence, Project, ProjectMember } from "@/lib/queries";
@@ -444,6 +445,7 @@ function ProjectDetail({ project, memberId, presence, isAdmin, assignments, onBa
       {canRename && <GithubSettings project={project} />}
       {canRename && <InboundWebhook project={project} />}
       {canRename && <OutgoingWebhook key={project.id} project={project} />}
+      {canRename && <Automations key={`auto-${project.id}`} project={project} people={[...presence.filter((m) => m.is_admin === 1), ...assigned.map((a) => a.member)]} />}
 
       {isAdmin && (
         <div className="mt-8 flex items-center gap-3 rounded-lg border border-[rgba(239,68,68,0.3)] px-3 py-2.5">
@@ -821,6 +823,97 @@ function OutgoingWebhook({ project }: { project: Project }) {
           )}
         </div>
       </form>
+    </section>
+  );
+}
+
+const ACTION_LABEL: Record<AutomationAction, string> = {
+  assign: "Assign", unassign: "Remove every assignee", priority: "Set priority", label: "Add label", due: "Set due date in (days)",
+};
+
+/** Rules that edit a card when it is created or moved into a column; run by `runAutomations` in lib/tasks.ts. */
+function Automations({ project, people }: { project: Project; people: { id: string; name: string }[] }) {
+  const tr = useT();
+  const router = useRouter();
+  const [rules, setRules] = useState<Partial<Automation>[]>(project.automations);
+  const [msg, setMsg] = useState<{ ok?: string; error?: string } | null>(null);
+  const [busy, startBusy] = useTransition();
+  const edit = (i: number, patch: Partial<Automation>) => setRules(rules.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  const save = () =>
+    startBusy(async () => {
+      setMsg(await saveAutomations(project.id, rules));
+      router.refresh();
+    });
+
+  return (
+    <section className="mt-8">
+      <h3 className="mb-1 text-sm font-medium">{tr("Automations")}</h3>
+      <div className="flex flex-col gap-3 rounded-lg border bg-card p-3">
+        <p className="text-[11px] text-muted-foreground">
+          {tr("Each rule changes a card when it is created or moved into a column — from the board, the List view, GitHub or the inbound webhook. Rules run top to bottom and are noted in the card’s history.")}
+        </p>
+        {rules.map((r, i) => (
+          <div key={r.id ?? i} className="flex flex-wrap items-center gap-1.5 text-xs">
+            <span className="text-muted-foreground">{tr("When a card is")}</span>
+            <select value={r.on ?? ""} onChange={(e) => edit(i, { on: e.target.value as Automation["on"] })} aria-label={tr("Trigger")} className={smallSelect}>
+              <option value="task.created">{tr("created in")}</option>
+              <option value="task.moved">{tr("moved into")}</option>
+            </select>
+            <select value={r.columnId ?? ""} onChange={(e) => edit(i, { columnId: e.target.value || null })} aria-label={tr("Column")} className={smallSelect}>
+              {r.on !== "task.moved" && <option value="">{tr("any column")}</option>}
+              {r.on === "task.moved" && !r.columnId && <option value="">{tr("Pick a column…")}</option>}
+              {project.columns.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}
+            </select>
+            <span className="text-muted-foreground">→</span>
+            <select value={r.do ?? ""} onChange={(e) => edit(i, { do: e.target.value as AutomationAction, value: "" })} aria-label={tr("Action")} className={smallSelect}>
+              {Object.entries(ACTION_LABEL).map(([a, l]) => <option key={a} value={a}>{tr(l)}</option>)}
+            </select>
+            {r.do === "assign" && (
+              <select value={r.value ?? ""} onChange={(e) => edit(i, { value: e.target.value })} aria-label={tr("Member")} className={smallSelect}>
+                <option value="">{tr("Pick a member…")}</option>
+                {people.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+              </select>
+            )}
+            {r.do === "priority" && (
+              <select value={r.value ?? ""} onChange={(e) => edit(i, { value: e.target.value })} aria-label={tr("Priority")} className={smallSelect}>
+                <option value="">{tr("Pick…")}</option>
+                <option value="high">{tr("High")}</option>
+                <option value="medium">{tr("Medium")}</option>
+                <option value="low">{tr("Low")}</option>
+              </select>
+            )}
+            {(r.do === "label" || r.do === "due") && (
+              <input
+                value={r.value ?? ""}
+                onChange={(e) => edit(i, { value: e.target.value })}
+                inputMode={r.do === "due" ? "numeric" : undefined}
+                aria-label={r.do === "due" ? tr("Days from today") : tr("Label")}
+                placeholder={r.do === "due" ? "3" : tr("Label")}
+                className={`${smallSelect} ${r.do === "due" ? "w-14" : "w-28"}`}
+              />
+            )}
+            <button type="button" onClick={() => setRules(rules.filter((_, j) => j !== i))} aria-label={tr("Remove rule")} className="rounded p-1 text-muted-foreground hover:bg-secondary">
+              <X className="size-3.5" />
+            </button>
+          </div>
+        ))}
+        {msg?.error && <FormError error={msg.error} />}
+        {msg?.ok && <p className="text-xs text-[var(--chart-2)]">{tr(msg.ok)}</p>}
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" disabled={busy} onClick={save} className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">
+            {busy ? tr("Saving…") : tr("Save")}
+          </button>
+          {rules.length < MAX_AUTOMATIONS && (
+            <button
+              type="button"
+              onClick={() => setRules([...rules, { on: "task.moved", columnId: project.doneColumnId ?? project.columns.at(-1)?.id ?? null, do: "unassign", value: "" }])}
+              className="flex items-center gap-1 rounded-md border px-3 py-2 text-xs hover:bg-secondary"
+            >
+              <Plus className="size-3.5" /> {tr("Add rule")}
+            </button>
+          )}
+        </div>
+      </div>
     </section>
   );
 }

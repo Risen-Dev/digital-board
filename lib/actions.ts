@@ -927,6 +927,25 @@ export async function saveOutgoing(projectId: string, url: string, events: strin
   return { ok: "Saved.", secret: secret === saved?.secret ? undefined : secret };
 }
 
+/** Replaces the project's automation rules (Settings → project). Each is checked against its columns and the workspace's members. */
+export async function saveAutomations(projectId: string, rules: Partial<import("./automations").Automation>[]) {
+  const user = await requireUser();
+  if (!await canManage(user, projectId)) return { error: "You cannot manage this project." };
+  const { cleanAutomation, MAX_AUTOMATIONS } = await import("./automations");
+  if (rules.length > MAX_AUTOMATIONS) return { error: "Too many rules." };
+  const columnIds = (await all<{ id: string }>("SELECT id FROM columns WHERE project_id = ?", projectId)).map((c) => c.id);
+  const memberIds = (await all<{ id: string }>("SELECT id FROM users WHERE workspace_id = ?", user.workspace_id)).map((u) => u.id);
+  const clean = [];
+  for (const raw of rules) {
+    const rule = cleanAutomation(raw, columnIds, memberIds);
+    if (typeof rule === "string") return { error: rule };
+    clean.push(rule);
+  }
+  await run("UPDATE projects SET automations = ? WHERE id = ?", clean.length ? JSON.stringify(clean) : null, projectId);
+  changed(user);
+  return { ok: "Saved." };
+}
+
 /** Sends a `ping` now and returns the receiver's HTTP status (or "timeout" / "unreachable"). */
 export async function testOutgoing(projectId: string) {
   const user = await requireUser();

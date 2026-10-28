@@ -2,6 +2,7 @@ import "server-only";
 import { createHmac } from "node:crypto";
 import { after } from "next/server";
 import { get, run } from "./db";
+import { runAutomations } from "./tasks";
 import { outgoingPayload, type OutgoingEvent, type OutgoingTask } from "./outgoing-events";
 
 /** `projects.outgoing` (JSONB): where to POST, the HMAC secret, which events, and the last result. */
@@ -10,9 +11,11 @@ export type OutgoingConfig = { url: string; secret: string; events: string[]; la
 /**
  * Queues one delivery for a task change, sent after the response so the UI never waits on
  * the receiver. Call it after the change is committed — except for task.deleted, which
- * must run before the row is gone. A project without an outgoing URL costs one query.
+ * must run before the row is gone. Created and moved also run the project's automation rules.
  */
 export async function notify(event: OutgoingEvent, taskId: string, change: string, actor: string | null) {
+  // First, so the delivery below already carries what the rules changed.
+  if (event === "task.created" || event === "task.moved") await runAutomations(event, taskId);
   const row = await get<OutgoingTask & { outgoing: OutgoingConfig; pid: string; pname: string; pkey: string }>(
     `SELECT p.outgoing, p.id AS pid, p.name AS pname, p.key AS pkey,
             t.id, p.key || '-' || t.number AS key, t.title, t.description, t.label, t.priority,

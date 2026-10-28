@@ -30,6 +30,7 @@ jobs:
       - run: node --experimental-strip-types lib/board.check.ts
       - run: node --experimental-strip-types lib/chat.check.ts
       - run: node --experimental-strip-types lib/secret.check.ts
+      - run: node --experimental-strip-types lib/automations.check.ts
       - run: node --experimental-strip-types lib/canvas/merge.check.ts
       - run: node --experimental-strip-types lib/i18n/i18n.check.ts
       - run: node lib/postgres.check.mjs
