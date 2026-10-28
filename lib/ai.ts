@@ -2,6 +2,7 @@ import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import { get } from "./db";
 import { parseFlow, type Flow } from "./canvas/flow";
+import { unseal } from "./secret";
 
 /**
  * Per-workspace AI provider, stored as JSON in `workspaces.ai_config`.
@@ -31,10 +32,12 @@ export const agentLabel = (c: AiConfig) => `${PROVIDER_NAME[c.provider]} · ${c.
 export const AI_PROVIDERS: AiProvider[] = ["anthropic", "openai", "gemini"];
 const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/openai";
 
-// ponytail: API key stored in plain text in Postgres, like the rest of the data; encrypt with a key from env if DB dumps leave the box.
+/** The API key comes back unsealed; saveAiConfig seals it (lib/secret.ts). */
 export async function aiConfig(workspaceId: string): Promise<AiConfig | null> {
   const row = await get<{ ai_config: string | null }>("SELECT ai_config FROM workspaces WHERE id = ?", workspaceId);
-  return row?.ai_config ? JSON.parse(row.ai_config) : null;
+  if (!row?.ai_config) return null;
+  const config: AiConfig = JSON.parse(row.ai_config);
+  return { ...config, apiKey: unseal(config.apiKey) };
 }
 
 const SYSTEM = `You are a business-process assistant inside a collaborative whiteboard.

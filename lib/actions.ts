@@ -1347,6 +1347,7 @@ export async function saveAiConfig(_prev: unknown, form: FormData) {
   if (!user.is_admin) return { error: "Only workspace admins can configure the AI agent." };
 
   const { AI_PROVIDERS, REASONING, aiConfig } = await import("./ai");
+  const { seal } = await import("./secret");
   const provider = String(form.get("provider") ?? "") as (typeof AI_PROVIDERS)[number];
   const model = String(form.get("model") ?? "").trim();
   const baseUrl = String(form.get("baseUrl") ?? "").trim();
@@ -1370,7 +1371,7 @@ export async function saveAiConfig(_prev: unknown, form: FormData) {
 
   await run(
     "UPDATE workspaces SET ai_config = ? WHERE id = ?",
-    JSON.stringify({ provider, model, baseUrl: provider === "openai" ? baseUrl : "", apiKey: key, reasoning }), user.workspace_id,
+    JSON.stringify({ provider, model, baseUrl: provider === "openai" ? baseUrl : "", apiKey: seal(key), reasoning }), user.workspace_id,
   );
   changed(user);
   return { ok: "Saved." };
