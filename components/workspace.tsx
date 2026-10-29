@@ -331,7 +331,7 @@ export function Workspace({
     const source = new EventSource("/api/chat/live");
     source.onmessage = (e) => {
       const { type, by } = JSON.parse(e.data) as { type: string; by?: string | null };
-      if (by === user.id) return;
+      if (by === user.id || type === "typing") return;
       refresh ||= type === "board";
       clearTimeout(soon);
       soon = window.setTimeout(() => {

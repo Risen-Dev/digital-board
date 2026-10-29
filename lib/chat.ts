@@ -40,3 +40,6 @@ export function turnsOf(rows: { agent: boolean; body: string; name: string }[]):
   }
   return turns;
 }
+
+/** The reaction set; the server accepts nothing else. */
+export const REACTIONS = ["👍", "❤️", "😂", "🎉", "😮", "😢"];

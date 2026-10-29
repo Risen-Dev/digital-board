@@ -3,7 +3,7 @@ import { after, NextResponse } from "next/server";
 import { currentUser } from "@/lib/auth";
 import { get, run, transaction } from "@/lib/db";
 import { conversation, listMembersWithPresence, markRead, unreadCounts } from "@/lib/queries";
-import { AGENT_MENTION } from "@/lib/chat";
+import { AGENT_MENTION, REACTIONS } from "@/lib/chat";
 import { answerInChat } from "@/lib/chat-agent";
 import { nudgeChat } from "@/lib/chat-live";
 import { mentionedIn, pushTo } from "@/lib/push";
@@ -127,6 +127,46 @@ export async function PATCH(req: Request) {
   }
 
   await run("UPDATE messages SET body = ?, edited_at = ? WHERE id = ?", text, new Date().toISOString(), id);
+  nudgeChat(me.workspace_id, "edit");
+  return new NextResponse(null, { status: 204 });
+}
+
+/** Delete your own message, with its files and reactions (cascade). No time window, unlike editing. */
+export async function DELETE(req: Request) {
+  const me = await currentUser();
+  if (!me) return new NextResponse("Unauthorized", { status: 401 });
+
+  const id = Number(new URL(req.url).searchParams.get("id"));
+  if (!id) return new NextResponse("Bad request", { status: 400 });
+
+  const gone = await get("DELETE FROM messages WHERE id = ? AND author_id = ? AND NOT agent RETURNING id", id, me.id);
+  if (!gone) return new NextResponse("Not your message", { status: 403 });
+  nudgeChat(me.workspace_id, "edit");
+  return new NextResponse(null, { status: 204 });
+}
+
+/** Toggle one of REACTIONS on any message you can read. */
+export async function PUT(req: Request) {
+  const me = await currentUser();
+  if (!me) return new NextResponse("Unauthorized", { status: 401 });
+
+  const { id, emoji } = ((await req.json().catch(() => null)) ?? {}) as { id?: number; emoji?: string };
+  if (!id || !emoji || !REACTIONS.includes(emoji)) return new NextResponse("Bad request", { status: 400 });
+
+  // Readable = this workspace's channel, or a DM you are in.
+  const visible = await get(
+    "SELECT 1 FROM messages WHERE id = ? AND workspace_id = ? AND (recipient_id IS NULL OR author_id = ? OR recipient_id = ?)",
+    id, me.workspace_id, me.id, me.id,
+  );
+  if (!visible) return new NextResponse("Not found", { status: 404 });
+
+  const removed = await get(
+    "DELETE FROM message_reactions WHERE message_id = ? AND user_id = ? AND emoji = ? RETURNING 1",
+    id, me.id, emoji,
+  );
+  if (!removed) {
+    await run("INSERT INTO message_reactions (message_id, user_id, emoji) VALUES (?,?,?) ON CONFLICT DO NOTHING", id, me.id, emoji);
+  }
   nudgeChat(me.workspace_id, "edit");
   return new NextResponse(null, { status: 204 });
 }

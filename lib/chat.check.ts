@@ -5,7 +5,7 @@ import type { ChatMessage } from "./queries.ts";
 
 const msg = (id: number, body = `m${id}`): ChatMessage => ({
   id, body, created_at: "2026-09-17T00:00:00.000Z", edited_at: null,
-  author_id: "u1", author_name: "Ada", author_color: "#000", agent: false, attachments: [],
+  author_id: "u1", author_name: "Ada", author_color: "#000", agent: false, attachments: [], reactions: [],
 });
 
 const a = [msg(1), msg(2)];
