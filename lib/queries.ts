@@ -329,26 +329,34 @@ export type ChatMessage = {
   /** Written by the AI agent on behalf of `author_id`, who called it. */
   agent: boolean;
   attachments: Attachment[];
+  reactions: Reaction[];
 };
+
+export type Reaction = { emoji: string; users: { id: string; name: string }[] };
 
 /** Canonical channel key for the read cursor: the workspace channel or a peer id. */
 const channelKey = (withUser: string | null) => withUser ?? "all";
 
-/** `withUser` null means the workspace channel; otherwise the DM thread with that person. */
+/**
+ * `withUser` null means the workspace channel; otherwise the DM thread with that person.
+ * From the start (`afterId` 0: first load, or the refetch after an edit) it is the
+ * newest 200, oldest first; after a cursor, the next 200 past it.
+ */
 export async function conversation(workspaceId: string, meId: string, withUser: string | null, afterId = 0): Promise<ChatMessage[]> {
   const base = `SELECT m.id, m.body, m.created_at, m.edited_at, m.author_id, m.agent,
                        u.name AS author_name, u.color AS author_color
                   FROM messages m JOIN users u ON u.id = m.author_id
                  WHERE m.workspace_id = ? AND m.id > ? AND `;
+  const order = afterId === 0 ? "ORDER BY m.id DESC LIMIT 200" : "ORDER BY m.id LIMIT 200";
   const rows =
     withUser === null
-      ? await all<Omit<ChatMessage, "attachments">>(`${base} m.recipient_id IS NULL ORDER BY m.id LIMIT 200`, workspaceId, afterId)
-      : await all<Omit<ChatMessage, "attachments">>(
-          `${base} ((m.author_id = ? AND m.recipient_id = ?) OR (m.author_id = ? AND m.recipient_id = ?))
-            ORDER BY m.id LIMIT 200`,
+      ? await all<Omit<ChatMessage, "attachments" | "reactions">>(`${base} m.recipient_id IS NULL ${order}`, workspaceId, afterId)
+      : await all<Omit<ChatMessage, "attachments" | "reactions">>(
+          `${base} ((m.author_id = ? AND m.recipient_id = ?) OR (m.author_id = ? AND m.recipient_id = ?)) ${order}`,
           workspaceId, afterId, meId, withUser, withUser, meId,
         );
   if (rows.length === 0) return [];
+  if (afterId === 0) rows.reverse();
 
   const ids = rows.map((r) => r.id);
   const files = await all<Attachment & { message_id: number }>(
@@ -356,7 +364,26 @@ export async function conversation(workspaceId: string, meId: string, withUser: 
       WHERE message_id IN (${ids.map(() => "?").join(",")}) ORDER BY created_at, id`,
     ...ids,
   );
-  return rows.map((r) => ({ ...r, attachments: files.filter((f) => f.message_id === r.id) }));
+  const reacts = await all<{ message_id: number; emoji: string; id: string; name: string }>(
+    `SELECT r.message_id, r.emoji, u.id, u.name FROM message_reactions r JOIN users u ON u.id = r.user_id
+      WHERE r.message_id IN (${ids.map(() => "?").join(",")}) ORDER BY r.message_id, r.emoji, u.name`,
+    ...ids,
+  );
+  return rows.map((r) => ({
+    ...r,
+    attachments: files.filter((f) => f.message_id === r.id),
+    reactions: reactionsOf(reacts.filter((x) => x.message_id === r.id)),
+  }));
+}
+
+/** Rows of one message's reactions, grouped per emoji in the order emoji first appear. */
+function reactionsOf(rows: { emoji: string; id: string; name: string }[]): Reaction[] {
+  const out: Reaction[] = [];
+  for (const { emoji, id, name } of rows) {
+    const r = out.find((x) => x.emoji === emoji) ?? out[out.push({ emoji, users: [] }) - 1];
+    r.users.push({ id, name });
+  }
+  return out;
 }
 
 /** Highest message id in a conversation — the value the read cursor moves to. */

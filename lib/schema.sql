@@ -460,3 +460,11 @@ CREATE TABLE IF NOT EXISTS canvas_assets (
 
 -- Automation rules: JSON array of {id, on, columnId, do, value}; see lib/automations.ts.
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS automations JSONB;
+
+-- Chat reactions: one row per (message, user, emoji); toggled by PUT /api/chat.
+CREATE TABLE IF NOT EXISTS message_reactions (
+  message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+  user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  emoji      TEXT NOT NULL,
+  PRIMARY KEY (message_id, user_id, emoji)
+);

@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, Hash, Paperclip, Pencil, Send, Sparkles, X } from "lucide-react";
+import { Check, Hash, Paperclip, Pencil, Send, SmilePlus, Sparkles, Trash2, X } from "lucide-react";
 import { initials } from "@/lib/board";
-import { AGENT_MENTION, cursorOf, mergeMessages } from "@/lib/chat";
+import { AGENT_MENTION, cursorOf, mergeMessages, REACTIONS } from "@/lib/chat";
 import type { Attachment, CanvasTag, ChatMessage, MemberPresence, Presence, Unread } from "@/lib/queries";
 import { MentionText, tagOptions, useMentionPicker } from "@/components/mentions";
 import { Avatar } from "../avatar";
@@ -174,6 +174,11 @@ function Thread({
   const [sending, setSending] = useState(false);
   const [editing, setEditing] = useState<number | null>(null);
   const [editDraft, setEditDraft] = useState("");
+  const [picking, setPicking] = useState<number | null>(null);
+  const [deleting, setDeleting] = useState<number | null>(null);
+  // Who is typing here right now: user id → name. Each entry expires on its own timer.
+  const [typing, setTyping] = useState<Record<string, string>>({});
+  const lastTypingPing = useRef(0);
   const [error, setError] = useState<string | null>(null);
   // The cursor when a sent message called the agent; it is waiting until an agent reply lands past it (or for 2 minutes).
   const [calledAt, setCalledAt] = useState<number | null>(null);
@@ -215,6 +220,9 @@ function Thread({
           lastId.current = cursorOf(data.messages, from);
           const fresh = reset;
           setMessages((prev) => mergeMessages(prev, data.messages, fresh));
+          // Their message landed: they are done typing it.
+          const authors = new Set(fresh ? [] : data.messages.map((m) => m.author_id));
+          setTyping((p) => (Object.keys(p).some((id) => authors.has(id)) ? Object.fromEntries(Object.entries(p).filter(([id]) => !authors.has(id))) : p));
           reset = false;
         } while (again.current);
       } catch {
@@ -231,19 +239,44 @@ function Thread({
     const t = setInterval(() => void poll(), POLL_MS);
     // EventSource reconnects on its own; an edit needs a full refetch (see poll).
     const live = new EventSource("/api/chat/live");
+    const typers = new Map<string, ReturnType<typeof setTimeout>>();
     live.onmessage = (e) => {
-      const { type } = JSON.parse(e.data) as { type: string };
+      const { type, by, channel, name } = JSON.parse(e.data) as { type: string; by?: string; channel?: string; name?: string };
+      if (type === "typing") {
+        if (!by || by === meId || channel !== active) return;
+        clearTimeout(typers.get(by));
+        setTyping((p) => (p[by] ? p : { ...p, [by]: name ?? "" }));
+        // Pings come every ~2.5s while they type; silence for 5s means they stopped.
+        typers.set(by, setTimeout(() => setTyping((p) => {
+          const rest = { ...p };
+          delete rest[by];
+          return rest;
+        }), 5000));
+        return;
+      }
       if (type !== "board") void poll(type === "edit");
     };
     return () => {
       clearInterval(t);
       live.close();
+      typers.forEach(clearTimeout);
     };
-  }, [poll]);
+  }, [poll, meId, active]);
+
+  // Tell the others while the draft changes, at most every 2.5s. The agent thread has nobody to tell.
+  useEffect(() => {
+    if (agentThread || !draft.trim() || Date.now() - lastTypingPing.current < 2500) return;
+    lastTypingPing.current = Date.now();
+    void fetch("/api/chat/typing", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ to: active }),
+    }).catch(() => {});
+  }, [draft, active, agentThread]);
 
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, waiting]);
+  }, [messages, waiting, typing]);
 
   useEffect(() => {
     if (calledAt === null) return;
@@ -297,6 +330,31 @@ function Thread({
     if (!res.ok) return setError(await res.text());
     await poll(true);
   }
+
+  async function react(id: number, emoji: string) {
+    setPicking(null);
+    const res = await fetch("/api/chat", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id, emoji }),
+    });
+    if (!res.ok) return setError(await res.text());
+    await poll(true);
+  }
+
+  async function remove(id: number) {
+    setDeleting(null);
+    const res = await fetch(`/api/chat?id=${id}`, { method: "DELETE" });
+    if (!res.ok) return setError(await res.text());
+    await poll(true);
+  }
+
+  const typers = Object.values(typing);
+  const typingLine =
+    typers.length === 0 ? null
+    : typers.length === 1 ? tr("{name} is typing…", { name: typers[0] })
+    : typers.length === 2 ? tr("{a} and {b} are typing…", { a: typers[0], b: typers[1] })
+    : tr("Several people are typing…");
 
   // Only "is it mine" is decided here. The 15-minute window is the server's
   // call — reading a clock during render is impure, and the server is the
@@ -361,6 +419,24 @@ function Thread({
                           <Pencil className="size-3" />
                         </button>
                       )}
+                      {editing !== m.id && (
+                        <button
+                          onClick={() => setPicking(picking === m.id ? null : m.id)}
+                          title={tr("Add reaction")}
+                          className="text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100"
+                        >
+                          <SmilePlus className="size-3" />
+                        </button>
+                      )}
+                      {editable(m) && editing !== m.id && (
+                        <button
+                          onClick={() => setDeleting(m.id)}
+                          title={tr("Delete message")}
+                          className="text-muted-foreground opacity-0 transition-opacity hover:text-[var(--chart-7)] group-hover:opacity-100"
+                        >
+                          <Trash2 className="size-3" />
+                        </button>
+                      )}
                     </div>
 
                     {editing === m.id ? (
@@ -398,6 +474,43 @@ function Thread({
                           </p>
                         )}
                         <Attachments files={m.attachments} />
+                        {m.reactions.length > 0 && (
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {m.reactions.map((r) => (
+                              <button
+                                key={r.emoji}
+                                onClick={() => void react(m.id, r.emoji)}
+                                title={r.users.map((u) => u.name).join(", ")}
+                                className={`flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-xs transition-colors ${
+                                  r.users.some((u) => u.id === meId) ? "border-primary bg-primary/10" : "bg-card hover:bg-secondary"
+                                }`}
+                              >
+                                {r.emoji}
+                                <span className="text-[10px] text-muted-foreground">{r.users.length}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        {picking === m.id && (
+                          <div className="mt-1 flex gap-0.5 rounded-full border bg-card px-1 py-0.5 shadow-sm">
+                            {REACTIONS.map((e) => (
+                              <button key={e} onClick={() => void react(m.id, e)} className="rounded-full px-1 text-base transition-transform hover:scale-125">
+                                {e}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        {deleting === m.id && (
+                          <div className="mt-1 flex items-center gap-2 text-[11px]">
+                            <span className="text-muted-foreground">{tr("Delete this message?")}</span>
+                            <button onClick={() => void remove(m.id)} className="font-medium text-[var(--chart-7)] hover:underline">
+                              {tr("Delete")}
+                            </button>
+                            <button onClick={() => setDeleting(null)} className="text-muted-foreground hover:text-foreground">
+                              {tr("Cancel")}
+                            </button>
+                          </div>
+                        )}
                       </>
                     )}
                   </div>
@@ -406,6 +519,7 @@ function Thread({
             })}
           </ul>
         )}
+        {typingLine && <p className="mt-3 animate-pulse text-xs text-muted-foreground">{typingLine}</p>}
         {waiting && (
           <div className="mt-3 flex items-center gap-2.5 text-xs text-muted-foreground">
             <AgentAvatar />
