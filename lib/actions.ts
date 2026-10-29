@@ -162,8 +162,9 @@ export async function loginAction(_prev: unknown, form: FormData) {
   const email = String(form.get("email") ?? "");
   const password = String(form.get("password") ?? "");
   const id = await login(email, password);
-  if (id === "locked") return { error: "Too many failed attempts. Try again in 15 minutes." };
-  if (!id) return { error: "Wrong email or password." };
+  // Echo the email back: React resets the form after an action, so it would otherwise be cleared.
+  if (id === "locked") return { error: "Too many failed attempts. Try again in 15 minutes.", email };
+  if (!id) return { error: "Wrong email or password.", email };
   await startSession(id);
   redirect("/board");
 }
