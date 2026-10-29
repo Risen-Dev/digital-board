@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Live Demo — Digital Board</title>
-<meta name="description" content="Try Digital Board in your browser: drag cards, edit tasks, switch views and draw on the canvas. No sign-up; everything stays in your browser.">
+<meta name="description" content="Try Digital Board in your browser: drag cards, edit tasks, switch views, chat, plan meetings and draw on the canvas. No sign-up; everything stays in your browser.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%2318181b'/%3E%3Crect x='3' y='3' width='4.5' height='4.5' rx='1' fill='%23fff'/%3E%3Crect x='8.5' y='3' width='4.5' height='4.5' rx='1' fill='%23fff' opacity='.6'/%3E%3Crect x='3' y='8.5' width='4.5' height='4.5' rx='1' fill='%23fff' opacity='.6'/%3E%3Crect x='8.5' y='8.5' width='4.5' height='4.5' rx='1' fill='%23fff' opacity='.3'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="https://unpkg.com/@excalidraw/excalidraw@0.18.1/dist/prod/index.css">
 <script type="importmap">
@@ -18,13 +18,15 @@
 }
 </script>
 <style>
-  /* Tokens and column palette from app/globals.css and lib/board.ts. */
+  /* Tokens and column palette from app/globals.css and lib/board.ts.
+     data-theme = light/dark (like the app's .dark), data-palette = the Appearance palette. */
   :root {
     --bg: oklch(1 0 0); --fg: oklch(0.141 0.005 285.823); --card: oklch(1 0 0);
     --primary: oklch(0.21 0.006 285.885); --primary-fg: oklch(0.985 0 0);
     --secondary: oklch(0.967 0.001 286.375); --muted: oklch(0.552 0.016 285.938);
-    --border: oklch(0.92 0.004 286.32); --lane: oklch(0.985 0 0);
-    --c0: #6366f1; --c1: #10b981; --c2: #f59e0b; --c3: #ec4899; --c4: #06b6d4;
+    --border: oklch(0.92 0.004 286.32); --lane: color-mix(in oklch, var(--secondary) 45%, var(--bg));
+    --c0: #6366f1; --c1: #10b981; --c2: #f59e0b; --c3: #ec4899; --c4: #06b6d4; --c5: #8b5cf6; --c6: #ef4444;
+    --radius: 0.5rem;
     color-scheme: light;
   }
   @media (prefers-color-scheme: dark) {
@@ -32,7 +34,7 @@
       --bg: oklch(0.141 0.005 285.823); --fg: oklch(0.985 0 0); --card: oklch(0.179 0.006 285.885);
       --primary: oklch(0.985 0 0); --primary-fg: oklch(0.21 0.006 285.885);
       --secondary: oklch(0.214 0.007 285.885); --muted: oklch(0.652 0.013 285.938);
-      --border: oklch(0.274 0.006 286.033); --lane: oklch(0.16 0.005 285.823);
+      --border: oklch(0.274 0.006 286.033);
       --c1: #10a37f; --c2: #c2860a; --c4: #0e9bb8;
       color-scheme: dark;
     }
@@ -41,93 +43,147 @@
     --bg: oklch(0.141 0.005 285.823); --fg: oklch(0.985 0 0); --card: oklch(0.179 0.006 285.885);
     --primary: oklch(0.985 0 0); --primary-fg: oklch(0.21 0.006 285.885);
     --secondary: oklch(0.214 0.007 285.885); --muted: oklch(0.652 0.013 285.938);
-    --border: oklch(0.274 0.006 286.033); --lane: oklch(0.16 0.005 285.823);
+    --border: oklch(0.274 0.006 286.033);
     --c1: #10a37f; --c2: #c2860a; --c4: #0e9bb8;
     color-scheme: dark;
   }
+  /* Palettes (lib/palettes.ts). Light first, then dark under .is-dark (set by the script). */
+  [data-palette="graphite"] { --bg: oklch(1 0 0); --fg: oklch(0.141 0.005 285.823); --card: oklch(1 0 0); --primary: oklch(0.21 0.006 285.885); --primary-fg: oklch(0.985 0 0); --secondary: oklch(0.967 0.001 286.375); --muted: oklch(0.552 0.016 285.938); --border: oklch(0.92 0.004 286.32); --radius: 0.5rem; --c0: #6366f1; --c1: #10b981; --c2: #f59e0b; --c3: #ec4899; --c4: #06b6d4; }
+  .is-dark [data-palette="graphite"] { --bg: oklch(0.141 0.005 285.823); --fg: oklch(0.985 0 0); --card: oklch(0.179 0.006 285.885); --primary: oklch(0.985 0 0); --primary-fg: oklch(0.21 0.006 285.885); --secondary: oklch(0.214 0.007 285.885); --muted: oklch(0.652 0.013 285.938); --border: oklch(0.274 0.006 286.033); --c1: #10a37f; --c2: #c2860a; --c4: #0e9bb8; }
+  [data-palette="harbor"] { --bg: #f1f4f8; --fg: #172b4d; --card: #ffffff; --primary: #0c66e4; --primary-fg: #ffffff; --secondary: #e4eaf2; --muted: #55637a; --border: #d3dbe6; --radius: 0.375rem; }
+  [data-palette="iris"] { --bg: #f7f6fb; --fg: #1f1d2b; --card: #ffffff; --primary: #6a55e8; --primary-fg: #ffffff; --secondary: #eeebfa; --muted: #63607a; --border: #e3e0f0; --radius: 0.75rem; }
+  [data-palette="shanshui"] { --bg: #ece2cb; --fg: #231c12; --card: #f6efdd; --primary: #1f5c9e; --primary-fg: #f6efdd; --secondary: #e2d5b6; --muted: #66563e; --border: #d2c199; --radius: 0.25rem; --c0: #1f5c9e; --c1: #2f8a6c; --c2: #b07d22; --c3: #a8392a; --c4: #2a8794; }
+  [data-palette="kanagawa"] { --bg: #f1eadb; --fg: #1a1f2b; --card: #faf6ec; --primary: #1d3f73; --primary-fg: #faf6ec; --secondary: #e6dcc7; --muted: #5a5e6c; --border: #d6cbb3; --radius: 0.125rem; --c0: #1d3f73; --c1: #4d7c8a; --c2: #c49a4a; --c3: #b5462e; --c4: #c98a7c; }
+  .is-dark[data-palette="harbor"], .is-dark [data-palette="harbor"] { --bg: #0f1722; --fg: #dee4ea; --card: #18212e; --primary: #579dff; --primary-fg: #0b1a2e; --secondary: #212c3a; --muted: #96a3b5; --border: #2a3646; }
+  .is-dark[data-palette="iris"], .is-dark [data-palette="iris"] { --bg: #15141c; --fg: #eceaf5; --card: #1d1c27; --primary: #9b8cff; --primary-fg: #15122b; --secondary: #262434; --muted: #a19eb6; --border: #302e40; }
+  .is-dark[data-palette="shanshui"], .is-dark [data-palette="shanshui"] { --bg: #15120d; --fg: #ede3cc; --card: #1f1a13; --primary: #4fa58a; --primary-fg: #10140f; --secondary: #2a2318; --muted: #a8997c; --border: #362d20; --c0: #4f8fd6; --c1: #4fa58a; --c2: #c99a45; --c3: #d0604a; --c4: #4aa9b5; }
+  .is-dark[data-palette="kanagawa"], .is-dark [data-palette="kanagawa"] { --bg: #121110; --fg: #ece6d8; --card: #1b1a18; --primary: #7ea6d8; --primary-fg: #0e1a2c; --secondary: #24221f; --muted: #a29d92; --border: #2e2b27; --c0: #7ea6d8; --c1: #6fa3b0; --c2: #d4ab5e; --c3: #e0765c; --c4: #dba293; }
+  [data-palette="shanshui"] :is(h1, h2, h3) { font-family: Georgia, "Songti SC", serif; }
+
   * { box-sizing: border-box; }
   html, body { height: 100%; }
   body { margin: 0; background: var(--bg); color: var(--fg); display: flex; flex-direction: column;
          font: 14px/1.5 Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; }
   button, input, select, textarea { font: inherit; color: inherit; }
   a { color: inherit; }
+  h2, h3 { margin: 0; }
   .banner { background: var(--primary); color: var(--primary-fg); font-size: 13px; text-align: center; padding: 6px 16px; }
   .banner a { font-weight: 600; }
+  .banner button { border: 0; background: none; color: inherit; text-decoration: underline; cursor: pointer; padding: 0; font-size: 13px; }
   .app { flex: 1; min-height: 0; display: flex; }
-  .side { width: 220px; flex: none; border-right: 1px solid var(--border); display: flex; flex-direction: column; }
-  .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 15px; text-decoration: none; padding: 0 12px; height: 54px; border-bottom: 1px solid var(--border); }
+  .side { width: 220px; flex: none; border-right: 1px solid var(--border); display: flex; flex-direction: column; background: var(--bg); transition: width .2s; overflow: hidden; }
+  .side.slim { width: 54px; }
+  .side.slim .hide-slim { display: none !important; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 14px; padding: 0 12px; height: 54px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  .brand > button:first-child { border: 0; background: none; padding: 0; cursor: pointer; }
   .logo { width: 28px; height: 28px; border-radius: 7px; background: var(--primary); display: grid; place-items: center; flex: none; }
   .logo rect { fill: var(--primary-fg); }
   .nav { display: grid; gap: 2px; padding: 12px 8px; }
-  .nav button { display: flex; align-items: center; gap: 10px; border: 0; background: none; border-radius: 8px; padding: 7px 8px; font-size: 14px; color: var(--muted); cursor: pointer; text-align: left; }
+  .nav button { display: flex; align-items: center; gap: 10px; border: 0; background: none; border-radius: 8px; padding: 7px 8px; font-size: 14px; color: var(--muted); cursor: pointer; text-align: left; white-space: nowrap; }
   .nav button:hover { background: var(--secondary); color: var(--fg); }
   .nav button[aria-current="true"] { background: var(--secondary); color: var(--fg); font-weight: 500; }
-  .nav button[data-soon] { cursor: default; }
-  .nav button[data-soon]:hover { background: none; color: var(--muted); }
   .nav .ico { width: 16px; height: 16px; }
-  .nav .badge { margin-left: auto; font-size: 11px; min-width: 18px; height: 18px; border-radius: 999px; display: grid; place-items: center; background: var(--secondary); color: var(--muted); padding: 0 5px; }
+  .badge { margin-left: auto; font-size: 10px; font-weight: 600; min-width: 18px; height: 18px; border-radius: 999px; display: grid; place-items: center; background: var(--secondary); color: var(--muted); padding: 0 5px; border: 1px solid var(--border); }
+  .badge.strong { background: var(--primary); color: var(--primary-fg); border-color: var(--primary); }
   .side-foot { margin-top: auto; border-top: 1px solid var(--border); }
-  .side-label { font-size: 11px; font-weight: 600; letter-spacing: .06em; color: var(--muted); padding: 12px 16px 6px; }
-  .side-project { display: flex; align-items: center; gap: 8px; margin: 0 8px 10px; padding: 5px 8px; border-radius: 8px; background: var(--secondary); font-size: 13px; }
-  .side-user { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-top: 1px solid var(--border); font-size: 13px; }
-  .side-user small { display: block; color: var(--muted); font-size: 11px; }
+  .side-label { font-size: 10px; font-weight: 600; letter-spacing: .06em; color: var(--muted); padding: 10px 16px 6px; }
+  .side-project { display: flex; align-items: center; gap: 8px; margin: 0 8px 10px; padding: 5px 8px; border-radius: 8px; background: var(--secondary); font-size: 12px; white-space: nowrap; }
+  .side-user { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-top: 1px solid var(--border); font-size: 12px; white-space: nowrap; }
+  .side-user small { display: block; color: var(--muted); font-size: 10px; }
   .main-col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-  header { display: flex; align-items: center; gap: 12px; padding: 0 16px; min-height: 54px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
-  .ptitle { font-size: 15px; font-weight: 600; margin: 0 4px 0 0; }
-  .tabs { display: flex; max-width: 100%; overflow-x: auto; gap: 2px; background: var(--secondary); border-radius: 8px; padding: 3px; }
-  .tabs button { border: 0; background: none; padding: 4px 10px; border-radius: 6px; color: var(--muted); cursor: pointer; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; }
-  .tabs button[aria-selected="true"] { background: var(--card); color: var(--fg); box-shadow: 0 1px 2px rgb(0 0 0 / .08); }
+  header { display: flex; align-items: center; gap: 10px; padding: 0 16px; min-height: 54px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .ptitle { font-size: 14px; font-weight: 600; margin: 0 4px 0 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 240px; }
+  .editable { cursor: text; border-radius: 4px; padding: 1px 4px; margin-left: -4px; }
+  .editable:hover { background: var(--secondary); }
+  .tabs { display: flex; max-width: 100%; overflow-x: auto; gap: 2px; background: var(--secondary); border: 1px solid var(--border); border-radius: 8px; padding: 2px; }
+  .tabs button { border: 0; background: none; padding: 4px 10px; border-radius: 6px; color: var(--muted); cursor: pointer; font-size: 12px; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; text-decoration: none; }
+  .tabs button[aria-selected="true"] { background: var(--card); color: var(--fg); font-weight: 500; box-shadow: 0 1px 2px rgb(0 0 0 / .08); }
   .spacer { flex: 1; }
   .search-wrap { position: relative; display: flex; align-items: center; }
   .search-wrap .ico { position: absolute; left: 9px; color: var(--muted); pointer-events: none; }
-  .search { border: 1px solid var(--border); background: transparent; border-radius: 8px; padding: 5px 10px 5px 30px; width: 200px; font-size: 13px; }
-  .btn { border: 1px solid var(--primary); background: var(--primary); color: var(--primary-fg); border-radius: 8px; padding: 5px 12px; font-size: 13px; font-weight: 500; cursor: pointer; }
+  .search { border: 1px solid var(--border); background: var(--secondary); border-radius: 8px; padding: 5px 10px 5px 30px; width: 190px; font-size: 12px; }
+  .btn { border: 1px solid var(--primary); background: var(--primary); color: var(--primary-fg); border-radius: 8px; padding: 5px 12px; font-size: 12px; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; text-decoration: none; }
+  .btn:hover { opacity: .9; }
   .btn.ghost { background: transparent; color: var(--fg); border-color: var(--border); }
+  .btn.ghost:hover { background: var(--secondary); opacity: 1; }
+  .btn.ghost.on { border-color: var(--primary); font-weight: 600; }
   .btn.danger { background: transparent; color: #ef4444; border-color: var(--border); }
-  .icon-btn { border: 0; background: none; color: var(--muted); padding: 6px; border-radius: 6px; cursor: pointer; display: grid; place-items: center; }
+  .btn.sm { padding: 3px 8px; font-size: 11px; }
+  .icon-btn { border: 0; background: none; color: var(--muted); padding: 6px; border-radius: 6px; cursor: pointer; display: grid; place-items: center; position: relative; }
   .icon-btn:hover { background: var(--secondary); color: var(--fg); }
-  main { flex: 1; min-height: 0; overflow: auto; }
+  .icon-btn .ping { position: absolute; right: 5px; top: 5px; width: 6px; height: 6px; border-radius: 50%; background: #ef4444; }
+  kbd { border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; font-size: 10px; font-family: inherit; color: var(--muted); }
+  main { flex: 1; min-height: 0; overflow: auto; position: relative; }
   [hidden] { display: none !important; }
-
-  /* Board */
-  .board { display: flex; gap: 16px; padding: 16px 24px; align-items: flex-start; min-height: 100%; width: max-content; }
-  .lane { flex: 0 0 264px; border-radius: 10px; padding: 2px; }
-  .lane.over { outline: 2px dashed var(--muted); outline-offset: 2px; }
-  .lane-head { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; padding: 6px 4px 12px; }
-  .lane-head .plus { margin-left: auto; border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 18px; line-height: 1; padding: 0 4px; border-radius: 4px; }
-  .lane-head .plus:hover { background: var(--secondary); color: var(--fg); }
-  .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
-  .count { font-size: 11px; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; min-width: 20px; height: 20px; display: grid; place-items: center; padding: 0 5px; font-weight: 500; }
-  .cards { display: flex; flex-direction: column; gap: 8px; min-height: 40px; }
-  .card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 12px; overflow: hidden; box-shadow: 0 1px 2px rgb(0 0 0 / .05); transition: transform .15s, box-shadow .15s; cursor: grab; text-align: left; width: 100%; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
-  .card:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgb(0 0 0 / .08); }
-  .cover { display: block; margin: -12px -12px 12px; width: calc(100% + 24px); height: auto; background: var(--secondary); border-bottom: 1px solid var(--border); }
-  .card.dragging { opacity: .4; }
-  .card .key { font-size: 11px; color: var(--muted); }
-  .card .title { font-weight: 500; margin: 2px 0 8px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-  .line { display: flex; align-items: center; gap: 8px; font-size: 12px; margin-top: 6px; }
-  .line > span:not(.avatar) { display: inline-flex; align-items: center; gap: 4px; }
   .muted { color: var(--muted); }
   .ico { width: 14px; height: 14px; flex: none; }
+  .pill { font-size: 10px; background: var(--primary); color: var(--primary-fg); border-radius: 999px; padding: 0 6px; }
+
+  /* Filter bar */
+  .filterbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 20px; border-bottom: 1px solid var(--border); background: color-mix(in oklch, var(--secondary) 50%, transparent); font-size: 12px; }
+  .filterbar select, .filterbar input { border: 1px solid var(--border); background: var(--bg); border-radius: 6px; padding: 3px 6px; font-size: 12px; }
+  .filterbar .count-note { margin-left: auto; color: var(--muted); }
+  .chip-btn { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--border); background: var(--bg); border-radius: 999px; padding: 2px 4px 2px 10px; font-size: 12px; cursor: pointer; }
+  .chip-btn.on { border-color: var(--primary); font-weight: 600; }
+  .chip-btn .x { border: 0; background: none; padding: 0 4px; cursor: pointer; color: var(--muted); }
+
+  /* Board */
+  .board-wrap { padding: 16px 24px; min-height: 100%; width: max-content; min-width: 100%; }
+  .board { display: flex; gap: 16px; align-items: flex-start; }
+  .swim { margin-bottom: 20px; }
+  .swim-head { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; padding: 4px 0 10px; border-bottom: 1px solid var(--border); margin-bottom: 12px; position: sticky; left: 0; width: max-content; }
+  .lane { flex: 0 0 264px; border-radius: 10px; padding: 2px; }
+  .lane.over { outline: 2px dashed var(--muted); outline-offset: 2px; }
+  .lane-head { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 13px; padding: 6px 4px 12px; }
+  .lane-head .name { border: 0; background: none; padding: 0 2px; font-weight: 600; cursor: pointer; border-radius: 4px; }
+  .lane-head .name:hover { background: var(--secondary); }
+  .lane-head .plus { margin-left: auto; border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 18px; line-height: 1; padding: 0 4px; border-radius: 4px; }
+  .lane-head .plus:hover { background: var(--secondary); color: var(--fg); }
+  .limit { font-size: 10px; color: var(--muted); font-weight: 500; display: inline-flex; align-items: center; gap: 2px; }
+  .add-col { flex: 0 0 220px; border: 1px dashed var(--border); border-radius: 10px; background: none; color: var(--muted); padding: 10px; cursor: pointer; font-size: 13px; }
+  .add-col:hover { color: var(--fg); background: var(--secondary); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; display: inline-block; }
+  .count { font-size: 11px; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; min-width: 20px; height: 20px; display: grid; place-items: center; padding: 0 5px; font-weight: 500; }
+  .cards { display: flex; flex-direction: column; gap: 8px; min-height: 40px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; overflow: hidden; box-shadow: 0 1px 2px rgb(0 0 0 / .05); transition: transform .15s, box-shadow .15s; cursor: grab; text-align: left; width: 100%; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+  .card:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgb(0 0 0 / .08); }
+  .cover { display: block; margin: -12px -12px 12px; width: calc(100% + 24px); height: auto; max-height: 140px; object-fit: cover; background: var(--secondary); border-bottom: 1px solid var(--border); }
+  .card.dragging { opacity: .4; }
+  .card .key { font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+  .card .title { font-weight: 500; margin: 2px 0 8px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .line { display: flex; align-items: center; gap: 8px; font-size: 12px; margin-top: 6px; flex-wrap: wrap; }
+  .line > span:not(.avatar) { display: inline-flex; align-items: center; gap: 4px; }
+  .blocked { color: #ef4444; font-weight: 500; }
+  .late, .over { color: #ef4444; font-weight: 500; }
+  .fields-line { font-size: 11px; color: var(--muted); margin-top: 6px; display: grid; }
+  .fields-line b { font-weight: 400; color: var(--fg); }
+  .live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--c1); animation: pulse 1.2s infinite; }
+  @keyframes pulse { 50% { opacity: .3; } }
   .tag { border-radius: 999px; padding: 1px 8px; background: var(--secondary); color: var(--muted); font-size: 10px; font-weight: 500; max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .prio { border-radius: 4px; padding: 0 6px; font-weight: 600; font-size: 10px; text-transform: uppercase; letter-spacing: .02em; }
   .prio-high { color: #ef4444; background: rgba(239,68,68,.1); }
   .prio-medium { color: #f59e0b; background: rgba(245,158,11,.1); }
   .prio-low { color: #6b7280; background: rgba(107,114,128,.12); }
   .due { color: var(--muted); }
-  .due.late { color: #ef4444; font-weight: 500; }
-  .avatar { width: 22px; height: 22px; border-radius: 50%; color: #fff; font-size: 10px; font-weight: 600; display: grid; place-items: center; flex: none; }
+  .avatar { width: 22px; height: 22px; border-radius: 50%; color: #fff; font-size: 10px; font-weight: 600; display: inline-grid; place-items: center; flex: none; }
+  .avatars { display: flex; }
+  .avatars .avatar { box-shadow: 0 0 0 2px var(--card); }
+  .avatars .avatar + .avatar { margin-left: -6px; }
   .add { border: 0; background: none; color: var(--muted); font-size: 13px; padding: 10px 4px 0; cursor: pointer; }
   .add:hover { color: var(--fg); }
+  .toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 80; display: flex; align-items: center; gap: 12px; background: var(--fg); color: var(--bg); border-radius: 10px; padding: 8px 10px 8px 14px; font-size: 13px; box-shadow: 0 8px 24px rgb(0 0 0 / .25); }
+  .toast button { border: 0; background: var(--bg); color: var(--fg); border-radius: 6px; padding: 3px 10px; font-weight: 600; cursor: pointer; font-size: 12px; }
 
   /* List */
   .list { padding: 16px; }
   table { width: 100%; border-collapse: collapse; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
-  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); white-space: nowrap; font-size: 13px; }
   th { font-size: 12px; color: var(--muted); font-weight: 500; background: var(--lane); cursor: pointer; user-select: none; }
   td:first-child { white-space: normal; min-width: 220px; }
   tbody tr { cursor: pointer; }
   tbody tr:hover { background: var(--secondary); }
+  td select { border: 1px solid transparent; background: transparent; border-radius: 6px; padding: 2px 4px; font-size: 12px; }
+  td select:hover { border-color: var(--border); }
   .table-wrap { overflow-x: auto; }
 
   /* Calendar */
@@ -140,8 +196,112 @@
   .grid .num { font-size: 11px; color: var(--muted); }
   .grid .other { background: var(--lane); }
   .grid .today .num { background: var(--primary); color: var(--primary-fg); border-radius: 999px; padding: 0 6px; }
+  .grid .drop { outline: 2px dashed var(--muted); outline-offset: -2px; }
   .chip { display: block; width: 100%; border: 0; text-align: left; font-size: 11px; padding: 2px 6px; margin-top: 3px; border-radius: 4px; cursor: pointer;
           white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* Timeline */
+  .tl { position: relative; }
+  .tl-head { position: sticky; top: 0; z-index: 20; display: flex; height: 44px; border-bottom: 1px solid var(--border); background: var(--bg); }
+  .tl-name { position: sticky; left: 0; z-index: 10; flex: none; width: 260px; border-right: 1px solid var(--border); background: var(--bg); }
+  .tl-head .tl-name { display: flex; align-items: flex-end; padding: 0 16px 6px; font-size: 12px; font-weight: 600; color: var(--muted); }
+  .tl-day { position: relative; flex: none; width: 28px; border-right: 1px solid color-mix(in oklch, var(--border) 50%, transparent); font-size: 10px; color: var(--muted); text-align: center; }
+  .tl-day.we { background: color-mix(in oklch, var(--secondary) 60%, transparent); }
+  .tl-day .m { position: absolute; left: 4px; top: 4px; white-space: nowrap; font-weight: 600; color: var(--fg); }
+  .tl-day .d { position: absolute; inset: auto 0 6px; }
+  .tl-day.today .d { color: #ef4444; font-weight: 700; }
+  .tl-row { position: relative; display: flex; height: 36px; border-bottom: 1px solid color-mix(in oklch, var(--border) 60%, transparent); }
+  .tl-row .tl-name { display: flex; align-items: center; gap: 8px; padding: 0 16px; font-size: 12px; border: 0; border-right: 1px solid var(--border); text-align: left; cursor: pointer; color: var(--fg); }
+  .tl-row .tl-name:hover { background: var(--secondary); }
+  .tl-row .tl-name span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tl-bar { position: absolute; top: 6px; height: 24px; z-index: 5; border: 0; border-radius: 6px; padding: 0 8px; color: #fff; font-size: 11px; font-weight: 500; text-align: left; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; cursor: pointer; box-shadow: 0 1px 2px rgb(0 0 0 / .1); }
+  .tl-today { position: absolute; top: 44px; bottom: 0; width: 1px; background: #ef4444; z-index: 6; pointer-events: none; }
+  .tl-note { padding: 12px 16px; font-size: 12px; color: var(--muted); position: sticky; left: 0; }
+
+  /* Pages (home, analytics, inbox, my tasks, meetings, settings) */
+  .page { padding: 24px; max-width: 1100px; }
+  .page.center { margin: 0 auto; max-width: 760px; }
+  .page h2 { font-size: 20px; font-weight: 600; }
+  .page h3 { font-size: 13px; font-weight: 600; margin-bottom: 10px; }
+  .page .sub { color: var(--muted); font-size: 13px; margin: 2px 0 20px; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .tile { border: 1px solid var(--border); background: var(--card); border-radius: 12px; padding: 14px 16px; }
+  .tile small { color: var(--muted); font-size: 12px; }
+  .tile b { display: block; font-size: 24px; font-weight: 600; margin-top: 2px; }
+  .tile em { font-style: normal; font-size: 11px; color: var(--muted); }
+  .panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+  .panel { border: 1px solid var(--border); background: var(--card); border-radius: 12px; padding: 16px; min-width: 0; }
+  .panel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .panel-head h3 { margin: 0; }
+  .link-btn { border: 0; background: none; color: var(--muted); font-size: 12px; cursor: pointer; padding: 0; }
+  .link-btn:hover { color: var(--fg); text-decoration: underline; }
+  .rows { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .row { display: flex; align-items: center; gap: 10px; padding: 7px 8px; border-radius: 8px; border: 0; background: none; text-align: left; width: 100%; font-size: 13px; cursor: pointer; color: var(--fg); }
+  .row:hover { background: var(--secondary); }
+  .row .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row small { color: var(--muted); font-size: 11px; white-space: nowrap; }
+  .row.unread { font-weight: 500; }
+  .row.unread::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--primary); flex: none; }
+  .bar-row { display: grid; grid-template-columns: 110px 1fr 32px; align-items: center; gap: 10px; font-size: 12px; margin: 6px 0; }
+  .bar-row > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .meter { height: 8px; border-radius: 999px; background: var(--secondary); overflow: hidden; }
+  .meter i { display: block; height: 100%; border-radius: 999px; }
+  .spark { display: flex; align-items: flex-end; gap: 4px; height: 120px; padding-top: 8px; }
+  .spark div { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%; justify-content: flex-end; font-size: 9px; color: var(--muted); }
+  .spark i { display: block; width: 100%; background: var(--c0); border-radius: 4px 4px 0 0; min-height: 2px; }
+  .empty { color: var(--muted); font-size: 13px; padding: 8px; }
+  .seg { display: inline-flex; gap: 2px; background: var(--secondary); border: 1px solid var(--border); border-radius: 8px; padding: 2px; }
+  .seg button { border: 0; background: none; border-radius: 6px; padding: 3px 10px; font-size: 12px; color: var(--muted); cursor: pointer; }
+  .seg button[aria-pressed="true"] { background: var(--card); color: var(--fg); font-weight: 500; }
+
+  /* Chat */
+  .chat { display: flex; height: 100%; }
+  .chat-list { width: 240px; flex: none; border-right: 1px solid var(--border); padding: 12px 8px; overflow: auto; }
+  .chat-list .side-label { padding: 8px 8px 4px; }
+  .chat-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .chat-head { padding: 12px 20px; border-bottom: 1px solid var(--border); font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+  .chat-feed { flex: 1; overflow: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; }
+  .msg { display: flex; gap: 10px; font-size: 13px; }
+  .msg b { font-size: 13px; }
+  .msg time { font-size: 11px; color: var(--muted); margin-left: 6px; }
+  .msg p { margin: 2px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .chat-compose { border-top: 1px solid var(--border); padding: 12px 20px; display: flex; gap: 8px; position: relative; }
+  .chat-compose textarea { flex: 1; min-height: 40px; height: 40px; resize: none; }
+  .presence { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .presence.online { background: #10b981; } .presence.away { background: #f59e0b; } .presence.offline { background: var(--border); }
+  @media (max-width: 640px) { .chat-list { width: 120px; } }
+
+  /* Meetings */
+  .meet { display: flex; align-items: center; gap: 14px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); margin-bottom: 8px; }
+  .meet .when { width: 64px; flex: none; text-align: center; font-size: 11px; color: var(--muted); }
+  .meet .when b { display: block; font-size: 18px; color: var(--fg); }
+  .meet .grow { flex: 1; min-width: 0; }
+  .meet .grow p { margin: 2px 0 0; font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .meet.past { opacity: .6; }
+  .state { font-size: 11px; border-radius: 999px; padding: 1px 8px; background: var(--secondary); color: var(--muted); white-space: nowrap; }
+  .state.live { background: rgba(16,185,129,.15); color: #10b981; font-weight: 600; }
+
+  /* Settings */
+  .settings { display: flex; height: 100%; }
+  .settings-nav { width: 200px; flex: none; border-right: 1px solid var(--border); padding: 16px 8px; display: grid; align-content: start; gap: 2px; }
+  .settings-nav button { display: flex; align-items: center; gap: 8px; border: 0; background: none; text-align: left; padding: 7px 10px; border-radius: 8px; font-size: 13px; color: var(--muted); cursor: pointer; }
+  .settings-nav button[aria-current="true"] { background: var(--secondary); color: var(--fg); font-weight: 500; }
+  .settings-body { flex: 1; min-width: 0; overflow: auto; }
+  .form-row { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 12px; }
+  .rule { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; margin-bottom: 6px; }
+  .rule .grow { flex: 1; }
+  .palettes { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+  .pal { border: 2px solid var(--border); border-radius: 12px; padding: 0; overflow: hidden; cursor: pointer; text-align: left; background: var(--bg); color: var(--fg); }
+  .pal[aria-pressed="true"] { border-color: var(--primary); }
+  .pal .pv { display: flex; gap: 6px; padding: 12px; background: var(--secondary); height: 72px; align-items: flex-start; }
+  .pal .pv i { flex: 1; height: 100%; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); }
+  .pal .pv i:first-child { border-top: 4px solid var(--primary); }
+  .pal div:last-child { padding: 8px 12px; font-size: 12px; }
+  .pal small { display: block; color: var(--muted); font-size: 11px; }
+  @media (max-width: 640px) {
+    .settings { flex-direction: column; }
+    .settings-nav { width: auto; border-right: 0; border-bottom: 1px solid var(--border); display: flex; overflow-x: auto; padding: 8px; }
+  }
 
   /* Canvas */
   .canvas { height: 100%; min-height: 480px; position: relative; }
@@ -154,6 +314,7 @@
   .tag-btn:hover { background: var(--secondary); }
   .tag-btn svg, .tag-preview svg { width: 13px; height: 13px; }
   .tag-link { border: 0; padding: 0; background: none; font: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+  .key-link { border: 0; padding: 0; background: none; font: inherit; color: var(--c0); font-weight: 600; cursor: pointer; }
   .tag-previews { display: flex; flex-wrap: wrap; gap: 8px; }
   .tag-preview { width: 224px; display: flex; flex-direction: column; padding: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 8px; background: none; color: var(--fg); text-align: left; cursor: pointer; }
   .tag-preview:hover { border-color: var(--muted); }
@@ -161,35 +322,61 @@
   .tag-preview img { max-width: 100%; max-height: 100%; object-fit: contain; }
   .tag-preview .name { display: flex; align-items: center; gap: 4px; padding: 5px 8px; border-top: 1px solid var(--border); font-size: 11px; font-weight: 400; }
 
-  /* Dialog */
-  dialog { border: 1px solid var(--border); border-radius: 14px; background: var(--card); color: var(--fg); padding: 0; width: min(980px, calc(100vw - 32px)); max-height: calc(100vh - 48px); overflow: hidden; }
-  dialog.new { width: min(620px, calc(100vw - 32px)); }
+  /* Dialogs */
+  dialog { border: 1px solid var(--border); border-radius: 14px; background: var(--card); color: var(--fg); padding: 0; width: min(1020px, calc(100vw - 32px)); max-height: calc(100vh - 48px); overflow: hidden; }
+  dialog.new { width: min(640px, calc(100vw - 32px)); }
+  dialog.small { width: min(440px, calc(100vw - 32px)); }
+  dialog.small .pad { padding: 18px 20px; display: grid; gap: 12px; max-height: calc(100vh - 120px); overflow: auto; }
   dialog::backdrop { background: rgb(0 0 0 / .4); }
   label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
   input, select, textarea { border: 1px solid var(--border); background: var(--bg); color: var(--fg); border-radius: 8px; padding: 7px 10px; font-size: 14px; }
+  input[type="checkbox"], input[type="radio"] { padding: 0; }
   textarea { min-height: 90px; resize: vertical; }
   .dlg-head { display: flex; align-items: center; gap: 8px; padding: 8px 12px 8px 18px; border-bottom: 1px solid var(--border); font-size: 12px; color: var(--muted); }
   .dlg-head .icon-btn { margin-left: auto; }
-  .dlg-body { display: flex; height: min(640px, calc(100vh - 100px)); }
-  dialog.new .dlg-body { height: auto; }
+  .dlg-body { display: flex; height: min(680px, calc(100vh - 100px)); }
+  dialog.new .dlg-body { height: auto; max-height: calc(100vh - 100px); }
   .dlg-main { flex: 1; min-width: 0; overflow: auto; padding: 20px 28px; display: grid; gap: 16px; align-content: start; }
-  .title-input { border: 0; background: transparent; font-size: 22px; font-weight: 600; padding: 0; min-height: 0; resize: none; field-sizing: content; }
+  .title-input { border: 0; background: transparent; font-size: 22px; font-weight: 600; padding: 0; min-height: 1.4em; line-height: 1.3; resize: none; field-sizing: content; }
   .title-input:focus { outline: none; }
+  .parent-line { font-size: 12px; color: var(--muted); }
   .props { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 24px; }
-  .prop { display: flex; align-items: center; gap: 10px; }
-  .prop > span { width: 76px; flex: none; }
-  .prop select, .prop input { flex: 1; min-width: 0; border-color: transparent; background: transparent; padding: 4px 8px; font-size: 13px; }
-  .prop select:hover, .prop input:hover, .prop select:focus, .prop input:focus { background: var(--secondary); outline: none; }
+  .prop { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--muted); position: relative; }
+  .prop > span:first-child { width: 76px; flex: none; }
+  .prop select, .prop input, .prop summary { flex: 1; min-width: 0; border: 1px solid transparent; background: transparent; padding: 4px 8px; font-size: 13px; border-radius: 8px; color: var(--fg); }
+  .prop select:hover, .prop input:hover, .prop select:focus, .prop input:focus, .prop summary:hover { background: var(--secondary); outline: none; }
+  .prop details { flex: 1; min-width: 0; }
+  .prop summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 6px; min-height: 30px; }
+  .prop summary::-webkit-details-marker { display: none; }
+  .pick-menu { position: absolute; z-index: 30; left: 86px; right: 0; top: 100%; background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 4px; box-shadow: 0 8px 24px rgb(0 0 0 / .15); }
+  .pick-menu label { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; color: var(--fg); font-size: 13px; cursor: pointer; }
+  .pick-menu label:hover { background: var(--secondary); }
   .section { border-top: 1px solid var(--border); padding-top: 14px; display: grid; gap: 8px; font-size: 12px; font-weight: 600; color: var(--muted); }
-  .section textarea { font-weight: 400; }
-  .checks label { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 400; color: var(--fg); }
-  .checks input[type="checkbox"] { width: 14px; height: 14px; padding: 0; }
-  .section input:not([type]) { font-size: 12px; font-weight: 400; }
-  .actions { display: flex; gap: 8px; border-top: 1px solid var(--border); padding-top: 16px; }
-  .actions .danger { margin-left: auto; }
+  .section > span:first-child { display: flex; align-items: center; gap: 6px; }
+  .section textarea, .section input, .section select { font-weight: 400; font-size: 13px; }
+  .checks label, .subs label { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 400; color: var(--fg); }
+  .checks input[type="checkbox"], .subs input[type="checkbox"] { width: 14px; height: 14px; }
+  .subs label .key-link { font-size: 11px; }
+  .subs .done-text { text-decoration: line-through; color: var(--muted); }
+  .deps { display: grid; gap: 4px; font-weight: 400; color: var(--fg); font-size: 13px; }
+  .deps div { display: flex; align-items: center; gap: 8px; }
+  .deps .x { border: 0; background: none; color: var(--muted); cursor: pointer; margin-left: auto; }
+  .fields-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 24px; font-weight: 400; }
+  .fields-grid .prop .x { border: 0; background: none; color: var(--muted); cursor: pointer; }
+  .inline-form { display: flex; gap: 6px; flex-wrap: wrap; font-weight: 400; }
+  .inline-form input, .inline-form select { padding: 4px 8px; font-size: 12px; }
+  .timer-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-weight: 400; color: var(--fg); font-size: 13px; }
+  .imgs { display: flex; flex-wrap: wrap; gap: 8px; }
+  .img { position: relative; width: 120px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .img img { display: block; width: 100%; height: 80px; object-fit: cover; }
+  .img div { display: flex; justify-content: space-between; padding: 2px 4px; font-size: 10px; font-weight: 400; }
+  .img button { border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 10px; padding: 2px; }
+  .img .is-cover { position: absolute; top: 4px; left: 4px; font-size: 9px; background: var(--primary); color: var(--primary-fg); border-radius: 4px; padding: 0 4px; }
+  .actions { display: flex; gap: 8px; border-top: 1px solid var(--border); padding-top: 16px; flex-wrap: wrap; }
+  .actions .push { margin-left: auto; }
   .dlg-side { width: 340px; flex: none; border-left: 1px solid var(--border); background: var(--lane); display: flex; flex-direction: column; min-height: 0; }
   .side-head { padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: 12px; font-weight: 600; }
-  .feed { flex: 1; overflow: auto; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+  .feed { flex: 1; min-height: 0; overflow: auto; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
   .event { font-size: 11px; color: var(--muted); padding: 0 2px; }
   .comment { display: flex; gap: 8px; border: 1px solid var(--border); background: var(--card); border-radius: 10px; padding: 8px 10px; font-size: 13px; }
   .comment b { font-size: 12px; }
@@ -197,69 +384,113 @@
   .comment p { margin: 2px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
   .mention { color: var(--c0); font-weight: 600; }
   .agent-mark { width: 22px; height: 22px; border-radius: 50%; background: var(--secondary); color: var(--c0); display: grid; place-items: center; flex: none; }
-  .composer { position: relative; border-top: 1px solid var(--border); padding: 10px; display: grid; gap: 6px; }
+  .composer { flex: none; position: relative; border-top: 1px solid var(--border); padding: 10px; display: grid; gap: 6px; }
   .composer textarea { min-height: 56px; font-size: 13px; resize: none; }
   .composer .bar { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); }
-  .mentions { position: absolute; left: 10px; right: 10px; bottom: 100%; margin: 0 0 4px; padding: 4px; list-style: none; background: var(--card); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px rgb(0 0 0 / .15); }
+  .mentions { position: absolute; left: 10px; right: 10px; bottom: 100%; margin: 0 0 4px; padding: 4px; list-style: none; background: var(--card); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px rgb(0 0 0 / .15); z-index: 40; max-height: 240px; overflow: auto; }
   .mentions li { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; font-size: 13px; cursor: pointer; }
   .mentions li[aria-selected="true"] { background: var(--secondary); }
   .mentions small { margin-left: auto; color: var(--muted); }
+  .swatches { display: flex; gap: 6px; flex-wrap: wrap; }
+  .swatches label { display: block; }
+  .swatches input { position: absolute; opacity: 0; }
+  .swatches span { display: block; width: 24px; height: 24px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; box-shadow: inset 0 0 0 2px var(--card); }
+  .swatches input:checked + span { border-color: var(--fg); }
+  .swatches input:focus-visible + span { outline: 2px solid var(--primary); }
+  .check-line { display: flex !important; align-items: center; gap: 8px; color: var(--fg) !important; font-size: 13px !important; }
+  .member-picks { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+
+  /* Menus (notifications) and the ⌘K palette */
+  .menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 60; width: 340px; max-width: calc(100vw - 24px); background: var(--card); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 12px 32px rgb(0 0 0 / .18); overflow: hidden; }
+  .menu-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 13px; font-weight: 600; }
+  .menu-body { max-height: 400px; overflow: auto; padding: 6px; }
+  .menu-label { font-size: 10px; font-weight: 600; letter-spacing: .06em; color: var(--muted); padding: 8px 8px 2px; text-transform: uppercase; }
+  .menu-foot { border-top: 1px solid var(--border); padding: 8px 12px; text-align: center; }
+  #palette { width: min(600px, calc(100vw - 32px)); margin-top: 12vh; }
+  #palette input { width: 100%; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; padding: 14px 16px; font-size: 15px; background: transparent; }
+  #palette input:focus { outline: none; }
+  #palette .results { max-height: 50vh; overflow: auto; padding: 6px; }
+  #palette .row[aria-selected="true"] { background: var(--secondary); }
+
   @media (max-width: 760px) {
     .dlg-body { flex-direction: column; height: calc(100vh - 100px); overflow: auto; }
     .dlg-main { overflow: visible; padding: 16px; }
     .dlg-side { width: auto; border-left: 0; border-top: 1px solid var(--border); }
     .feed { max-height: 320px; }
-    .props { grid-template-columns: 1fr; }
+    .props, .fields-grid { grid-template-columns: 1fr; }
   }
   .sm-only { display: none !important; }
+  .scrim { display: none; }
   @media (max-width: 767px) {
-    .side { display: none; }
+    .side { position: fixed; inset: 0 auto 0 0; z-index: 70; transform: translateX(-100%); transition: transform .2s; width: 220px !important; }
+    .side.open { transform: none; }
+    .side.slim .hide-slim { display: revert !important; }
+    .scrim.open { display: block; position: fixed; inset: 0; z-index: 65; background: rgb(0 0 0 / .4); }
     .sm-only { display: inline-flex !important; }
-    header { padding: 8px 12px; }
+    header { padding: 8px 12px; gap: 6px; }
+    .hide-sm { display: none !important; }
+    .page { padding: 16px; }
   }
   @media (max-width: 640px) {
     .search-wrap { order: 10; width: 100%; }
     .search { width: 100%; }
-    .hide-sm { display: none; }
+    .tabs button .lbl { display: none; }
   }
 </style>
 </head>
 <body>
-<div class="banner">Live demo · changes stay in your browser · <a href="../">Back to Digital Board</a></div>
+<div class="banner">Live demo · changes stay in your browser · <button type="button" id="reset" title="Put the sample data back">Reset demo</button> · <a href="../">Back to Digital Board</a></div>
 <div class="app">
-<aside class="side">
-  <a class="brand" href="../" title="Back to Digital Board">
-    <span class="logo"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><rect x="1" y="1" width="6" height="6" rx="1.2"/><rect x="9" y="1" width="6" height="6" rx="1.2" opacity=".6"/><rect x="1" y="9" width="6" height="6" rx="1.2" opacity=".6"/><rect x="9" y="9" width="6" height="6" rx="1.2" opacity=".3"/></svg></span>
-    Acme
-  </a>
+<div class="scrim" id="scrim"></div>
+<aside class="side" id="side-nav">
+  <div class="brand">
+    <button type="button" id="collapse" aria-label="Collapse sidebar"><span class="logo"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><rect x="1" y="1" width="6" height="6" rx="1.2"/><rect x="9" y="1" width="6" height="6" rx="1.2" opacity=".6"/><rect x="1" y="9" width="6" height="6" rx="1.2" opacity=".6"/><rect x="9" y="9" width="6" height="6" rx="1.2" opacity=".3"/></svg></span></button>
+    <span class="editable hide-slim" id="ws-name" title="Rename workspace"></span>
+  </div>
   <nav class="nav" id="nav"></nav>
   <div class="side-foot">
-    <div class="side-label">PROJECTS</div>
-    <div class="side-project"><span class="dot" style="background:var(--c0)"></span>Web App</div>
-    <div class="side-user"><span class="avatar" style="background:#6366f1">AL</span><div>Ada Lovelace<small>ada@acme.example</small></div></div>
+    <div class="side-label hide-slim">PROJECTS</div>
+    <div class="side-project hide-slim"><span class="dot" style="background:var(--c0)"></span><span id="side-project"></span></div>
+    <div class="side-user"><span class="avatar" style="background:#6366f1">AL</span><div class="hide-slim">Ada Lovelace<small>ada@acme.example</small></div></div>
   </div>
 </aside>
 <div class="main-col">
 <header>
-  <h1 class="ptitle">Web App</h1>
+  <button class="icon-btn sm-only" id="menu-btn" aria-label="Open menu"></button>
+  <h1 class="ptitle" id="ptitle"></h1>
   <div class="tabs" role="tablist" id="tabs"></div>
   <span class="spacer"></span>
   <label class="search-wrap" id="search-wrap"><span id="search-ico"></span><input class="search" id="search" type="search" placeholder="Search tasks…" aria-label="Search tasks"></label>
-  <button class="btn ghost" id="reset" title="Put the sample data back">Reset demo</button>
+  <button class="btn ghost" id="filter-btn"></button>
+  <button class="icon-btn" id="palette-btn" title="Search (⌘K)" aria-label="Search"></button>
   <button class="icon-btn" id="theme" aria-label="Toggle theme">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
   </button>
-  <button class="btn" id="new">+ New Task</button>
+  <div style="position:relative">
+    <button class="icon-btn" id="bell" aria-label="Notifications" aria-haspopup="menu" aria-expanded="false"></button>
+    <div class="menu" id="bell-menu" hidden></div>
+  </div>
+  <button class="btn" id="new"></button>
 </header>
+<div class="filterbar" id="filterbar" hidden></div>
 
 <main>
-  <section id="view-board" class="board"></section>
+  <section id="view-home" hidden></section>
+  <section id="view-board" class="board-wrap"></section>
   <section id="view-list" class="list" hidden></section>
   <section id="view-calendar" class="cal" hidden></section>
+  <section id="view-timeline" class="tl" hidden></section>
+  <section id="view-analytics" hidden></section>
   <section id="view-canvas" class="canvas" hidden><div class="loading">Loading canvas…</div></section>
+  <section id="view-chat" class="chat" hidden></section>
+  <section id="view-inbox" hidden></section>
+  <section id="view-mine" hidden></section>
+  <section id="view-meetings" hidden></section>
+  <section id="view-settings" class="settings" hidden></section>
 </main>
 </div>
 </div>
+<div class="toast" id="toast" hidden></div>
 
 <dialog id="dialog">
   <div class="dlg-head"><span class="dot" id="dialog-dot"></span><span id="dialog-title">New task</span>
@@ -267,19 +498,44 @@
   </div>
   <div class="dlg-body">
     <form method="dialog" id="form" class="dlg-main">
+      <div class="parent-line" id="parent-line" hidden></div>
       <textarea name="title" class="title-input" rows="1" required maxlength="120" placeholder="Task name" aria-label="Title"></textarea>
       <div class="props">
-        <label class="prop"><span>Status</span><select name="col"></select></label>
+        <label class="prop"><span>Column</span><select name="col"></select></label>
         <label class="prop"><span>Priority</span><select name="prio"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></label>
-        <label class="prop"><span>Assignee</span><select name="who"></select></label>
+        <div class="prop"><span>Assignees</span><details id="who-pick"><summary id="who-summary"></summary><div class="pick-menu" id="who-menu"></div></details></div>
+        <label class="prop"><span>Labels</span><input name="label" maxlength="60" placeholder="Design, QA" autocomplete="off"></label>
+        <label class="prop"><span>Start date</span><input name="start" type="date"></label>
         <label class="prop"><span>Due date</span><input name="due" type="date"></label>
-        <label class="prop"><span>Labels</span><input name="label" maxlength="60" placeholder="Bug, Frontend" autocomplete="off"></label>
+        <label class="prop"><span>Sprint</span><select name="sprint"></select></label>
+        <label class="prop"><span>Repeat</span><select name="repeat"><option value="">Never</option><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select></label>
       </div>
       <label class="section">Description <textarea name="desc" maxlength="2000" placeholder="Add a description"></textarea></label>
+      <div class="section" id="fields-box"></div>
       <div class="section" id="checklist-box">
         <span>Checklist <span id="check-count"></span></span>
         <div class="checks" id="checks"></div>
         <input id="check-add" placeholder="Add an item and press Enter" autocomplete="off">
+      </div>
+      <div class="section" id="subtasks-box">
+        <span>Subtasks <span id="sub-count"></span></span>
+        <div class="subs" id="subs"></div>
+        <input id="sub-add" placeholder="Add a subtask… press Enter" autocomplete="off">
+      </div>
+      <div class="section" id="deps-box">
+        <span>Dependencies</span>
+        <div class="deps" id="deps"></div>
+        <input id="dep-add" list="dep-options" placeholder="Blocked by… type a key or title" autocomplete="off">
+        <datalist id="dep-options"></datalist>
+      </div>
+      <div class="section" id="time-box">
+        <span>Time tracking</span>
+        <div class="timer-row" id="timer-row"></div>
+      </div>
+      <div class="section" id="images-box">
+        <span>Images <span id="img-count"></span></span>
+        <div class="imgs" id="imgs"></div>
+        <label class="btn ghost sm" style="width:max-content;display:inline-flex">Add images<input type="file" id="img-add" accept="image/*" multiple hidden></label>
       </div>
       <div class="section" id="canvas-box" hidden>
         <span>Canvas <span id="canvas-count"></span></span>
@@ -288,6 +544,7 @@
       <div class="actions">
         <button class="btn" value="save">Save</button>
         <button type="button" class="btn ghost" id="cancel">Cancel</button>
+        <button type="button" class="btn ghost push" id="archive">Archive</button>
         <button type="button" class="btn danger" id="delete">Delete</button>
       </div>
     </form>
@@ -303,23 +560,27 @@
   </div>
 </dialog>
 
-<script>
-const COLUMNS = [
-  { id: "backlog", title: "Backlog", color: "var(--c0)" },
-  { id: "todo", title: "Todo", color: "var(--c4)" },
-  { id: "progress", title: "In Progress", color: "var(--c1)" },
-  { id: "review", title: "In Review", color: "var(--c3)" },
-  { id: "done", title: "Done", color: "var(--c2)" },
-];
-const PEOPLE = [
-  { id: "ada", name: "Ada Lovelace", color: "#6366f1" },
-  { id: "ben", name: "Ben Ito", color: "#10b981" },
-  { id: "cleo", name: "Cleo Park", color: "#ec4899" },
-];
-const KEY = "digital-board-demo-v4";
-const CANVAS_KEY = KEY + "-canvas";
+<dialog id="small" class="small">
+  <div class="dlg-head"><span id="small-title"></span>
+    <button type="button" class="icon-btn" data-close-small aria-label="Close"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+  </div>
+  <form method="dialog" class="pad" id="small-body"></form>
+</dialog>
 
-// Due dates are relative to today, so the calendar always has something on it.
+<dialog id="palette" aria-label="Search">
+  <input id="palette-q" placeholder="Search cards, meetings and messages…" autocomplete="off">
+  <div class="results" id="palette-results"></div>
+</dialog>
+
+<script>
+const ME = "ada";
+const KEY = "digital-board-demo-v5";
+const CANVAS_KEY = KEY + "-canvas";
+const H = 36e5, DAY = 864e5;
+const COLORS = ["var(--c0)", "var(--c4)", "var(--c1)", "var(--c3)", "var(--c2)", "var(--c5)", "var(--c6)"];
+const MEMBER_COLORS = ["#8b5cf6", "#06b6d4", "#f59e0b", "#ef4444", "#14b8a6"];
+
+// Due dates are relative to today, so the calendar and timeline always have something on them.
 function day(offset) {
   const d = new Date(); d.setDate(d.getDate() + offset);
   return iso(d);
@@ -327,43 +588,115 @@ function day(offset) {
 function iso(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
 
 function sample() {
-  const t = (n, col, title, desc, prio, label, who, due, checklist = [], comments = []) =>
-    ({ id: n, key: `WEB-${n}`, col, title, desc, prio, label, who, due, checklist, comments, history: [`Created by ${PEOPLE[0].name}`] });
-  const c = (who, text, agent = false) => ({ who, text, agent, at: "Yesterday" });
+  const N = Date.now(), h = (x) => N - x * H;
+  const T = (o) => ({ desc: "", prio: "medium", label: "", who: [], start: "", due: "", checklist: [], comments: [], parent: null,
+    blockedBy: [], sprint: "s7", repeat: "", fields: {}, images: [], archived: false, time: { secs: 0, since: null },
+    ...o, key: `WEB-${o.id}`, entered: h(o.age ?? 30),
+    history: [{ by: o.by ?? "ada", text: "created this card", at: h((o.age ?? 30) + 30) }, ...(o.log ?? [])] });
+  const c = (who, text, hrs, agent = false) => ({ who, text, agent, at: h(hrs) });
   return {
-    seq: 10,
+    workspace: "Acme",
+    project: "Web App",
+    seq: 13,
+    members: [
+      { id: "ada", name: "Ada Lovelace", email: "ada@acme.example", color: "#6366f1", role: "Admin", presence: "online" },
+      { id: "ben", name: "Ben Ito", email: "ben@acme.example", color: "#10b981", role: "Member", presence: "online" },
+      { id: "cleo", name: "Cleo Park", email: "cleo@acme.example", color: "#ec4899", role: "Member", presence: "away" },
+    ],
+    columns: [
+      { id: "backlog", title: "Backlog", color: "var(--c0)", limit: null },
+      { id: "todo", title: "Todo", color: "var(--c4)", limit: null },
+      { id: "progress", title: "In Progress", color: "var(--c1)", limit: 5 },
+      { id: "review", title: "In Review", color: "var(--c3)", limit: 2 },
+      { id: "done", title: "Done", color: "var(--c2)", limit: null },
+    ],
+    sprints: [
+      { id: "s6", name: "Sprint 6", start: day(-19), end: day(-6), closed: true },
+      { id: "s7", name: "Sprint 7", start: day(-5), end: day(9), closed: false },
+    ],
+    fields: [
+      { id: "f1", name: "Client", type: "text" },
+      { id: "f2", name: "Size", type: "select", options: ["Small", "Medium", "Large"] },
+    ],
+    automations: [{ id: "r1", when: "moved", col: "review", action: "assign", value: "ada" }],
+    views: [{ name: "My open work", layout: "list", filters: { who: "me" } }],
     tasks: [
-      t(1, "progress", "Set up CI pipeline (lint, test, build)", "Run on every pull request. Block merge when it fails.\nThe flow: @ReleaseFlow", "high", "Chore, DevOps", "ben", day(2),
-        [{ text: "Lint", done: true }, { text: "Unit tests", done: true }, { text: "Build", done: false }],
-        [c("ada", "The fix-and-push loop in @ReleaseFlow is the part CI must catch.")]),
-      t(2, "review", "Login page", "Acceptance criteria:\n- Email + password\n- Error on wrong password", "medium", "Feature, Frontend, Auth", "ada", day(5),
-        [{ text: "Form", done: true }, { text: "Error state", done: false }], [c("cleo", "Looks good on mobile too.")]),
-      t(3, "review", "Fix: session expires too early", "Steps to reproduce:\n1. Log in\n2. Wait 10 minutes", "high", "Bug, Auth", "ben", day(-1), [],
-        [c("ada", "@agent what's left on this?"), c("", "WEB-3 is in In Review, high priority, assigned to Ben Ito and already overdue. The fix is written; it needs a review and a check that sessions now last the configured time.", true)]),
-      t(4, "backlog", "Write README setup section", "", "low", "Docs", "", ""),
-      t(5, "todo", "Dark mode for the settings page", "Follow the app theme toggle.", "medium", "Feature", "cleo", day(9)),
-      { ...t(6, "review", "Onboarding flow redesign", "New sign-up steps, sketched on the canvas.", "medium", "Design, Frontend", "cleo", day(3),
-        [{ text: "Wireframes", done: true }, { text: "Copy review", done: false }], [c("cleo", "Wireframes are on the canvas, have a look.")]), cover: true },
-      t(10, "todo", "Add rate limit to the inbound webhook", "", "high", "Security", "ada", day(4)),
-      t(7, "backlog", "Export board as CSV", "One row per task with its column.", "low", "Feature", "", day(14)),
-      t(8, "done", "Project templates", "Six templates with their own columns.", "medium", "Feature", "cleo", day(-6), [{ text: "Six templates", done: true }]),
-      t(9, "done", "Invite members by email", "", "low", "Feature", "ada", day(-3)),
+      T({ id: 1, col: "progress", title: "Set up CI pipeline (lint, test, build)", desc: "Run on every pull request. Block merge when it fails.\nThe flow: @ReleaseFlow", prio: "high", label: "Chore, DevOps", who: ["ben"], start: day(-3), due: day(2),
+        checklist: [{ text: "Lint", done: true }, { text: "Unit tests", done: true }, { text: "Build", done: false }], time: { secs: 5400, since: null }, fields: { f2: "Medium" }, age: 2,
+        comments: [c("ada", "The fix-and-push loop in @ReleaseFlow is the part CI must catch.", 20)], log: [{ by: "ben", text: "moved from Todo to In Progress", at: h(2) }] }),
+      T({ id: 11, col: "done", title: "Lint and test jobs", prio: "low", who: ["ben"], parent: 1, due: day(-1), by: "ben", age: 26 }),
+      T({ id: 12, col: "todo", title: "Cache node_modules between runs", prio: "low", parent: 1, by: "ben" }),
+      T({ id: 2, col: "review", title: "Login page", desc: "Acceptance criteria:\n- Email + password\n- Error on wrong password", label: "Feature, Frontend, Auth", who: ["ada", "cleo"], start: day(1), due: day(5), blockedBy: [3], age: 5,
+        checklist: [{ text: "Form", done: true }, { text: "Error state", done: false }],
+        comments: [c("cleo", "Looks good on mobile too.", 30), c("cleo", "@Ada Lovelace can you check the error copy?", 5)] }),
+      T({ id: 3, col: "review", title: "Fix: session expires too early", desc: "Steps to reproduce:\n1. Log in\n2. Wait 10 minutes", prio: "high", label: "Bug, Auth", who: ["ben"], start: day(-4), due: day(-1), age: 96,
+        comments: [c("ada", "@agent what's left on this?", 26), c("", "WEB-3 is in In Review, high priority, assigned to Ben Ito and already overdue. The fix is written; it needs a review and a check that sessions now last the configured time.", 26, true)] }),
+      T({ id: 4, col: "backlog", title: "Write README setup section", prio: "low", label: "Docs", sprint: "" }),
+      T({ id: 5, col: "todo", title: "Dark mode for the settings page", desc: "Follow the app theme toggle.", label: "Feature", who: ["cleo"], start: day(6), due: day(9), blockedBy: [6], by: "cleo" }),
+      T({ id: 6, col: "review", title: "Onboarding flow redesign", desc: "New sign-up steps, sketched on the canvas.", label: "Design, Frontend", who: ["cleo"], start: day(-2), due: day(3), cover: true, age: 20, by: "cleo",
+        fields: { f1: "Acme Inc", f2: "Large" }, checklist: [{ text: "Wireframes", done: true }, { text: "Copy review", done: false }], comments: [c("cleo", "Wireframes are on the canvas, have a look.", 5)] }),
+      T({ id: 10, col: "todo", title: "Add rate limit to the inbound webhook", prio: "high", label: "Security", who: ["ada"], start: day(2), due: day(4) }),
+      T({ id: 13, col: "todo", title: "Update dependencies", desc: "Weekly: bump minor versions, run the tests.", prio: "low", label: "Chore", who: ["ben"], due: day(1), repeat: "weekly", by: "ben" }),
+      T({ id: 7, col: "backlog", title: "Export board as CSV", desc: "One row per task with its column.", prio: "low", label: "Feature", due: day(14), sprint: "" }),
+      T({ id: 8, col: "done", title: "Project templates", desc: "Six templates with their own columns.", label: "Feature", who: ["cleo"], due: day(-6), sprint: "s6", checklist: [{ text: "Six templates", done: true }], by: "cleo", age: 150 }),
+      T({ id: 9, col: "done", title: "Invite members by email", prio: "low", label: "Feature", who: ["ada"], due: day(-3), sprint: "s6", age: 80 }),
+    ],
+    inbox: [
+      { id: 1, by: "cleo", text: "mentioned you on WEB-2 Login page", task: 2, at: h(5), read: false, mention: true },
+      { id: 2, by: "cleo", text: "commented on WEB-6 Onboarding flow redesign", task: 6, at: h(5), read: false },
+      { id: 3, by: "ben", text: "moved WEB-1 Set up CI pipeline to In Progress", task: 1, at: h(2), read: false },
+      { id: 4, by: "ben", text: "completed WEB-11 Lint and test jobs", task: 11, at: h(26), read: true },
+    ],
+    messages: [
+      { ch: "general", from: "ada", text: "Standup moves to 9:30 from tomorrow.", at: h(26) },
+      { ch: "general", from: "ben", text: "Morning! CI is green again on main.", at: h(3) },
+      { ch: "general", from: "cleo", text: "Wireframes for WEB-6 are up on the canvas, comments welcome.", at: N - 40 * 6e4 },
+      { ch: "ben", from: "ben", text: "Can you review WEB-3 today?", at: N - 20 * 6e4 },
+      { ch: "cleo", from: "ada", text: "Thanks for checking the login page on mobile!", at: h(29) },
+      { ch: "cleo", from: "cleo", text: "Anytime 🙂", at: h(28) },
+    ],
+    seen: { general: h(2), ben: 0, cleo: N },
+    meetings: [
+      { id: 1, title: "Daily standup", date: day(-7), time: "09:30", dur: 15, repeat: "daily", who: ["ada", "ben", "cleo"], link: "https://meet.example.com/standup", notes: "Yesterday, today, blockers." },
+      { id: 2, title: "Sprint 7 review", date: day(9), time: "14:00", dur: 60, repeat: "", who: ["ada", "ben", "cleo"], link: "", notes: "Demo what shipped in Sprint 7." },
+      { id: 3, title: "Onboarding design sync", date: day(1), time: "11:00", dur: 30, repeat: "", who: ["ada", "cleo"], link: "https://meet.example.com/design", notes: "Walk through the WEB-6 wireframes." },
+      { id: 4, title: "Sprint 6 retro", date: day(-6), time: "15:00", dur: 45, repeat: "", who: ["ada", "ben", "cleo"], link: "", notes: "" },
     ],
   };
 }
 
 let state;
 try { state = JSON.parse(localStorage.getItem(KEY)) || sample(); } catch { state = sample(); }
-function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch {} }
+function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch { toast("Browser storage is full: the last change was not saved."); } }
 
 const $ = (s) => document.querySelector(s);
-const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
-const person = (id) => PEOPLE.find((p) => p.id === id);
-const column = (id) => COLUMNS.find((c) => c.id === id);
-const initials = (name) => name.split(" ").map((w) => w[0]).join("");
-const fmt = (d) => new Date(d + "T00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" });
-let query = "";
-const visible = () => state.tasks.filter((t) => !query || `${t.key} ${t.title} ${t.desc} ${t.label}`.toLowerCase().includes(query));
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const person = (id) => state.members.find((p) => p.id === id);
+const column = (id) => state.columns.find((c) => c.id === id) ?? state.columns[0];
+const task = (id) => state.tasks.find((t) => t.id === id);
+const doneId = () => state.columns.at(-1).id;
+const isDone = (t) => t.col === doneId();
+const initials = (name) => name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase();
+const fmt = (d) => new Date(d + "T00:00").toLocaleDateString("en", { month: "short", day: "numeric" });
+const ago = (ts) => {
+  const s = (Date.now() - ts) / 1000;
+  if (s < 60) return "Just now";
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  const d = Math.floor(s / 86400);
+  return d === 1 ? "Yesterday" : `${d}d ago`;
+};
+const dur = (s) => { const m = Math.floor(s / 60); return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`; };
+const tracked = (t) => t.time.secs + (t.time.since ? (Date.now() - t.time.since) / 1000 : 0);
+const currentSprint = () => state.sprints.find((s) => !s.closed && s.start <= day(0) && day(0) <= s.end);
+const mine = () => state.tasks.filter((t) => !t.archived && t.who.includes(ME) && !isDone(t));
+const late = (t) => t.due && !isDone(t) && t.due < day(0);
+const blocked = (t) => t.blockedBy.some((id) => task(id) && !isDone(task(id)));
+const labelsOf = (s) => (s || "").split(",").map((l) => l.trim()).filter(Boolean);
+const allLabels = () => [...new Set(state.tasks.flatMap((t) => labelsOf(t.label)))].sort();
+
+// Card history: one row per change, with who did it.
+function log(t, text, by = ME) { t.history.push({ by, text, at: Date.now() }); }
 
 const ICON = {
   desc: '<path d="M15 12H3M17 18H3M21 6H3"/>',
@@ -382,48 +715,177 @@ const ICON = {
   gear: '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
   list: '<path d="M3 12h.01M3 18h.01M3 6h.01M8 12h13M8 18h13M8 6h13"/>',
   chart: '<path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9M13 17V5M8 17v-3"/>',
+  gantt: '<path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M7 7h8M10 12h8M8 17h5"/>',
   search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
   spark: '<path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>',
+  timer: '<path d="M10 2h4M12 14l3-3"/><circle cx="12" cy="14" r="8"/>',
+  clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+  tree: '<path d="M21 12h-8M21 6H8M21 18h-8M3 6v4c0 1.1.9 2 2 2h3M3 10v6c0 1.1.9 2 2 2h3"/>',
+  clip: '<path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/>',
+  repeat: '<path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>',
+  ban: '<circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/>',
+  bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
+  filter: '<path d="M22 3H2l8 9.46V19l4 2v-8.54z"/>',
+  archive: '<rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8M10 12h4"/>',
+  zap: '<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>',
+  x: '<path d="M18 6 6 18M6 6l12 12"/>',
+  menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
+  plus: '<path d="M5 12h14M12 5v14"/>',
+  play: '<path d="M6 3l14 9-14 9z"/>',
+  stop: '<rect x="6" y="6" width="12" height="12" rx="1"/>',
+  link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+  download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>',
+  users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
+  folder: '<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
+  brush: '<circle cx="13.5" cy="6.5" r=".5"/><circle cx="17.5" cy="10.5" r=".5"/><circle cx="8.5" cy="7.5" r=".5"/><circle cx="6.5" cy="12.5" r=".5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/>',
 };
 const svg = (k, style = "") => `<svg class="ico" style="${style}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[k]}</svg>`;
 const PRIO = { high: "#ef4444", medium: "#f59e0b", low: "#6b7280" };
 const cap = (s) => s[0].toUpperCase() + s.slice(1);
-const labelsOf = (s) => (s || "").split(",").map((l) => l.trim()).filter(Boolean);
-const avatar = (p) => `<span class="avatar" style="background:${p.color}" title="${esc(p.name)}">${initials(p.name)}</span>`;
-const late = (t) => t.due && t.col !== "done" && t.due < day(0);
+const avatar = (p, size = 22) => p ? `<span class="avatar" style="background:${p.color};width:${size}px;height:${size}px" title="${esc(p.name)}">${initials(p.name)}</span>` : "";
+const avatars = (ids) => ids.length ? `<span class="avatars" title="${esc(ids.map((id) => person(id)?.name).filter(Boolean).join(", "))}">${ids.slice(0, 3).map((id) => avatar(person(id))).join("")}${ids.length > 3 ? `<span class="avatar" style="background:var(--secondary);color:var(--fg)">+${ids.length - 3}</span>` : ""}</span>` : "";
+const keyLinks = (html) => html.replace(/\bWEB-(\d+)\b/g, (m, n) => task(+n) ? `<button type="button" class="key-link" data-open="${n}">${m}</button>` : m);
+
+let toastTimer;
+function toast(text, undo) {
+  const el = $("#toast");
+  el.innerHTML = `<span>${esc(text)}</span>${undo ? `<button type="button">Undo</button>` : ""}`;
+  el.hidden = false;
+  if (undo) el.querySelector("button").onclick = () => { undo(); el.hidden = true; };
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => (el.hidden = true), 6000);
+}
 
 const COVER = `<svg class="cover" viewBox="0 0 264 120" aria-hidden="true"><rect width="264" height="120" fill="var(--secondary)"/>
   <g fill="var(--card)" stroke="var(--muted)" stroke-width="1.2"><rect x="20" y="48" width="44" height="24" rx="12"/><rect x="86" y="48" width="48" height="24" rx="4"/><path d="M178 38l22 22-22 22-22-22z"/><rect x="220" y="20" width="32" height="22" rx="4"/><rect x="220" y="78" width="32" height="22" rx="11"/></g>
   <g stroke="var(--muted)" stroke-width="1.2" fill="none"><path d="M64 60h22M134 60h22M200 60h8v-29h12M200 60h8v29h12"/></g>
   <g fill="var(--c1)" opacity=".5"><rect x="26" y="57" width="32" height="6" rx="3"/></g><g fill="var(--c0)" opacity=".45"><rect x="94" y="57" width="32" height="6" rx="3"/></g></svg>`;
 
+// ── Filters and saved views ───────────────────────────────────────────────
+let filters = {};
+let showFilters = false;
+const subtasksOf = (t) => state.tasks.filter((s) => s.parent === t.id && !s.archived);
+function matches(t) {
+  const f = filters, q = (f.q || "").toLowerCase();
+  if (t.archived) return false;
+  if (q && !`${t.key} ${t.title} ${t.desc} ${t.label}`.toLowerCase().includes(q)) return false;
+  if (f.who && !t.who.includes(f.who === "me" ? ME : f.who)) return false;
+  if (f.prio && t.prio !== f.prio) return false;
+  if (f.label && !labelsOf(t.label).includes(f.label)) return false;
+  if (f.sprint) {
+    const want = f.sprint === "current" ? currentSprint()?.id : f.sprint === "none" ? "" : f.sprint;
+    if ((t.sprint || "") !== (want ?? "-")) return false;
+  }
+  return true;
+}
+const visible = () => state.tasks.filter(matches);
+const activeFilters = () => ["who", "prio", "label", "sprint", "group"].filter((k) => filters[k]).length;
+
+function renderFilterbar() {
+  const bar = $("#filterbar");
+  bar.hidden = !(showFilters && section === "board");
+  $("#filter-btn").innerHTML = `${svg("filter")}<span class="hide-sm">Filter</span>${activeFilters() ? `<span class="pill">${activeFilters()}</span>` : ""}`;
+  $("#filter-btn").classList.toggle("on", activeFilters() > 0);
+  if (bar.hidden) return;
+  const opt = (v, label, cur) => `<option value="${esc(v)}"${cur === v ? " selected" : ""}>${esc(label)}</option>`;
+  const sp = currentSprint(), sprint = filters.sprint && state.sprints.find((s) => s.id === (filters.sprint === "current" ? sp?.id : filters.sprint));
+  const inSprint = sprint ? state.tasks.filter((t) => !t.archived && t.sprint === sprint.id) : [];
+  const all = state.tasks.filter((t) => !t.archived).length;
+  bar.innerHTML = `
+    ${state.views.map((v, i) => `<span class="chip-btn" data-saved="${i}">${esc(v.name)}<button type="button" class="x" data-unsave="${i}" aria-label="Remove view ${esc(v.name)}">×</button></span>`).join("")}
+    <span id="save-view-wrap"><button type="button" class="btn ghost sm" id="save-view">+ Save view</button></span>
+    ${view === "board" ? `<select data-f="group" aria-label="Swimlanes">${opt("", "No swimlanes", filters.group || "")}${opt("assignee", "Lanes by assignee", filters.group)}${opt("label", "Lanes by label", filters.group)}${opt("priority", "Lanes by priority", filters.group)}</select>` : ""}
+    <select data-f="who">${opt("", "All assignees", filters.who || "")}${opt("me", "Me", filters.who)}${state.members.map((m) => opt(m.id, m.name, filters.who)).join("")}</select>
+    <select data-f="prio">${opt("", "All priorities", filters.prio || "")}${["high", "medium", "low"].map((p) => opt(p, cap(p), filters.prio)).join("")}</select>
+    <select data-f="label">${opt("", "All labels", filters.label || "")}${allLabels().map((l) => opt(l, l, filters.label)).join("")}</select>
+    <button type="button" class="btn ghost sm" id="reset-filters">${svg("x")}Reset</button>
+    <select data-f="sprint" aria-label="Sprint">${opt("", "All sprints", filters.sprint || "")}${opt("current", `Current sprint${sp ? ` (${sp.name})` : ""}`, filters.sprint)}${state.sprints.filter((s) => !s.closed).map((s) => opt(s.id, s.name, filters.sprint)).join("")}${opt("none", "Backlog (no sprint)", filters.sprint)}${state.sprints.some((s) => s.closed) ? `<optgroup label="Completed sprints">${state.sprints.filter((s) => s.closed).map((s) => opt(s.id, s.name, filters.sprint)).join("")}</optgroup>` : ""}</select>
+    ${sprint ? `<span class="muted">${inSprint.filter(isDone).length}/${inSprint.length} done · ${fmt(sprint.start)} → ${fmt(sprint.end)}</span>` : ""}
+    <button type="button" class="btn ghost sm" id="open-sprints">${svg("zap")}Sprints</button>
+    <button type="button" class="btn ghost sm" id="open-archived">${svg("archive")}Archived</button>
+    <span class="count-note">${visible().length} of ${all} tasks</span>`;
+}
+$("#filterbar").addEventListener("change", (e) => {
+  const k = e.target.dataset.f;
+  if (!k) return;
+  filters = { ...filters, [k]: e.target.value || undefined };
+  render();
+});
+$("#filterbar").addEventListener("click", (e) => {
+  const t = e.target;
+  if (t.closest("[data-unsave]")) { state.views.splice(+t.closest("[data-unsave]").dataset.unsave, 1); save(); return render(); }
+  const saved = t.closest("[data-saved]");
+  if (saved) { const v = state.views[+saved.dataset.saved]; filters = { ...v.filters, q: filters.q }; return setView(v.layout); }
+  if (t.closest("#reset-filters")) { filters = { q: filters.q }; return render(); }
+  if (t.closest("#open-sprints")) return openSprints();
+  if (t.closest("#open-archived")) return openArchived();
+  if (t.closest("#save-view")) {
+    $("#save-view-wrap").innerHTML = `<input id="view-name" placeholder="View name, Enter to save" maxlength="40" style="width:170px">`;
+    $("#view-name").focus();
+  }
+});
+$("#filterbar").addEventListener("keydown", (e) => {
+  if (e.target.id !== "view-name") return;
+  if (e.key === "Escape") return renderFilterbar();
+  if (e.key !== "Enter" || !e.target.value.trim()) return;
+  const { q, ...rest } = filters;
+  state.views.push({ name: e.target.value.trim(), layout: view, filters: rest });
+  save(); render();
+});
+$("#filter-btn").onclick = () => { showFilters = !showFilters; renderFilterbar(); };
+
+// ── Cards ─────────────────────────────────────────────────────────────────
 function card(t) {
-  const p = person(t.who), labels = labelsOf(t.label);
+  const labels = labelsOf(t.label), col = column(t.col), subs = subtasksOf(t);
+  const stageDays = Math.floor((Date.now() - t.entered) / DAY);
+  const fields = state.fields.filter((f) => t.fields[f.id]);
   const icons = [
+    blocked(t) && `<span class="blocked" title="Waiting on another card">${svg("ban")}Blocked</span>`,
+    col.limit && `<span class="${stageDays > col.limit ? "over" : ""}" title="${stageDays} day(s) in this column">${svg("timer")}${stageDays}d</span>`,
+    (t.time.since || t.time.secs >= 60) && `<span title="${t.time.since ? "Timer running" : "Time logged"}">${t.time.since ? `<i class="live-dot"></i>` : svg("clock")}<span data-timer="${t.id}">${dur(tracked(t))}</span></span>`,
     t.desc && svg("desc"),
     t.checklist.length && `<span>${svg("check")}${t.checklist.filter((i) => i.done).length}/${t.checklist.length}</span>`,
+    subs.length && `<span title="Subtasks">${svg("tree")}${subs.filter(isDone).length}/${subs.length}</span>`,
     t.comments.length && `<span>${svg("comment")}${t.comments.length}</span>`,
+    t.images.length && `<span>${svg("clip")}${t.images.length}</span>`,
+    t.repeat && `<span title="Repeats ${t.repeat}">${svg("repeat")}</span>`,
   ].filter(Boolean);
-  return `<button class="card" data-id="${t.id}">${t.cover ? COVER : ""}
-    <div class="key">${t.key}</div><div class="title">${esc(t.title)}</div>
+  const cover = t.images[0] ? `<img class="cover" src="${t.images[0]}" alt="">` : t.cover ? COVER : "";
+  return `<button class="card" data-id="${t.id}">${cover}
+    <div class="key">${t.key}${t.parent && task(t.parent) ? `<span title="Subtask of ${task(t.parent).key}">↳ ${task(t.parent).key}</span>` : ""}</div><div class="title">${esc(t.title)}</div>
     ${icons.length ? `<div class="line muted">${icons.join("")}</div>` : ""}
-    ${p || t.due ? `<div class="line">${p ? avatar(p) : ""}${t.due ? `<span class="due${late(t) ? " late" : ""}">${svg("cal")}${fmt(t.due)}</span>` : ""}</div>` : ""}
+    ${t.who.length || t.due ? `<div class="line">${avatars(t.who)}${t.due ? `<span class="due${late(t) ? " late" : ""}">${svg("cal")}${fmt(t.due)}</span>` : ""}</div>` : ""}
     <div class="line"><span>${svg("flag", `color:${PRIO[t.prio]};fill:${PRIO[t.prio]}`)}${cap(t.prio)}</span></div>
     ${labels.length ? `<div class="line">${svg("tag", "color:var(--muted)")}${labels.slice(0, 2).map((l) => `<span class="tag">${esc(l)}</span>`).join("")}${labels.length > 2 ? `<span class="muted" style="font-size:11px" title="${esc(labels.slice(2).join(", "))}">+${labels.length - 2}</span>` : ""}</div>` : ""}
+    ${fields.length ? `<div class="fields-line">${fields.map((f) => `<span>${esc(f.name)}: <b>${esc(t.fields[f.id])}</b></span>`).join("")}</div>` : ""}
   </button>`;
 }
 
 // ── Board ─────────────────────────────────────────────────────────────────
-function renderBoard() {
-  const tasks = visible();
-  $("#view-board").innerHTML = COLUMNS.map((c) => {
-    const mine = tasks.filter((t) => t.col === c.id);
+function columnsHtml(tasks, full) {
+  return state.columns.map((c) => {
+    const here = tasks.filter((t) => t.col === c.id);
     return `<div class="lane" data-col="${c.id}">
-      <div class="lane-head"><span class="dot" style="background:${c.color}"></span>${c.title}<span class="count">${mine.length}</span><button class="plus" data-add="${c.id}" aria-label="Add task to ${c.title}">+</button></div>
-      <div class="cards">${mine.map(card).join("")}</div>
+      <div class="lane-head"><span class="dot" style="background:${c.color}"></span>${full ? `<button type="button" class="name" data-edit-col="${c.id}" title="Edit column">${esc(c.title)}</button>` : esc(c.title)}<span class="count">${here.length}</span>${c.limit ? `<span class="limit" title="Day limit">${svg("timer")}${c.limit}d</span>` : ""}<button class="plus" data-add="${c.id}" aria-label="Add task to ${esc(c.title)}">+</button></div>
+      <div class="cards">${here.map(card).join("")}</div>
       <button class="add" data-add="${c.id}">+ Add task</button>
     </div>`;
   }).join("");
+}
+// Swimlanes: a card with two assignees or labels shows in both lanes.
+function lanes(tasks) {
+  const g = filters.group;
+  if (g === "priority") return ["high", "medium", "low"].map((p) => ({ label: `${cap(p)} priority`, tasks: tasks.filter((t) => t.prio === p) }));
+  const keys = g === "assignee" ? state.members.map((m) => m.id) : allLabels();
+  const of = (t) => g === "assignee" ? t.who : labelsOf(t.label);
+  return [...keys.map((k) => ({ label: g === "assignee" ? person(k).name : k, tasks: tasks.filter((t) => of(t).includes(k)) })),
+    { label: g === "assignee" ? "Unassigned" : "No label", tasks: tasks.filter((t) => !of(t).length) }].filter((l) => l.tasks.length);
+}
+function renderBoard() {
+  const tasks = visible();
+  $("#view-board").innerHTML = filters.group
+    ? lanes(tasks).map((l) => `<div class="swim"><div class="swim-head">${esc(l.label)}<span class="count">${l.tasks.length}</span></div><div class="board">${columnsHtml(l.tasks, false)}</div></div>`).join("") || `<p class="empty">No tasks match.</p>`
+    : `<div class="board">${columnsHtml(tasks, true)}<button type="button" class="add-col" id="add-col">+ Add column</button></div>`;
 }
 
 const board = $("#view-board");
@@ -432,7 +894,15 @@ board.addEventListener("click", (e) => {
   const card = e.target.closest(".card");
   if (card) return drag?.moved ? null : openTask(+card.dataset.id);
   const add = e.target.closest("[data-add]");
-  if (add) openTask(null, add.dataset.add);
+  if (add) return openTask(null, add.dataset.add);
+  const edit = e.target.closest("[data-edit-col]");
+  if (edit) return openColumn(edit.dataset.editCol);
+  if (e.target.closest("#add-col")) {
+    const c = { id: `c${Date.now()}`, title: "New column", color: COLORS[state.columns.length % COLORS.length], limit: null };
+    // New columns go before the last one, which stays the "done" column.
+    state.columns.splice(state.columns.length - 1, 0, c);
+    save(); render(); openColumn(c.id);
+  }
 });
 
 // Pointer events instead of HTML5 drag and drop, which phones don't support.
@@ -478,43 +948,188 @@ addEventListener("pointerup", (e) => {
       .find((c) => e.clientY < c.getBoundingClientRect().top + c.offsetHeight / 2);
     moveTask(id, lane.dataset.col, before ? +before.dataset.id : null);
   }
-  renderBoard();
+  render();
   setTimeout(() => (drag = null)); // after the click that follows pointerup
 });
 addEventListener("pointercancel", () => { if (drag) { clearTimeout(drag.timer); drag.ghost?.remove(); drag = null; renderBoard(); } });
 
 function moveTask(id, col, beforeId) {
-  const task = state.tasks.find((t) => t.id === id);
-  const from = task.col;
-  state.tasks.splice(state.tasks.indexOf(task), 1);
-  task.col = col;
-  const at = beforeId ? state.tasks.findIndex((t) => t.id === beforeId) : state.tasks.length;
-  state.tasks.splice(at, 0, task);
-  if (from !== col) task.history.push(`Moved from ${column(from).title} to ${column(col).title}`);
+  const t = task(id);
+  const from = t.col;
+  state.tasks.splice(state.tasks.indexOf(t), 1);
+  const at = beforeId ? state.tasks.findIndex((x) => x.id === beforeId) : state.tasks.length;
+  state.tasks.splice(at, 0, t);
+  if (from !== col) changeColumn(t, col);
   save();
+}
+// Every column change goes through here: history, stage timer, automations, repeats.
+function changeColumn(t, col) {
+  const from = t.col;
+  t.col = col;
+  t.entered = Date.now();
+  log(t, `moved from ${column(from).title} to ${column(col).title}`);
+  runAutomations(t, "moved");
+  if (col === doneId() && t.repeat) repeatTask(t);
+}
+
+// The next copy of a repeating card, due one interval later, back in the first column.
+function repeatTask(t) {
+  const base = t.due || day(0);
+  const d = new Date(base + "T00:00");
+  if (t.repeat === "daily") d.setDate(d.getDate() + 1);
+  else if (t.repeat === "weekly") d.setDate(d.getDate() + 7);
+  else { const dd = d.getDate(); d.setDate(1); d.setMonth(d.getMonth() + 1); d.setDate(Math.min(dd, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate())); }
+  const copy = createTask({ ...structuredClone(t), col: state.columns[0].id, due: iso(d), start: "", comments: [], images: [],
+    checklist: t.checklist.map((i) => ({ ...i, done: false })), time: { secs: 0, since: null } });
+  log(t, `repeats: created ${copy.key}`);
+}
+
+function createTask(v) {
+  const id = ++state.seq;
+  const t = { desc: "", prio: "medium", label: "", who: [], start: "", due: "", checklist: [], comments: [], parent: null, blockedBy: [],
+    sprint: "", repeat: "", fields: {}, images: [], archived: false, time: { secs: 0, since: null }, ...v,
+    id, key: `WEB-${id}`, entered: Date.now(), history: [] };
+  delete t.cover;
+  log(t, "created this card");
+  state.tasks.push(t);
+  runAutomations(t, "created");
+  return t;
+}
+
+// ── Automations (Settings → Projects): one action per rule ────────────────
+const ACTIONS = { assign: "assign", unassign: "unassign everyone", priority: "set priority", label: "add label", due: "set due in N days" };
+function ruleText(r) {
+  const when = r.when === "created" ? "a card is created" : `a card moves to ${r.col ? column(r.col).title : "any column"}`;
+  const what = r.action === "assign" ? `assign ${person(r.value)?.name ?? "?"}` : r.action === "unassign" ? "unassign everyone"
+    : r.action === "priority" ? `set priority to ${cap(r.value || "medium")}` : r.action === "label" ? `add label “${r.value}”` : `set the due date ${r.value} day(s) out`;
+  return `When ${when}, ${what}`;
+}
+function runAutomations(t, when) {
+  for (const r of state.automations) {
+    if (r.when !== when || (r.when === "moved" && r.col && r.col !== t.col)) continue;
+    if (r.action === "assign" && person(r.value) && !t.who.includes(r.value)) t.who = [...t.who, r.value];
+    else if (r.action === "unassign") t.who = [];
+    else if (r.action === "priority") t.prio = r.value;
+    else if (r.action === "label" && !labelsOf(t.label).includes(r.value)) t.label = [...labelsOf(t.label), r.value].join(", ");
+    else if (r.action === "due") t.due = day(+r.value || 0);
+    else continue;
+    log(t, `Automation: ${ruleText(r).replace(/^When [^,]+, /, "")}`, "automation");
+  }
+}
+
+// ── Column editor ─────────────────────────────────────────────────────────
+function openColumn(id) {
+  const c = column(id), i = state.columns.indexOf(c), empty = !state.tasks.some((t) => t.col === id && !t.archived);
+  smallDialog("Edit column", `
+    <label>Name <input name="title" value="${esc(c.title)}" maxlength="40" required></label>
+    <div><div style="font-size:12px;color:var(--muted);margin-bottom:6px">Colour</div><div class="swatches">${COLORS.map((col) =>
+      `<label><input type="radio" name="color" value="${col}"${col === c.color ? " checked" : ""}><span style="background:${col}"></span></label>`).join("")}</div></div>
+    <label>Day limit <input name="limit" type="number" min="1" max="365" value="${c.limit ?? ""}" placeholder="No limit"><small>Cards in this column longer than this turn red.</small></label>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button type="button" class="btn ghost sm" data-move="-1"${i === 0 ? " disabled" : ""}>← Move left</button>
+      <button type="button" class="btn ghost sm" data-move="1"${i === state.columns.length - 1 ? " disabled" : ""}>Move right →</button>
+      <button type="button" class="btn danger sm" data-del-col style="margin-left:auto"${empty && state.columns.length > 1 ? "" : ` disabled title="Move its cards out first"`}>Delete</button>
+    </div>
+    <div style="display:flex;gap:8px"><button class="btn">Save</button><button type="button" class="btn ghost" data-close-small>Cancel</button></div>`,
+  (v) => { c.title = v.title.trim() || c.title; c.color = v.color; c.limit = v.limit ? +v.limit : null; save(); render(); },
+  (e) => {
+    const move = e.target.closest("[data-move]");
+    if (move) {
+      const j = i + +move.dataset.move;
+      [state.columns[i], state.columns[j]] = [state.columns[j], state.columns[i]];
+      save(); render(); openColumn(id);
+    }
+    if (e.target.closest("[data-del-col]")) { state.columns.splice(i, 1); save(); $("#small").close(); render(); }
+  });
+}
+
+// One small modal for column, sprint, archive, member and meeting forms.
+let smallSubmit = null, smallClick = null;
+function smallDialog(title, html, onSubmit, onClick) {
+  $("#small-title").textContent = title;
+  $("#small-body").innerHTML = html;
+  smallSubmit = onSubmit; smallClick = onClick;
+  if (!$("#small").open) $("#small").showModal();
+}
+$("#small-body").addEventListener("submit", (e) => {
+  const fd = new FormData(e.target);
+  const v = Object.fromEntries(fd);
+  v._all = (k) => fd.getAll(k);
+  if (smallSubmit?.(v) === false) e.preventDefault();
+});
+$("#small").addEventListener("click", (e) => {
+  if (e.target.closest("[data-close-small]")) return $("#small").close();
+  smallClick?.(e);
+});
+
+// ── Sprints and archive ───────────────────────────────────────────────────
+function openSprints() {
+  const rows = state.sprints.map((s) => {
+    const tasks = state.tasks.filter((t) => !t.archived && t.sprint === s.id);
+    return `<div class="rule"><div class="grow"><b>${esc(s.name)}</b>${s === currentSprint() ? ` <span class="state live">Current</span>` : s.closed ? ` <span class="state">Completed</span>` : ""}<br><small class="muted">${fmt(s.start)} → ${fmt(s.end)} · ${tasks.filter(isDone).length}/${tasks.length} done</small></div>
+      ${s.closed ? "" : `<button type="button" class="btn ghost sm" data-close-sprint="${s.id}">Complete</button>`}</div>`;
+  }).join("");
+  smallDialog("Sprints", `${rows}
+    <div class="form-row"><label style="flex:1">Name <input name="name" required maxlength="40" value="Sprint ${state.sprints.length + 1}"></label></div>
+    <div class="form-row"><label>Start <input name="start" type="date" required value="${day(0)}"></label><label>End <input name="end" type="date" required value="${day(13)}"></label></div>
+    <div><button class="btn">Create sprint</button></div>`,
+  (v) => {
+    if (v.end < v.start) { toast("The end date is before the start."); return false; }
+    state.sprints.push({ id: `s${Date.now()}`, name: v.name.trim(), start: v.start, end: v.end, closed: false });
+    save(); render(); setTimeout(openSprints);
+  },
+  (e) => {
+    const b = e.target.closest("[data-close-sprint]");
+    if (!b) return;
+    // Completing a sprint sends its unfinished cards back to the backlog.
+    const s = state.sprints.find((x) => x.id === b.dataset.closeSprint);
+    s.closed = true;
+    for (const t of state.tasks) if (t.sprint === s.id && !isDone(t)) t.sprint = "";
+    save(); render(); openSprints();
+  });
+}
+function openArchived() {
+  const rows = state.tasks.filter((t) => t.archived);
+  smallDialog("Archived", rows.length ? rows.map((t) => `<div class="rule"><span class="muted">${t.key}</span><span class="grow">${esc(t.title)}</span>
+    <button type="button" class="btn ghost sm" data-restore="${t.id}">Restore</button><button type="button" class="btn danger sm" data-purge="${t.id}">Delete</button></div>`).join("")
+    : `<p class="empty">Nothing is archived. Archive a card from its dialog.</p>`, null, (e) => {
+    const r = e.target.closest("[data-restore]"), p = e.target.closest("[data-purge]");
+    if (r) { const t = task(+r.dataset.restore); t.archived = false; log(t, "restored this card"); }
+    else if (p) deleteTask(task(+p.dataset.purge));
+    else return;
+    save(); render(); openArchived();
+  });
 }
 
 // ── List ──────────────────────────────────────────────────────────────────
 let sort = { by: "col", dir: 1 };
-const RANK = { col: (t) => COLUMNS.findIndex((c) => c.id === t.col), prio: (t) => ["high", "medium", "low"].indexOf(t.prio),
-  title: (t) => t.title.toLowerCase(), due: (t) => t.due || "9999", who: (t) => person(t.who)?.name || "~" };
+const RANK = { col: (t) => state.columns.findIndex((c) => c.id === t.col), prio: (t) => ["high", "medium", "low"].indexOf(t.prio),
+  title: (t) => t.title.toLowerCase(), due: (t) => t.due || "9999", who: (t) => person(t.who[0])?.name || "~" };
 function renderList() {
   const rows = [...visible()].sort((a, b) => (RANK[sort.by](a) > RANK[sort.by](b) ? 1 : RANK[sort.by](a) < RANK[sort.by](b) ? -1 : 0) * sort.dir);
   const th = (by, label) => `<th data-sort="${by}">${label}${sort.by === by ? (sort.dir > 0 ? " ↑" : " ↓") : ""}</th>`;
   $("#view-list").innerHTML = `<div class="table-wrap"><table>
-    <thead><tr>${th("title", "Task")}${th("col", "Status")}${th("prio", "Priority")}${th("due", "Due")}${th("who", "Assignee")}</tr></thead>
+    <thead><tr>${th("title", "Task")}${th("col", "Status")}${th("prio", "Priority")}${th("due", "Due")}${th("who", "Assignees")}</tr></thead>
     <tbody>${rows.map((t) => `<tr data-id="${t.id}">
-      <td><span class="key" style="color:var(--muted);font-size:12px">${t.key}</span> ${esc(t.title)}</td>
-      <td><span class="dot" style="display:inline-block;background:${column(t.col).color}"></span> ${column(t.col).title}</td>
-      <td><span class="prio prio-${t.prio}">${t.prio}</span></td>
-      <td>${t.due ? fmt(t.due) : "—"}</td>
-      <td>${person(t.who)?.name || "—"}</td></tr>`).join("")}</tbody></table></div>`;
+      <td><span style="color:var(--muted);font-size:12px">${t.key}</span> ${esc(t.title)}</td>
+      <td><span class="dot" style="background:${column(t.col).color}"></span> <select data-inline="col" aria-label="Status">${state.columns.map((c) => `<option value="${c.id}"${c.id === t.col ? " selected" : ""}>${esc(c.title)}</option>`).join("")}</select></td>
+      <td><select data-inline="prio" aria-label="Priority" class="prio prio-${t.prio}">${["high", "medium", "low"].map((p) => `<option value="${p}"${p === t.prio ? " selected" : ""}>${p}</option>`).join("")}</select></td>
+      <td class="${late(t) ? "late" : ""}">${t.due ? fmt(t.due) : "—"}</td>
+      <td>${t.who.length ? avatars(t.who) : "—"}</td></tr>`).join("") || `<tr><td colspan="5" class="muted">No tasks match.</td></tr>`}</tbody></table></div>`;
 }
 $("#view-list").addEventListener("click", (e) => {
+  if (e.target.closest("select")) return;
   const th = e.target.closest("th");
   if (th) { sort = { by: th.dataset.sort, dir: sort.by === th.dataset.sort ? -sort.dir : 1 }; return renderList(); }
   const tr = e.target.closest("tr[data-id]");
   if (tr) openTask(+tr.dataset.id);
+});
+// Status and priority change in place, like the app's list.
+$("#view-list").addEventListener("change", (e) => {
+  const t = task(+e.target.closest("tr").dataset.id), k = e.target.dataset.inline;
+  if (k === "col") changeColumn(t, e.target.value);
+  else { log(t, `changed priority from ${cap(t.prio)} to ${cap(e.target.value)}`); t.prio = e.target.value; }
+  save(); render();
 });
 
 // ── Calendar ──────────────────────────────────────────────────────────────
@@ -528,18 +1143,20 @@ function renderCalendar() {
     const d = new Date(start); d.setDate(start.getDate() + i);
     const key = iso(d);
     const cls = [d.getMonth() !== month.getMonth() && "other", key === day(0) && "today"].filter(Boolean).join(" ");
-    cells.push(`<div class="${cls}"><span class="num">${d.getDate()}</span>${(byDay[key] || []).map((t) =>
-      `<button class="chip prio-${t.prio}" data-id="${t.id}" title="${esc(t.title)}">${esc(t.title)}</button>`).join("")}</div>`);
+    cells.push(`<div class="${cls}" data-day="${key}"><span class="num">${d.getDate()}</span>${(byDay[key] || []).map((t) =>
+      `<button class="chip prio-${t.prio}" data-id="${t.id}" draggable="true" title="${esc(t.title)}">${esc(t.title)}</button>`).join("")}</div>`);
   }
   $("#view-calendar").innerHTML = `<div class="cal-head">
-      <h2>${month.toLocaleDateString(undefined, { month: "long", year: "numeric" })}</h2>
+      <h2>${month.toLocaleDateString("en", { month: "long", year: "numeric" })}</h2>
       <button class="btn ghost" data-step="-1" aria-label="Previous month">‹</button>
       <button class="btn ghost" data-step="0">Today</button>
       <button class="btn ghost" data-step="1" aria-label="Next month">›</button>
+      <span class="muted hide-sm" style="font-size:12px;margin-left:auto">Drag a card to another day to change its due date.</span>
     </div>
     <div class="grid">${["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => `<div class="dow">${d}</div>`).join("")}${cells.join("")}</div>`;
 }
-$("#view-calendar").addEventListener("click", (e) => {
+const cal = $("#view-calendar");
+cal.addEventListener("click", (e) => {
   const step = e.target.closest("[data-step]");
   if (step) {
     if (step.dataset.step === "0") { month = new Date(); month.setDate(1); }
@@ -549,55 +1166,452 @@ $("#view-calendar").addEventListener("click", (e) => {
   const chip = e.target.closest(".chip");
   if (chip) openTask(+chip.dataset.id);
 });
+cal.addEventListener("dragstart", (e) => e.dataTransfer.setData("text/plain", e.target.dataset.id));
+cal.addEventListener("dragover", (e) => { const c = e.target.closest("[data-day]"); if (c) { e.preventDefault(); c.classList.add("drop"); } });
+cal.addEventListener("dragleave", (e) => e.target.closest("[data-day]")?.classList.remove("drop"));
+cal.addEventListener("drop", (e) => {
+  const c = e.target.closest("[data-day]"), t = task(+e.dataTransfer.getData("text/plain"));
+  if (!c || !t) return;
+  e.preventDefault();
+  if (t.due !== c.dataset.day) { log(t, `changed the due date to ${fmt(c.dataset.day)}`); t.due = c.dataset.day; save(); }
+  render();
+});
+
+// ── Timeline ──────────────────────────────────────────────────────────────
+const dayNo = (s) => Math.round(Date.UTC(+s.slice(0, 4), +s.slice(5, 7) - 1, +s.slice(8, 10)) / DAY);
+const dayStr = (n) => new Date(n * DAY).toISOString().slice(0, 10);
+function renderTimeline() {
+  const DW = 28, ROW = 36, LEFT = 260;
+  const dated = visible().filter((t) => t.start || t.due);
+  const rows = dated.map((t) => {
+    const a = dayNo(t.start || t.due), b = dayNo(t.due || t.start);
+    return { t, start: Math.min(a, b), end: Math.max(a, b) };
+  }).sort((x, y) => x.start - y.start || x.end - y.end);
+  const el = $("#view-timeline");
+  if (!rows.length) return void (el.innerHTML = `<p class="page muted">No dated cards yet. Give cards a start or due date to see them here.</p>`);
+  const today = dayNo(day(0));
+  const from = Math.min(today, ...rows.map((r) => r.start)) - 2, to = Math.max(today, ...rows.map((r) => r.end)) + 5;
+  const days = Array.from({ length: to - from + 1 }, (_, i) => from + i);
+  const x = (n) => (n - from) * DW;
+  const rowOf = new Map(rows.map((r, i) => [r.t.id, i]));
+  const arrows = rows.flatMap((r, i) => r.t.blockedBy.flatMap((b) => {
+    const j = rowOf.get(b);
+    if (j === undefined) return [];
+    const x1 = x(rows[j].end + 1), y1 = j * ROW + ROW / 2, x2 = x(r.start), y2 = i * ROW + ROW / 2, isLate = r.start <= rows[j].end;
+    const bend = Math.max(x1 + 6, Math.min(x2 - 6, x1 + 12));
+    return [`<path d="M${x1} ${y1} H${bend} V${y2} H${x2}" fill="none" stroke="${isLate ? "#ef4444" : "var(--muted)"}" stroke-width="1.5" marker-end="url(#tl-${isLate ? "late" : "ok"})">${isLate ? `<title>Starts before ${rows[j].t.key} is done</title>` : ""}</path>`];
+  }));
+  const head = days.map((n, i) => {
+    const d = new Date(n * DAY), we = d.getUTCDay() % 6 === 0;
+    return `<div class="tl-day${we ? " we" : ""}${n === today ? " today" : ""}">${i === 0 || d.getUTCDate() === 1 ? `<span class="m">${d.toLocaleDateString("en", { month: "short", year: "numeric", timeZone: "UTC" })}</span>` : ""}<span class="d">${d.getUTCDate()}</span></div>`;
+  }).join("");
+  el.innerHTML = `<div style="position:relative;width:${LEFT + days.length * DW}px;min-height:100%">
+    <div class="tl-head"><div class="tl-name">Timeline</div>${head}</div>
+    <div class="tl-today" style="left:${LEFT + x(today) + DW / 2}px" title="Today"></div>
+    ${rows.map(({ t, start, end }) => `<div class="tl-row">
+      <button class="tl-name" data-id="${t.id}"><span class="muted" style="font-size:10px">${t.key}</span><span style="${isDone(t) ? "text-decoration:line-through;color:var(--muted)" : ""}">${esc(t.title)}</span></button>
+      <button class="tl-bar" data-id="${t.id}" title="${esc(t.title)} · ${dayStr(start)} → ${dayStr(end)}" style="left:${LEFT + x(start) + 2}px;width:${(end - start + 1) * DW - 4}px;background:${column(t.col).color};${isDone(t) ? "opacity:.5" : ""}">${esc(t.title)}</button>
+    </div>`).join("")}
+    <svg style="position:absolute;top:44px;left:${LEFT}px;overflow:visible;pointer-events:none;z-index:7" width="${days.length * DW}" height="${rows.length * ROW}" aria-hidden="true">
+      <defs><marker id="tl-ok" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="var(--muted)"/></marker>
+      <marker id="tl-late" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="#ef4444"/></marker></defs>
+      ${arrows.join("")}</svg>
+    ${visible().length - rows.length ? `<p class="tl-note">${visible().length - rows.length} card(s) without dates are not on the timeline.</p>` : ""}
+  </div>`;
+}
+$("#view-timeline").addEventListener("click", (e) => { const b = e.target.closest("[data-id]"); if (b) openTask(+b.dataset.id); });
+
+// ── Analytics ─────────────────────────────────────────────────────────────
+const bars = (items, max) => items.map(([label, n, color]) =>
+  `<div class="bar-row"><span title="${esc(label)}">${esc(label)}</span><span class="meter"><i style="width:${max ? (n / max) * 100 : 0}%;background:${color}"></i></span><span class="muted">${n}</span></div>`).join("");
+function renderAnalytics() {
+  const tasks = state.tasks.filter((t) => !t.archived);
+  const done = tasks.filter(isDone).length;
+  const perCol = state.columns.map((c) => [c.title, tasks.filter((t) => t.col === c.id).length, c.color]);
+  const perPrio = ["high", "medium", "low"].map((p) => [cap(p), tasks.filter((t) => t.prio === p).length, PRIO[p]]);
+  const load = [...state.members.map((m) => [m.name, tasks.filter((t) => !isDone(t) && t.who.includes(m.id)).length, m.color]),
+    ["Unassigned", tasks.filter((t) => !isDone(t) && !t.who.length).length, "var(--muted)"]];
+  const days = Array.from({ length: 14 }, (_, i) => day(i - 13));
+  const changes = days.map((d) => state.tasks.reduce((n, t) => n + t.history.filter((h) => iso(new Date(h.at)) === d).length, 0));
+  const top = Math.max(1, ...changes);
+  $("#view-analytics").innerHTML = `<div class="page">
+    <div class="tiles">
+      <div class="tile"><small>Total tasks</small><b>${tasks.length}</b></div>
+      <div class="tile"><small>Completed</small><b>${done}</b><em>${tasks.length ? Math.round((done / tasks.length) * 100) : 0}%</em></div>
+      <div class="tile"><small>Outstanding</small><b>${tasks.length - done}</b></div>
+      <div class="tile"><small>Overdue</small><b style="color:${tasks.some(late) ? "#ef4444" : "inherit"}">${tasks.filter(late).length}</b></div>
+    </div>
+    <div class="panels">
+      <div class="panel"><h3>Tasks per column</h3>${bars(perCol, Math.max(...perCol.map((x) => x[1])))}</div>
+      <div class="panel"><h3>Priority</h3>${bars(perPrio, Math.max(...perPrio.map((x) => x[1])))}</div>
+      <div class="panel"><h3>Workload per member</h3><p class="muted" style="font-size:12px;margin:-6px 0 6px">Open tasks.</p>${bars(load, Math.max(...load.map((x) => x[1])))}</div>
+      <div class="panel"><h3>Last 14 days</h3><p class="muted" style="font-size:12px;margin:-6px 0 0">Task changes per day.</p>
+        <div class="spark">${changes.map((n, i) => `<div title="${fmt(days[i])}: ${n}"><i style="height:${(n / top) * 85}%"></i><span>${i % 2 ? "&nbsp;" : new Date(days[i] + "T00:00").getDate()}</span></div>`).join("")}</div></div>
+    </div></div>`;
+}
+
+// ── Home, Inbox, My Tasks ─────────────────────────────────────────────────
+const actorName = (by) => by === "automation" ? "Automation" : person(by)?.name ?? "Someone";
+function activity() {
+  return state.tasks.filter((t) => !t.archived).flatMap((t) => t.history.map((h) => ({ ...h, t }))).sort((a, b) => b.at - a.at);
+}
+const taskRow = (t) => `<button class="row" data-open="${t.id}"><span class="dot" style="background:${column(t.col).color}"></span><span class="grow">${esc(t.title)}</span><small class="${late(t) ? "late" : ""}">${t.due ? fmt(t.due) : column(t.col).title}</small></button>`;
+function renderHome() {
+  const tasks = state.tasks.filter((t) => !t.archived), m = mine();
+  const hour = new Date().getHours();
+  $("#view-home").innerHTML = `<div class="page">
+    <h2>${hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening"}, Ada</h2>
+    <p class="sub">Here’s where ${esc(state.project)} stands today.</p>
+    <div class="tiles">
+      <div class="tile"><small>Total tasks</small><b>${tasks.length}</b><em>across ${state.columns.length} columns</em></div>
+      <div class="tile"><small>Completed</small><b>${tasks.filter(isDone).length}</b></div>
+      <div class="tile"><small>Assigned to you</small><b>${m.length}</b></div>
+      <div class="tile"><small>Overdue</small><b style="color:${tasks.some(late) ? "#ef4444" : "inherit"}">${tasks.filter(late).length}</b></div>
+    </div>
+    <div class="panels">
+      <div class="panel"><div class="panel-head"><h3>Your next tasks</h3><button class="link-btn" data-go="mine">See all</button></div>
+        <div class="rows">${m.sort((a, b) => (a.due || "9") > (b.due || "9") ? 1 : -1).slice(0, 5).map(taskRow).join("") || `<p class="empty">Nothing assigned to you.</p>`}</div></div>
+      <div class="panel"><div class="panel-head"><h3>Progress by column</h3><button class="link-btn" data-go="board">Open board</button></div>
+        ${bars(state.columns.map((c) => [c.title, tasks.filter((t) => t.col === c.id).length, c.color]), tasks.length)}</div>
+      <div class="panel"><div class="panel-head"><h3>Recent activity</h3><button class="link-btn" data-go="inbox">Open inbox</button></div>
+        <div class="rows">${activity().slice(0, 6).map((a) => `<button class="row" data-open="${a.t.id}"><span class="grow"><b>${esc(actorName(a.by))}</b> ${esc(a.text)} · ${a.t.key}</span><small>${ago(a.at)}</small></button>`).join("")}</div></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:16px"><button class="btn" data-go="board">Open board</button><button class="btn ghost" data-go="canvas">Open canvas</button></div>
+  </div>`;
+}
+
+let inboxTab = "all";
+function renderInbox() {
+  const items = [...state.inbox].sort((a, b) => b.at - a.at).filter((i) => inboxTab === "all" || i.mention);
+  $("#view-inbox").innerHTML = `<div class="page center">
+    <div class="panel-head"><h2>Inbox</h2><button class="btn ghost sm" id="read-all">Mark all read</button></div>
+    <p class="sub">What others did on your cards.</p>
+    <div class="seg" style="margin-bottom:12px"><button aria-pressed="${inboxTab === "all"}" data-inbox-tab="all">All</button><button aria-pressed="${inboxTab === "mentions"}" data-inbox-tab="mentions">Mentions</button></div>
+    <div class="panel rows">${items.map((i) => `<button class="row${i.read ? "" : " unread"}" data-note="${i.id}">${avatar(person(i.by))}<span class="grow"><b>${esc(actorName(i.by))}</b> ${esc(i.text)}</span><small>${ago(i.at)}</small></button>`).join("") || `<p class="empty">You're all caught up.</p>`}</div>
+  </div>`;
+}
+$("#view-inbox").addEventListener("click", (e) => {
+  const tab = e.target.closest("[data-inbox-tab]");
+  if (tab) { inboxTab = tab.dataset.inboxTab; return renderInbox(); }
+  if (e.target.closest("#read-all")) { state.inbox.forEach((i) => (i.read = true)); save(); return render(); }
+});
+function openNote(id) {
+  const n = state.inbox.find((i) => i.id === id);
+  n.read = true; save(); render();
+  if (task(n.task)) openTask(n.task);
+}
+
+function renderMine() {
+  const rows = mine().sort((a, b) => (a.due || "9") > (b.due || "9") ? 1 : -1);
+  $("#view-mine").innerHTML = `<div class="page center"><h2>My Tasks</h2><p class="sub">Open cards assigned to you, soonest first.</p>
+    <div class="panel rows">${rows.map((t) => `<button class="row" data-open="${t.id}"><span class="muted" style="font-size:11px;width:48px">${t.key}</span><span class="grow">${esc(t.title)}</span><span class="prio prio-${t.prio}">${t.prio}</span><small style="width:84px;text-align:right">${column(t.col).title}</small><small class="${late(t) ? "late" : ""}" style="width:52px;text-align:right">${t.due ? fmt(t.due) : "—"}</small></button>`).join("") || `<p class="empty">Nothing is assigned to you.</p>`}</div></div>`;
+}
+
+// ── Chat ──────────────────────────────────────────────────────────────────
+let channel = "general";
+const chName = (ch) => ch === "general" ? "# general" : person(ch)?.name ?? ch;
+const unreadIn = (ch) => state.messages.filter((m) => m.ch === ch && m.from !== ME && m.at > (state.seen[ch] || 0)).length;
+const unreadChat = () => ["general", ...state.members.filter((m) => m.id !== ME).map((m) => m.id)].reduce((n, ch) => n + unreadIn(ch), 0);
+function renderChat() {
+  state.seen[channel] = Date.now(); save();
+  const dms = state.members.filter((m) => m.id !== ME);
+  const item = (ch, label, extra = "") => `<button class="row" data-ch="${ch}" style="${ch === channel ? "background:var(--secondary);font-weight:500" : ""}">${extra}<span class="grow">${esc(label)}</span>${unreadIn(ch) ? `<span class="badge strong">${unreadIn(ch)}</span>` : ""}</button>`;
+  const msgs = state.messages.filter((m) => m.ch === channel).sort((a, b) => a.at - b.at);
+  const other = channel !== "general" && person(channel);
+  $("#view-chat").innerHTML = `
+    <div class="chat-list">
+      <div class="side-label">CHANNELS</div>${item("general", "# general")}
+      <div class="side-label">DIRECT MESSAGES</div>${dms.map((m) => item(m.id, m.name, `<span class="presence ${m.presence ?? "offline"}"></span>`)).join("")}
+    </div>
+    <div class="chat-main">
+      <div class="chat-head">${other ? `<span class="presence ${other.presence ?? "offline"}"></span>` : ""}${esc(chName(channel))}${other ? `<small class="muted" style="font-weight:400">${other.presence === "online" ? "Online" : other.presence === "away" ? "Away" : "Offline"}</small>` : ""}</div>
+      <div class="chat-feed" id="chat-feed">${msgs.map((m) => `<div class="msg">${avatar(person(m.from), 30)}<div style="min-width:0"><b>${esc(person(m.from)?.name ?? "?")}</b><time>${ago(m.at)}</time><p>${highlight(m.text)}</p></div></div>`).join("") || `<p class="empty">No messages yet. Say hi.</p>`}</div>
+      <div class="chat-compose"><ul class="mentions" id="chat-mentions" role="listbox" hidden></ul><textarea id="chat-input" placeholder="Message ${esc(chName(channel))}… Enter to send, Shift+Enter for a new line" aria-label="Message"></textarea><button class="btn" id="chat-send">Send</button></div>
+    </div>`;
+  const feed = $("#chat-feed"); feed.scrollTop = feed.scrollHeight;
+  attachMentions($("#chat-input"), $("#chat-mentions"), sendChat, false);
+}
+function sendChat() {
+  const input = $("#chat-input"), text = input.value.trim();
+  if (!text) return;
+  state.messages.push({ ch: channel, from: ME, text, at: Date.now() });
+  save(); render();
+  $("#chat-input")?.focus();
+}
+$("#view-chat").addEventListener("click", (e) => {
+  const ch = e.target.closest("[data-ch]");
+  if (ch) { channel = ch.dataset.ch; return render(); }
+  if (e.target.closest("#chat-send")) sendChat();
+});
+
+// ── Meetings ──────────────────────────────────────────────────────────────
+// A repeating meeting's next start is its first occurrence that hasn't ended yet.
+function occurrence(m) {
+  let start = new Date(`${m.date}T${m.time}`);
+  const step = { daily: 1, weekly: 7 }[m.repeat];
+  if (step) while (start.getTime() + m.dur * 6e4 < Date.now()) start = new Date(start.getTime() + step * DAY);
+  return { start, end: new Date(start.getTime() + m.dur * 6e4) };
+}
+function meetingState(m) {
+  const { start, end } = occurrence(m), now = Date.now();
+  if (now >= start && now < end) return { live: true, text: "Now" };
+  if (end < now) return { past: true, text: "Ended" };
+  const mins = Math.round((start - now) / 6e4);
+  return { text: mins < 60 ? `in ${mins}m` : mins < 1440 ? `in ${Math.round(mins / 60)}h` : `in ${Math.round(mins / 1440)}d` };
+}
+function renderMeetings() {
+  const list = [...state.meetings].sort((a, b) => occurrence(a).start - occurrence(b).start);
+  const row = (m) => {
+    const { start } = occurrence(m), s = meetingState(m);
+    return `<div class="meet${s.past ? " past" : ""}">
+      <div class="when">${start.toLocaleDateString("en", { month: "short" })}<b>${start.getDate()}</b>${start.toLocaleTimeString("en", { hour: "2-digit", minute: "2-digit" })}</div>
+      <div class="grow"><b>${esc(m.title)}</b> <span class="state${s.live ? " live" : ""}">${s.text}</span>${m.repeat ? ` <span class="state">${svg("repeat", "width:10px;height:10px;vertical-align:-1px")} ${cap(m.repeat)}</span>` : ""}
+        <p>${m.dur} min · ${avatars(m.who)} ${m.notes ? `· ${highlight(m.notes)}` : ""}</p></div>
+      ${m.link && !s.past ? `<a class="btn${s.live ? "" : " ghost"}" href="${esc(m.link)}" target="_blank" rel="noopener">Join</a>` : ""}
+      <button class="btn ghost sm" data-edit-meet="${m.id}">Edit</button>
+    </div>`;
+  };
+  const up = list.filter((m) => !meetingState(m).past), past = list.filter((m) => meetingState(m).past);
+  $("#view-meetings").innerHTML = `<div class="page center">
+    <div class="panel-head"><h2>Meetings</h2><button class="btn" id="new-meet">${svg("plus")}New meeting</button></div>
+    <p class="sub">Times are read in each person’s own time zone.</p>
+    ${up.map(row).join("") || `<p class="empty">No meetings planned.</p>`}
+    ${past.length ? `<h3 style="margin:20px 0 10px">Past</h3>${past.map(row).join("")}` : ""}
+  </div>`;
+}
+function openMeeting(id) {
+  const m = state.meetings.find((x) => x.id === id) ?? { title: "", date: day(1), time: "10:00", dur: 30, repeat: "", who: [ME], link: "", notes: "" };
+  smallDialog(id ? "Edit meeting" : "New meeting", `
+    <label>Title <input name="title" required maxlength="80" value="${esc(m.title)}" placeholder="Daily standup"></label>
+    <div class="form-row"><label>Starts on <input name="date" type="date" required value="${m.date}"></label><label>Time <input name="time" type="time" required value="${m.time}"></label></div>
+    <div class="form-row"><label>Duration (minutes) <input name="dur" type="number" min="5" max="480" step="5" value="${m.dur}"></label>
+      <label>Repeat <select name="repeat"><option value="">Never</option><option value="daily"${m.repeat === "daily" ? " selected" : ""}>Daily</option><option value="weekly"${m.repeat === "weekly" ? " selected" : ""}>Weekly</option></select></label></div>
+    <div><div style="font-size:12px;color:var(--muted);margin-bottom:4px">Attendees</div><div class="member-picks">${state.members.map((p) =>
+      `<label class="check-line"><input type="checkbox" name="who" value="${p.id}"${m.who.includes(p.id) ? " checked" : ""}>${esc(p.name)}</label>`).join("")}</div></div>
+    <label>Meeting link <input name="link" type="url" value="${esc(m.link)}" placeholder="https://"></label>
+    <label>Notes <textarea name="notes" maxlength="1000" placeholder="Agenda, dial-in…" style="min-height:60px">${esc(m.notes)}</textarea></label>
+    <label class="check-line"><input type="checkbox" name="remind" checked>Remind attendees when it starts</label>
+    <div style="display:flex;gap:8px"><button class="btn">Save</button><button type="button" class="btn ghost" data-close-small>Cancel</button>${id ? `<button type="button" class="btn danger" data-del-meet style="margin-left:auto">Delete</button>` : ""}</div>`,
+  (v) => {
+    Object.assign(m, { title: v.title.trim(), date: v.date, time: v.time, dur: +v.dur || 30, repeat: v.repeat, who: v._all("who"), link: v.link.trim(), notes: v.notes.trim() });
+    if (!id) state.meetings.push({ ...m, id: Date.now() });
+    save(); render();
+  },
+  (e) => {
+    if (!e.target.closest("[data-del-meet]")) return;
+    state.meetings = state.meetings.filter((x) => x.id !== id);
+    save(); $("#small").close(); render();
+  });
+}
+$("#view-meetings").addEventListener("click", (e) => {
+  if (e.target.closest("#new-meet")) return openMeeting(null);
+  const b = e.target.closest("[data-edit-meet]");
+  if (b) openMeeting(+b.dataset.editMeet);
+});
+
+// ── Settings ──────────────────────────────────────────────────────────────
+let settingsTab = "general";
+const PALETTES = [
+  ["graphite", "Graphite", "Neutral and quiet. The original look."],
+  ["harbor", "Harbor", "Cobalt on cool slate, crisp cards. Built for busy boards."],
+  ["iris", "Iris", "Soft violet, rounder corners. Friendly for long sprints."],
+  ["shanshui", "Shanshui", "Azurite and malachite on silk, after A Thousand Li of Rivers and Mountains."],
+  ["kanagawa", "Kanagawa", "Prussian blue on washi, after Hokusai's Thirty-six Views of Mount Fuji."],
+];
+function renderSettings() {
+  const tabs = [["general", "General", "gear"], ["members", "Members", "users"], ["projects", "Projects", "folder"], ["appearance", "Appearance", "brush"]];
+  const colOpts = (cur, any) => (any ? `<option value="">any column</option>` : "") + state.columns.map((c) => `<option value="${c.id}"${c.id === cur ? " selected" : ""}>${esc(c.title)}</option>`).join("");
+  const body = {
+    general: () => `<h2>General</h2><p class="sub">Workspace settings.</p>
+      <form class="form-row" id="ws-form"><label style="flex:1;max-width:320px">Workspace name <input name="name" value="${esc(state.workspace)}" maxlength="60" required></label><button class="btn">Save</button></form>
+      <h3 style="margin-top:24px">Export</h3><p class="sub" style="margin-top:-6px">Everything in this workspace as one JSON file.</p>
+      <button class="btn ghost" id="export">${svg("download")}Download JSON</button>`,
+    members: () => `<h2>Members</h2><p class="sub">Who can sign in to ${esc(state.workspace)}.</p>
+      <div class="panel rows" style="margin-bottom:16px">${state.members.map((m) => `<div class="row" style="cursor:default">${avatar(m, 28)}<span class="grow">${esc(m.name)}<br><small>${esc(m.email)}</small></span>
+        <span class="presence ${m.presence ?? "offline"}" title="${m.presence ?? "offline"}"></span>
+        ${m.id === ME ? `<small>Admin · you</small>` : `<select data-role="${m.id}" aria-label="Role">${["Admin", "Member", "Viewer"].map((r) => `<option${r === m.role ? " selected" : ""}>${r}</option>`).join("")}</select><button class="btn danger sm" data-remove="${m.id}">Remove</button>`}</div>`).join("")}</div>
+      <h3>Add member</h3>
+      <form class="form-row" id="member-form"><label>Name <input name="name" required maxlength="60"></label><label>Email <input name="email" type="email" required maxlength="120"></label>
+        <label>Role <select name="role"><option>Member</option><option>Viewer</option><option>Admin</option></select></label><button class="btn">Add member</button></form>`,
+    projects: () => `<h2>${esc(state.project)}</h2><p class="sub">Project settings. Columns are edited on the board: click a column's name.</p>
+      <form class="form-row" id="project-form"><label style="flex:1;max-width:320px">Project name <input name="name" value="${esc(state.project)}" maxlength="60" required></label><button class="btn">Save</button></form>
+      <h3 style="margin-top:20px">Automations</h3><p class="sub" style="margin-top:-6px">Rules that run when a card is created or moved. One action per rule.</p>
+      ${state.automations.map((r) => `<div class="rule">${svg("zap")}<span class="grow">${esc(ruleText(r))}</span><button class="btn danger sm" data-del-rule="${r.id}">Delete</button></div>`).join("") || `<p class="empty">No rules yet.</p>`}
+      <form class="inline-form" id="rule-form" style="margin:8px 0 20px">When <select name="when"><option value="moved">a card moves to</option><option value="created">a card is created in</option></select>
+        <select name="col">${colOpts("", true)}</select> then <select name="action">${Object.entries(ACTIONS).map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select>
+        <select name="who">${state.members.map((m) => `<option value="${m.id}">${esc(m.name)}</option>`).join("")}</select>
+        <select name="prio"><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select>
+        <input name="text" placeholder="Label or days" maxlength="40" style="width:110px"><button class="btn sm">Add rule</button></form>
+      <h3>Custom fields</h3><p class="sub" style="margin-top:-6px">Shown on every card in this project. Add them from a card's dialog.</p>
+      ${state.fields.map((f) => `<div class="rule"><span class="grow"><b>${esc(f.name)}</b> <small class="muted">${f.type === "select" ? `Options: ${esc(f.options.join(", "))}` : "Text"}</small></span><button class="btn danger sm" data-del-field="${f.id}">Remove</button></div>`).join("") || `<p class="empty">No custom fields.</p>`}`,
+    appearance: () => `<h2>Appearance</h2><p class="sub">Only on this device.</p>
+      <h3>Mode</h3><div class="seg" style="margin-bottom:20px">${["light", "dark", "system"].map((m) => `<button data-mode="${m}" aria-pressed="${(root.dataset.theme || "system") === m}">${cap(m)}</button>`).join("")}</div>
+      <h3>Theme</h3><div class="palettes">${PALETTES.map(([id, name, hint]) => `<button class="pal" data-pal="${id}" data-palette="${id}" aria-pressed="${(root.dataset.palette || "graphite") === id}"><div class="pv"><i></i><i></i><i></i></div><div><b>${name}</b><small>${hint}</small></div></button>`).join("")}</div>`,
+  };
+  $("#view-settings").innerHTML = `<nav class="settings-nav">${tabs.map(([k, l, i]) => `<button data-stab="${k}" aria-current="${settingsTab === k}">${svg(i)}${l}</button>`).join("")}</nav>
+    <div class="settings-body"><div class="page">${body[settingsTab]()}</div></div>`;
+}
+const settingsEl = $("#view-settings");
+settingsEl.addEventListener("click", (e) => {
+  const t = e.target;
+  const tab = t.closest("[data-stab]");
+  if (tab) { settingsTab = tab.dataset.stab; return renderSettings(); }
+  if (t.closest("#export")) {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([JSON.stringify({ format: "digital-board-export", version: 1, exportedAt: new Date().toISOString(), ...state }, null, 2)], { type: "application/json" }));
+    a.download = `${state.workspace.toLowerCase().replace(/\W+/g, "-")}-${day(0)}.json`;
+    return a.click();
+  }
+  const rm = t.closest("[data-remove]");
+  if (rm) {
+    const id = rm.dataset.remove;
+    state.members = state.members.filter((m) => m.id !== id);
+    state.tasks.forEach((x) => (x.who = x.who.filter((w) => w !== id)));
+    save(); return render();
+  }
+  const rule = t.closest("[data-del-rule]");
+  if (rule) { state.automations = state.automations.filter((r) => r.id !== rule.dataset.delRule); save(); return render(); }
+  const field = t.closest("[data-del-field]");
+  if (field) { state.fields = state.fields.filter((f) => f.id !== field.dataset.delField); save(); return render(); }
+  const mode = t.closest("[data-mode]");
+  if (mode) return setTheme(mode.dataset.mode === "system" ? null : mode.dataset.mode);
+  const pal = t.closest("[data-pal]");
+  if (pal) return setPalette(pal.dataset.pal);
+});
+settingsEl.addEventListener("change", (e) => {
+  const role = e.target.dataset.role;
+  if (role) { person(role).role = e.target.value; save(); }
+});
+settingsEl.addEventListener("submit", (e) => {
+  e.preventDefault();
+  const v = Object.fromEntries(new FormData(e.target));
+  if (e.target.id === "ws-form") state.workspace = v.name.trim();
+  if (e.target.id === "project-form") state.project = v.name.trim();
+  if (e.target.id === "member-form") {
+    if (state.members.some((m) => m.email.toLowerCase() === v.email.trim().toLowerCase())) return toast("That email is already a member.");
+    state.members.push({ id: `m${Date.now()}`, name: v.name.trim(), email: v.email.trim(), role: v.role, presence: "offline", color: MEMBER_COLORS[state.members.length % MEMBER_COLORS.length] });
+    toast(`${v.name.trim()} was added.`);
+  }
+  if (e.target.id === "rule-form") {
+    const value = v.action === "assign" ? v.who : v.action === "priority" ? v.prio : v.text.trim();
+    if ((v.action === "label" && !value) || (v.action === "due" && !/^\d+$/.test(value))) return toast(v.action === "label" ? "Type the label to add." : "Type the number of days.");
+    state.automations.push({ id: `r${Date.now()}`, when: v.when, col: v.col, action: v.action, value });
+  }
+  save(); render();
+});
 
 // ── Task dialog ───────────────────────────────────────────────────────────
 const dialog = $("#dialog"), form = $("#form");
-form.col.innerHTML = COLUMNS.map((c) => `<option value="${c.id}">${c.title}</option>`).join("");
-form.who.innerHTML = `<option value="">Unassigned</option>` + PEOPLE.map((p) => `<option value="${p.id}">${p.name}</option>`).join("");
 let editing = null;
-function openTask(id, col = "todo") {
-  const t = state.tasks.find((t) => t.id === id);
+function fillSelects() {
+  form.col.innerHTML = state.columns.map((c) => `<option value="${c.id}">${esc(c.title)}</option>`).join("");
+  form.sprint.innerHTML = `<option value="">No sprint</option>` + state.sprints.filter((s) => !s.closed || s.id === editing?.sprint).map((s) => `<option value="${s.id}">${esc(s.name)}</option>`).join("");
+  const who = editing?.who ?? [];
+  $("#who-menu").innerHTML = state.members.map((p) => `<label><input type="checkbox" name="who" value="${p.id}"${who.includes(p.id) ? " checked" : ""}>${avatar(p)}${esc(p.name)}</label>`).join("");
+  syncWho();
+}
+function syncWho() {
+  const ids = [...form.querySelectorAll('input[name="who"]:checked')].map((i) => i.value);
+  $("#who-summary").innerHTML = ids.length ? `${avatars(ids)}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(ids.map((id) => person(id)?.name).join(", "))}</span>` : `<span class="muted">Unassigned</span>`;
+}
+$("#who-menu").addEventListener("change", syncWho);
+document.addEventListener("click", (e) => { if (!e.target.closest("#who-pick")) $("#who-pick").open = false; });
+
+function openTask(id, col, extra = {}) {
+  const t = task(id);
   editing = t || null;
   dialog.classList.toggle("new", !t);
+  fillSelects();
   $("#dialog-title").textContent = t ? `${column(t.col).title} / ${t.key}` : "New task";
   $("#dialog-dot").style.background = t ? column(t.col).color : "transparent";
   form.title.value = t?.title ?? "";
   form.desc.value = t?.desc ?? "";
-  form.col.value = t?.col ?? col;
+  form.col.value = t?.col ?? col ?? state.columns[0].id;
   form.prio.value = t?.prio ?? "medium";
-  form.who.value = t?.who ?? "";
+  form.start.value = t?.start ?? "";
   form.due.value = t?.due ?? "";
   form.label.value = t?.label ?? "";
-  $("#delete").hidden = !t;
-  $("#side").hidden = !t;
-  $("#checklist-box").hidden = !t;
+  form.sprint.value = t ? t.sprint : (extra.sprint ?? currentSprint()?.id ?? "");
+  form.repeat.value = t?.repeat ?? "";
+  form.dataset.parent = extra.parent ?? "";
+  const parent = t?.parent ? task(t.parent) : null;
+  $("#parent-line").hidden = !parent;
+  if (parent) $("#parent-line").innerHTML = `Subtask of <button type="button" class="key-link" data-open="${parent.id}">${parent.key}</button> ${esc(parent.title)}`;
+  for (const box of ["#delete", "#archive", "#side", "#checklist-box", "#subtasks-box", "#deps-box", "#time-box", "#images-box"]) $(box).hidden = !t;
   $("#comment").value = "";
   closeMentions();
-  if (t) { renderChecks(); renderFeed(); }
+  renderFields();
+  if (t) { renderChecks(); renderSubs(); renderDeps(); renderTimer(); renderImages(); renderFeed(); }
   renderTagPreviews();
-  dialog.showModal();
+  if (!dialog.open) dialog.showModal();
   if (!t) form.title.focus();
 }
 form.title.addEventListener("keydown", (e) => { if (e.key === "Enter") e.preventDefault(); });
+// Enter in the time and new-field inputs runs their own button instead of saving the card.
+form.addEventListener("keydown", (e) => {
+  if (e.key !== "Enter") return;
+  const own = e.target.closest("#timer-row") ? "#time-add" : e.target.closest("#field-form") ? "#field-add" : null;
+  if (own) { e.preventDefault(); $(own).click(); }
+});
 form.addEventListener("submit", () => {
-  const v = Object.fromEntries(new FormData(form));
+  const fd = new FormData(form);
+  const v = { title: fd.get("title").trim(), desc: fd.get("desc"), prio: fd.get("prio"), label: fd.get("label").trim(), start: fd.get("start"), due: fd.get("due"),
+    sprint: fd.get("sprint"), repeat: fd.get("repeat"), who: fd.getAll("who"), fields: {} };
+  for (const f of state.fields) { const x = (fd.get(`f:${f.id}`) ?? "").trim(); if (x) v.fields[f.id] = x; }
+  if (v.start && v.due && v.start > v.due) [v.start, v.due] = [v.due, v.start];
+  const col = fd.get("col");
   if (!editing) {
-    const id = ++state.seq;
-    state.tasks.push({ id, key: `WEB-${id}`, ...v, title: v.title.trim(), checklist: [], comments: [], history: ["Created by you"] });
+    createTask({ ...v, col, parent: form.dataset.parent ? +form.dataset.parent : null });
   } else {
-    const changed = ["title", "desc", "col", "prio", "who", "due", "label"].filter((k) => editing[k] !== v[k]);
-    if (editing.col !== v.col) editing.history.push(`Moved from ${column(editing.col).title} to ${column(v.col).title}`);
-    const other = changed.filter((k) => k !== "col");
-    if (other.length) editing.history.push(`Edited ${other.map((k) => ({ desc: "description", prio: "priority", who: "assignee", due: "due date", label: "labels" })[k] || k).join(", ")}`);
-    Object.assign(editing, v, { title: v.title.trim() });
+    const names = { title: "title", desc: "description", prio: "priority", label: "labels", start: "start date", due: "due date", sprint: "sprint", repeat: "repeat", who: "assignees", fields: "custom fields" };
+    const changed = Object.keys(names).filter((k) => JSON.stringify(editing[k] ?? "") !== JSON.stringify(v[k] ?? ""));
+    if (changed.length) log(editing, `edited ${changed.map((k) => names[k]).join(", ")}`);
+    Object.assign(editing, v);
+    if (editing.col !== col) changeColumn(editing, col);
   }
   save(); render();
 });
 $("#cancel").onclick = $("#close").onclick = () => dialog.close();
-$("#delete").onclick = () => {
-  state.tasks = state.tasks.filter((t) => t !== editing);
+function deleteTask(t) {
+  const at = state.tasks.indexOf(t), kids = subtasksOf(t);
+  state.tasks.splice(at, 1);
+  kids.forEach((k) => (k.parent = null));
+  state.tasks.forEach((x) => (x.blockedBy = x.blockedBy.filter((b) => b !== t.id)));
+  save(); render();
+  toast(`Deleted ${t.key}`, () => { state.tasks.splice(at, 0, t); kids.forEach((k) => (k.parent = t.id)); save(); render(); });
+}
+$("#delete").onclick = () => { dialog.close(); deleteTask(editing); };
+$("#archive").onclick = () => {
+  editing.archived = true; log(editing, "archived this card");
+  const t = editing;
   save(); dialog.close(); render();
+  toast(`Archived ${t.key}`, () => { t.archived = false; save(); render(); });
 };
+
+// Custom fields: values save with the card; the field list is project-wide.
+function renderFields() {
+  const vals = editing?.fields ?? {};
+  $("#fields-box").innerHTML = `<span>Custom fields</span>
+    <div class="fields-grid">${state.fields.map((f) => `<label class="prop"><span>${esc(f.name)}</span>${f.type === "select"
+      ? `<select name="f:${f.id}"><option value="">—</option>${f.options.map((o) => `<option${vals[f.id] === o ? " selected" : ""}>${esc(o)}</option>`).join("")}</select>`
+      : `<input name="f:${f.id}" value="${esc(vals[f.id] ?? "")}" maxlength="120">`}</label>`).join("")}</div>
+    <div class="inline-form" id="field-form"><input id="field-name" placeholder="Field name" maxlength="40"><select id="field-type"><option value="text">Text</option><option value="select">Dropdown</option></select>
+      <input id="field-opts" placeholder="Options: Small, Medium, Large" maxlength="200" hidden><button type="button" class="btn ghost sm" id="field-add">Add field</button><small class="muted" style="align-self:center">for every card in this project</small></div>`;
+}
+$("#fields-box").addEventListener("change", (e) => { if (e.target.id === "field-type") $("#field-opts").hidden = e.target.value !== "select"; });
+$("#fields-box").addEventListener("click", (e) => {
+  if (!e.target.closest("#field-add")) return;
+  const name = $("#field-name").value.trim(), type = $("#field-type").value, options = labelsOf($("#field-opts").value);
+  if (!name || (type === "select" && !options.length)) return toast(name ? "Give the dropdown at least one option." : "Name the field first.");
+  // Keep what was typed into the other fields while the list re-renders.
+  const typed = Object.fromEntries([...new FormData(form)].filter(([k]) => k.startsWith("f:")).map(([k, v]) => [k.slice(2), v]));
+  state.fields.push({ id: `f${Date.now()}`, name, type, ...(type === "select" ? { options } : {}) });
+  save();
+  const keep = editing ? { ...editing.fields } : null;
+  if (editing) editing.fields = typed;
+  renderFields();
+  if (editing) editing.fields = keep;
+});
 
 // Checklist: ticks and new items save at once, like the app.
 function renderChecks() {
@@ -606,8 +1620,7 @@ function renderChecks() {
   $("#checks").innerHTML = items.map((i, n) => `<label><input type="checkbox" data-n="${n}"${i.done ? " checked" : ""}>${esc(i.text)}</label>`).join("");
 }
 $("#checks").addEventListener("change", (e) => {
-  const item = editing.checklist[+e.target.dataset.n];
-  item.done = e.target.checked;
+  editing.checklist[+e.target.dataset.n].done = e.target.checked;
   save(); renderChecks(); render();
 });
 $("#check-add").addEventListener("keydown", (e) => {
@@ -620,8 +1633,119 @@ $("#check-add").addEventListener("keydown", (e) => {
   save(); renderChecks(); render();
 });
 
-// Comments & activity: events as one muted line each, then comments, oldest first.
-const MENTION_NAMES = ["agent", ...PEOPLE.map((p) => p.name)];
+// Subtasks are cards of their own; ticking one moves it to the done column.
+function renderSubs() {
+  const subs = subtasksOf(editing);
+  $("#sub-count").textContent = subs.length ? `${subs.filter(isDone).length}/${subs.length}` : "";
+  $("#subs").innerHTML = subs.map((s) => `<label><input type="checkbox" data-sub="${s.id}"${isDone(s) ? " checked" : ""}><button type="button" class="key-link" data-open="${s.id}">${s.key}</button><span class="${isDone(s) ? "done-text" : ""}">${esc(s.title)}</span><span class="muted" style="margin-left:auto;font-size:11px">${esc(column(s.col).title)}</span></label>`).join("");
+}
+$("#subs").addEventListener("change", (e) => {
+  const s = task(+e.target.dataset.sub);
+  changeColumn(s, e.target.checked ? doneId() : state.columns[0].id);
+  save(); renderSubs(); renderFeed(); render();
+});
+$("#sub-add").addEventListener("keydown", (e) => {
+  if (e.key !== "Enter") return;
+  e.preventDefault();
+  const title = e.target.value.trim();
+  if (!title) return;
+  createTask({ title, col: state.columns[0].id, parent: editing.id, sprint: editing.sprint });
+  log(editing, `added subtask “${title}”`);
+  e.target.value = "";
+  save(); renderSubs(); renderFeed(); render();
+});
+
+// Dependencies: "waiting on" cards this one is blocked by, and the reverse.
+function renderDeps() {
+  const by = editing.blockedBy.map(task).filter(Boolean), blocking = state.tasks.filter((t) => t.blockedBy.includes(editing.id));
+  const line = (t, rm) => `<div>${isDone(t) ? "✓" : svg("ban", "color:#ef4444")}<button type="button" class="key-link" data-open="${t.id}">${t.key}</button><span>${esc(t.title)}</span>${rm ? `<button type="button" class="x" data-undep="${t.id}" aria-label="Remove">×</button>` : ""}</div>`;
+  $("#deps").innerHTML = (by.length ? `<small class="muted">Waiting on</small>${by.map((t) => line(t, true)).join("")}` : "")
+    + (blocking.length ? `<small class="muted">Blocking</small>${blocking.map((t) => line(t, false)).join("")}` : "");
+  $("#dep-options").innerHTML = state.tasks.filter((t) => t !== editing && !editing.blockedBy.includes(t.id) && !t.archived).map((t) => `<option value="${t.key} ${esc(t.title)}">`).join("");
+}
+$("#deps").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-undep]");
+  if (!b) return;
+  editing.blockedBy = editing.blockedBy.filter((id) => id !== +b.dataset.undep);
+  save(); renderDeps(); render();
+});
+function addDep(input) {
+  const q = input.value.trim().toLowerCase();
+  const t = state.tasks.find((x) => x !== editing && !x.archived && (q.startsWith(x.key.toLowerCase() + " ") || q === x.key.toLowerCase() || x.title.toLowerCase() === q));
+  if (!t) return;
+  // A card can't wait on something that already waits on it.
+  const waitsOn = (a, b, seen = new Set()) => a.blockedBy.some((id) => id === b.id || (!seen.has(id) && seen.add(id) && task(id) && waitsOn(task(id), b, seen)));
+  if (waitsOn(t, editing)) return toast(`${t.key} already waits on ${editing.key}.`);
+  editing.blockedBy.push(t.id);
+  log(editing, `is now waiting on ${t.key}`);
+  input.value = "";
+  save(); renderDeps(); renderFeed(); render();
+}
+$("#dep-add").addEventListener("change", (e) => addDep(e.target));
+$("#dep-add").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); addDep(e.target); } });
+
+// Time tracking: one running timer at a time, plus manual entries like "1h 30m".
+function renderTimer() {
+  const t = editing;
+  $("#timer-row").innerHTML = `<button type="button" class="btn${t.time.since ? "" : " ghost"} sm" id="timer-toggle" title="Starting here stops your timer on any other card">${svg(t.time.since ? "stop" : "play")}${t.time.since ? "Stop timer" : "Start timer"}</button>
+    <span>${svg("clock")} <span data-timer="${t.id}">${dur(tracked(t))}</span> logged</span>
+    <input id="time-log" placeholder="Log time, e.g. 1h 30m" style="width:160px;padding:4px 8px"><button type="button" class="btn ghost sm" id="time-add">Log</button>`;
+}
+function stopTimer(t) {
+  if (!t.time.since) return;
+  const s = (Date.now() - t.time.since) / 1000;
+  t.time = { secs: t.time.secs + s, since: null };
+  log(t, `logged ${dur(s)}`);
+}
+$("#timer-row").addEventListener("click", (e) => {
+  const t = editing;
+  if (e.target.closest("#timer-toggle")) {
+    if (t.time.since) stopTimer(t);
+    else { state.tasks.forEach(stopTimer); t.time.since = Date.now(); log(t, "started the timer"); }
+  } else if (e.target.closest("#time-add")) {
+    const m = /^\s*(?:(\d+(?:\.\d+)?)\s*h)?\s*(?:(\d+)\s*m)?\s*$/i.exec($("#time-log").value);
+    const s = m && ((+m[1] || 0) * 3600 + (+m[2] || 0) * 60);
+    if (!s) return toast("Write the time like 1h 30m, 45m or 2h.");
+    t.time.secs += s;
+    log(t, `logged ${dur(s)}`);
+  } else return;
+  save(); renderTimer(); renderFeed(); render();
+});
+setInterval(() => {
+  for (const el of document.querySelectorAll("[data-timer]")) { const t = task(+el.dataset.timer); if (t?.time.since) el.textContent = dur(tracked(t)); }
+}, 1000);
+
+// Images: scaled down so a few fit in localStorage; the first one is the card's cover.
+function renderImages() {
+  const imgs = editing.images;
+  $("#img-count").textContent = imgs.length || "";
+  $("#imgs").innerHTML = imgs.map((src, i) => `<div class="img"><img src="${src}" alt="">${i === 0 ? `<span class="is-cover">Cover</span>` : ""}
+    <div>${i ? `<button type="button" data-cover="${i}">Make cover</button>` : "<span></span>"}<button type="button" data-unimg="${i}">Remove</button></div></div>`).join("");
+}
+$("#imgs").addEventListener("click", (e) => {
+  const c = e.target.closest("[data-cover]"), r = e.target.closest("[data-unimg]");
+  if (c) editing.images.unshift(...editing.images.splice(+c.dataset.cover, 1));
+  else if (r) editing.images.splice(+r.dataset.unimg, 1);
+  else return;
+  save(); renderImages(); render();
+});
+$("#img-add").addEventListener("change", async (e) => {
+  const t = editing;
+  for (const file of [...e.target.files].slice(0, 5 - t.images.length)) {
+    const bmp = await createImageBitmap(file).catch(() => null);
+    if (!bmp) continue;
+    const k = Math.min(1, 640 / Math.max(bmp.width, bmp.height)), c = document.createElement("canvas");
+    c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+    c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+    t.images.push(c.toDataURL("image/jpeg", 0.75));
+  }
+  e.target.value = "";
+  log(t, "added images");
+  save(); if (editing === t) { renderImages(); renderFeed(); } render();
+});
+
+// Comments & activity: one muted line per event and the comments, oldest first.
+const mentionNames = () => ["agent", ...state.members.map((p) => p.name)];
 // Canvas tags are the names on groups of shapes (customData.tag); "@name" links to them.
 function canvasTags() {
   let els = null;
@@ -629,11 +1753,12 @@ function canvasTags() {
   if (!els) return ["ReleaseFlow"]; // the seed's group, before the canvas was first opened
   return [...new Set(els.filter((e) => !e.isDeleted).map((e) => e.customData?.tag).filter(Boolean))];
 }
+const reEsc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const highlight = (text) => {
   const tags = canvasTags();
-  const words = [...MENTION_NAMES, ...tags].sort((a, b) => b.length - a.length);
-  return esc(text).replace(new RegExp(`@(${words.join("|")})(?![\\w-])`, "g"), (_, w) =>
-    tags.includes(w) ? `<button type="button" class="mention tag-link" data-tag="${w}">@${w}</button>` : `<span class="mention">@${w}</span>`);
+  const words = [...mentionNames(), ...tags].sort((a, b) => b.length - a.length).map(reEsc);
+  return keyLinks(esc(text).replace(new RegExp(`@(${words.join("|")})(?![\\w-])`, "g"), (_, w) =>
+    tags.includes(w) ? `<button type="button" class="mention tag-link" data-tag="${w}">@${w}</button>` : `<span class="mention">@${w}</span>`));
 };
 const tagsIn = (text) => canvasTags().filter((tag) => new RegExp(`(^|\\s)@${tag}(?![\\w-])`).test(text));
 function renderTagPreviews() {
@@ -649,28 +1774,38 @@ function renderTagPreviews() {
     });
   }
 }
-// A clicked @name opens the canvas with that group selected.
+// A clicked @name opens the canvas with that group selected; a clicked key opens that card.
 document.addEventListener("click", (e) => {
   const link = e.target.closest("[data-tag]");
-  if (!link) return;
-  dialog.close();
-  setView("canvas");
-  window.focusTag?.(link.dataset.tag);
+  if (link) {
+    dialog.close();
+    setSection("canvas");
+    return window.focusTag?.(link.dataset.tag);
+  }
+  const open = e.target.closest("[data-open]");
+  if (open && task(+open.dataset.open)) { e.preventDefault(); return openTask(+open.dataset.open); }
+  const note = e.target.closest("[data-note]");
+  if (note) { $("#bell-menu").hidden = true; return openNote(+note.dataset.note); }
+  const go = e.target.closest("[data-go]");
+  if (go) setSection(go.dataset.go);
 });
 function renderFeed() {
   const feed = $("#feed");
-  feed.innerHTML = editing.history.map((h) => `<div class="event">${esc(h)}</div>`).join("") + editing.comments.map((c) => {
-    const p = person(c.who);
-    const mark = c.agent ? `<span class="agent-mark">${svg("spark")}</span>` : p ? avatar(p) : `<span class="avatar" style="background:#71717a">Y</span>`;
-    return `<div class="comment">${mark}<div style="min-width:0"><b>${c.agent ? "AI agent" : p?.name ?? "You"}</b><time>${esc(c.at)}</time><p>${highlight(c.text)}</p></div></div>`;
-  }).join("");
+  const items = [...editing.history.map((h) => ({ ...h, event: true })), ...editing.comments].sort((a, b) => a.at - b.at);
+  feed.innerHTML = items.map((c) => {
+    if (c.event) return `<div class="event"><b>${esc(actorName(c.by))}</b> ${esc(c.text)} · ${ago(c.at)}</div>`;
+    const p = person(c.who || ME);
+    const mark = c.agent ? `<span class="agent-mark">${svg("spark")}</span>` : avatar(p) || `<span class="avatar" style="background:#71717a">?</span>`;
+    return `<div class="comment">${mark}<div style="min-width:0"><b>${c.agent ? "AI agent" : esc(p?.name ?? "Former member")}</b><time>${ago(c.at)}</time><p>${highlight(c.text)}</p></div></div>`;
+  }).join("") || `<p class="empty">No comments yet.</p>`;
   feed.scrollTop = feed.scrollHeight;
 }
 
 // The demo has no model behind it: the "agent" summarises the card from its own fields.
 function agentAnswer(t) {
-  const p = person(t.who), open = t.checklist.filter((i) => !i.done).map((i) => i.text);
-  return `${t.key} is in ${column(t.col).title}, ${t.prio} priority, ${p ? `assigned to ${p.name}` : "unassigned"}${t.due ? `, due ${fmt(t.due)}${late(t) ? " (overdue)" : ""}` : ""}.`
+  const open = t.checklist.filter((i) => !i.done).map((i) => i.text), names = t.who.map((id) => person(id)?.name).filter(Boolean);
+  return `${t.key} is in ${column(t.col).title}, ${t.prio} priority, ${names.length ? `assigned to ${names.join(" and ")}` : "unassigned"}${t.due ? `, due ${fmt(t.due)}${late(t) ? " (overdue)" : ""}` : ""}.`
+    + (blocked(t) ? ` It is waiting on ${t.blockedBy.map(task).filter((b) => b && !isDone(b)).map((b) => b.key).join(", ")}.` : "")
     + (t.checklist.length ? ` Checklist ${t.checklist.length - open.length}/${t.checklist.length}${open.length ? `, still open: ${open.join(", ")}` : ""}.` : "")
     + "\n\n(Demo answer. In the app the AI agent reads this card, the board, meetings and canvas sheets, and answers your actual question.)";
 }
@@ -678,113 +1813,227 @@ const comment = $("#comment");
 function postComment() {
   const text = comment.value.trim();
   if (!text) return;
-  const task = editing;
-  task.comments.push({ who: "", text, agent: false, at: "Just now" });
+  const t = editing;
+  t.comments.push({ who: ME, text, agent: false, at: Date.now() });
   comment.value = "";
   closeMentions();
   save(); renderFeed(); renderTagPreviews(); render();
   if (!/(^|\s)@agent\b/i.test(text)) return;
   $("#comment-hint").textContent = "AI agent is thinking…";
   setTimeout(() => {
-    task.comments.push({ who: "", text: agentAnswer(task), agent: true, at: "Just now" });
+    t.comments.push({ who: "", text: agentAnswer(t), agent: true, at: Date.now() });
     $("#comment-hint").textContent = "Ctrl/⌘ + Enter";
     save(); render();
-    if (editing === task) renderFeed();
+    if (editing === t) renderFeed();
   }, 900);
 }
 $("#send").onclick = postComment;
 
-// "@" at the caret opens the picker: the agent first, then the people on the project.
-let mention = null, options = [], active = 0;
-function closeMentions() { mention = null; options = []; $("#mentions").hidden = true; }
-function renderMentions() {
-  const q = mention.query.toLowerCase();
-  options = [{ name: "agent", label: "AI agent" }, ...PEOPLE.map((p) => ({ name: p.name, label: p.name, p })), ...canvasTags().map((tag) => ({ name: tag, label: `@${tag}`, tag: true }))]
-    .filter((o) => o.label.toLowerCase().includes(q) || o.name.toLowerCase().includes(q));
-  active = Math.min(active, Math.max(options.length - 1, 0));
-  $("#mentions").hidden = !options.length;
-  $("#mentions").innerHTML = options.map((o, i) => `<li role="option" data-i="${i}" aria-selected="${i === active}">
-    ${o.p ? avatar(o.p) : o.tag ? `<span class="agent-mark">${svg("tag")}</span>` : `<span class="agent-mark">${svg("spark")}</span>`}${esc(o.label)}${o.p ? "" : o.tag ? "<small>Canvas</small>" : "<small>Ask about this card</small>"}</li>`).join("");
-}
-function pick(o) {
-  const caret = comment.selectionStart, insert = `@${o.name} `;
-  comment.value = comment.value.slice(0, mention.start) + insert + comment.value.slice(caret);
-  const at = mention.start + insert.length;
-  closeMentions();
-  comment.focus();
-  comment.setSelectionRange(at, at);
-}
-comment.addEventListener("input", () => {
-  const m = /(^|\s)@([^\s@]*)$/.exec(comment.value.slice(0, comment.selectionStart));
-  if (!m) return closeMentions();
-  mention = { query: m[2], start: comment.selectionStart - m[2].length - 1 };
-  active = 0;
-  renderMentions();
-});
-comment.addEventListener("keydown", (e) => {
-  if (options.length) {
-    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-      e.preventDefault();
-      active = (active + (e.key === "ArrowDown" ? 1 : options.length - 1)) % options.length;
-      return renderMentions();
-    }
-    if (e.key === "Enter" || e.key === "Tab") { e.preventDefault(); return pick(options[active]); }
-    if (e.key === "Escape") { e.preventDefault(); return closeMentions(); }
+// "@" at the caret opens the picker: the agent first (card comments only), then people, then canvas tags.
+let closeMentions = () => {};
+function attachMentions(input, list, submit, withAgent, modifier = false) {
+  let mention = null, options = [], active = 0;
+  const close = () => { mention = null; options = []; list.hidden = true; };
+  if (input === comment) closeMentions = close;
+  function draw() {
+    const q = mention.query.toLowerCase();
+    options = [...(withAgent ? [{ name: "agent", label: "AI agent" }] : []), ...state.members.map((p) => ({ name: p.name, label: p.name, p })), ...canvasTags().map((tag) => ({ name: tag, label: `@${tag}`, tag: true }))]
+      .filter((o) => o.label.toLowerCase().includes(q) || o.name.toLowerCase().includes(q));
+    active = Math.min(active, Math.max(options.length - 1, 0));
+    list.hidden = !options.length;
+    list.innerHTML = options.map((o, i) => `<li role="option" data-i="${i}" aria-selected="${i === active}">
+      ${o.p ? avatar(o.p) : o.tag ? `<span class="agent-mark">${svg("tag")}</span>` : `<span class="agent-mark">${svg("spark")}</span>`}${esc(o.label)}${o.p ? "" : o.tag ? "<small>Canvas</small>" : "<small>Ask about this card</small>"}</li>`).join("");
   }
-  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) postComment();
-});
-comment.addEventListener("blur", () => setTimeout(closeMentions, 150));
-$("#mentions").addEventListener("mousedown", (e) => {
-  const li = e.target.closest("li");
-  if (!li) return;
-  e.preventDefault();
-  pick(options[+li.dataset.i]);
+  function pick(o) {
+    const caret = input.selectionStart, insert = `@${o.name} `;
+    input.value = input.value.slice(0, mention.start) + insert + input.value.slice(caret);
+    const at = mention.start + insert.length;
+    close();
+    input.focus();
+    input.setSelectionRange(at, at);
+  }
+  input.addEventListener("input", () => {
+    const m = /(^|\s)@([^\s@]*)$/.exec(input.value.slice(0, input.selectionStart));
+    if (!m) return close();
+    mention = { query: m[2], start: input.selectionStart - m[2].length - 1 };
+    active = 0;
+    draw();
+  });
+  input.addEventListener("keydown", (e) => {
+    if (options.length) {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        active = (active + (e.key === "ArrowDown" ? 1 : options.length - 1)) % options.length;
+        return draw();
+      }
+      if (e.key === "Enter" || e.key === "Tab") { e.preventDefault(); return pick(options[active]); }
+      if (e.key === "Escape") { e.preventDefault(); return close(); }
+    }
+    if (e.key === "Enter" && (modifier ? e.metaKey || e.ctrlKey : !e.shiftKey)) { e.preventDefault(); submit(); }
+  });
+  input.addEventListener("blur", () => setTimeout(close, 150));
+  list.addEventListener("mousedown", (e) => {
+    const li = e.target.closest("li");
+    if (!li) return;
+    e.preventDefault();
+    pick(options[+li.dataset.i]);
+  });
+}
+attachMentions(comment, $("#mentions"), postComment, true, true);
+
+// ── Notifications and ⌘K search ───────────────────────────────────────────
+function renderBell() {
+  const unread = state.inbox.filter((i) => !i.read), dueMine = mine().filter((t) => t.due && t.due <= day(0));
+  const soon = state.meetings.filter((m) => { const { start } = occurrence(m); return !meetingState(m).past && start - Date.now() < DAY && m.who.includes(ME); });
+  const chats = unreadChat();
+  $("#bell").innerHTML = svg("bell", "width:16px;height:16px") + (unread.length || dueMine.length || soon.length || chats ? `<span class="ping"></span>` : "");
+  const menu = $("#bell-menu");
+  if (menu.hidden) return;
+  menu.innerHTML = `<div class="menu-head">Notifications<button class="link-btn" id="bell-read">Mark all read</button></div><div class="menu-body">
+    ${soon.length ? `<div class="menu-label">Meetings</div>${soon.map((m) => `<button class="row" data-go="meetings">${svg("meet")}<span class="grow">${esc(m.title)}</span><small>${meetingState(m).text}</small></button>`).join("")}` : ""}
+    ${dueMine.length ? `<div class="menu-label">Due</div>${dueMine.map((t) => `<button class="row" data-open="${t.id}">${svg("cal")}<span class="grow">${esc(t.title)}</span><small class="${late(t) ? "late" : ""}">${late(t) ? "Overdue" : "Today"}</small></button>`).join("")}` : ""}
+    ${chats ? `<div class="menu-label">Chat</div><button class="row" data-go="chat">${svg("chat")}<span class="grow">${chats} unread message(s)</span></button>` : ""}
+    <div class="menu-label">Cards</div>${unread.map((i) => `<button class="row unread" data-note="${i.id}">${avatar(person(i.by))}<span class="grow"><b>${esc(actorName(i.by))}</b> ${esc(i.text)}</span><small>${ago(i.at)}</small></button>`).join("") || `<p class="empty">No new card activity.</p>`}
+  </div><div class="menu-foot"><button class="link-btn" data-go="inbox">Open inbox</button></div>`;
+}
+$("#bell").onclick = (e) => {
+  e.stopPropagation();
+  const menu = $("#bell-menu");
+  menu.hidden = !menu.hidden;
+  $("#bell").setAttribute("aria-expanded", !menu.hidden);
+  renderBell();
+};
+document.addEventListener("click", (e) => {
+  if (e.target.closest("#bell-read")) { state.inbox.forEach((i) => (i.read = true)); save(); return render(); }
+  if (!e.target.closest("#bell-menu") || e.target.closest("[data-go],[data-open]")) $("#bell-menu").hidden = true;
 });
 
-// ── Shell ─────────────────────────────────────────────────────────────────
-// The sidebar mirrors the app's; only Board and Canvas exist in the demo.
-const NAV = [["home", "Home"], ["board", "Board", "board"], ["pen", "Canvas", "canvas"], ["chat", "Chat"], ["inbox", "Inbox"], ["mine", "My Tasks"], ["meet", "Meetings"], ["gear", "Settings"]];
-$("#nav").innerHTML = NAV.map(([icon, label, v]) =>
-  `<button ${v ? `data-view="${v}"` : `data-soon title="In the full app"`}>${svg(icon)}${label}${label === "My Tasks" ? `<span class="badge">${state.tasks.filter((t) => t.who === "ada" && t.col !== "done").length}</span>` : ""}</button>`).join("");
-$("#tabs").innerHTML = [["board", "Board", "board"], ["list", "List", "list"], ["calendar", "Calendar", "meet"], ["canvas", "Canvas", "pen", "sm-only"]]
-  .map(([v, label, icon, cls]) => `<button role="tab" data-view="${v}"${cls ? ` class="${cls}"` : ""}>${svg(icon)}${label}</button>`).join("")
-  + `<button role="tab" data-soon title="In the full app" style="cursor:default">${svg("chart")}Analytics</button>`;
-$("#search-ico").outerHTML = svg("search");
-let view = "board";
-function render() {
-  ({ board: renderBoard, list: renderList, calendar: renderCalendar, canvas: () => {} })[view]();
+const pal = $("#palette");
+let hits = [], hit = 0;
+function searchAll(q) {
+  q = q.trim().toLowerCase();
+  if (!q) return state.tasks.filter((t) => !t.archived).slice(-6).reverse().map((t) => ({ kind: "Card", label: `${t.key} ${t.title}`, sub: column(t.col).title, go: () => openTask(t.id) }));
+  const has = (s) => s.toLowerCase().includes(q);
+  return [
+    ...state.tasks.filter((t) => !t.archived && has(`${t.key} ${t.title} ${t.desc}`)).map((t) => ({ kind: "Card", label: `${t.key} ${t.title}`, sub: column(t.col).title, go: () => openTask(t.id) })),
+    ...state.meetings.filter((m) => has(`${m.title} ${m.notes}`)).map((m) => ({ kind: "Meeting", label: m.title, sub: meetingState(m).text, go: () => setSection("meetings") })),
+    ...state.messages.filter((m) => has(m.text)).map((m) => ({ kind: "Message", label: m.text, sub: `${person(m.from)?.name ?? "?"} in ${chName(m.ch)}`, go: () => { channel = m.ch; setSection("chat"); } })),
+  ].slice(0, 20);
 }
-function setView(v) {
-  view = v;
-  document.querySelectorAll("#tabs [data-view]").forEach((b) => b.setAttribute("aria-selected", b.dataset.view === v));
-  document.querySelectorAll("#nav [data-view]").forEach((b) => b.setAttribute("aria-current", (b.dataset.view === "canvas") === (v === "canvas")));
-  document.querySelectorAll("main > section").forEach((s) => (s.hidden = s.id !== `view-${v}`));
-  $("#search-wrap").hidden = v === "canvas";
-  if (v === "canvas") window.loadCanvas?.();
+function drawHits() {
+  hits = searchAll($("#palette-q").value);
+  hit = Math.min(hit, Math.max(hits.length - 1, 0));
+  $("#palette-results").innerHTML = hits.map((h, i) => `<button class="row" data-hit="${i}" aria-selected="${i === hit}"><small style="width:60px">${h.kind}</small><span class="grow">${esc(h.label)}</span><small>${esc(h.sub)}</small></button>`).join("") || `<p class="empty">Nothing found.</p>`;
+}
+function openPalette() { $("#palette-q").value = ""; hit = 0; drawHits(); pal.showModal(); $("#palette-q").focus(); }
+const runHit = (h) => { pal.close(); h?.go(); };
+$("#palette-q").addEventListener("input", () => { hit = 0; drawHits(); });
+$("#palette-q").addEventListener("keydown", (e) => {
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); hit = (hit + (e.key === "ArrowDown" ? 1 : hits.length - 1)) % Math.max(hits.length, 1); drawHits(); }
+  if (e.key === "Enter") { e.preventDefault(); runHit(hits[hit]); }
+});
+$("#palette-results").addEventListener("click", (e) => { const b = e.target.closest("[data-hit]"); if (b) runHit(hits[+b.dataset.hit]); });
+pal.addEventListener("click", (e) => { if (e.target === pal) pal.close(); });
+$("#palette-btn").onclick = openPalette;
+addEventListener("keydown", (e) => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); pal.open ? pal.close() : openPalette(); } });
+
+// ── Shell ─────────────────────────────────────────────────────────────────
+const SECTIONS = [["home", "Home", "home"], ["board", "Board", "board"], ["canvas", "Canvas", "pen"], ["chat", "Chat", "chat"], ["inbox", "Inbox", "inbox"], ["mine", "My Tasks", "mine"], ["meetings", "Meetings", "meet"], ["settings", "Settings", "gear"]];
+const VIEWS = [["board", "Board", "board"], ["list", "List", "list"], ["calendar", "Calendar", "cal"], ["timeline", "Timeline", "gantt"], ["analytics", "Analytics", "chart"]];
+$("#tabs").innerHTML = VIEWS.map(([v, label, icon]) => `<button role="tab" data-view="${v}" title="${label}">${svg(icon)}<span class="lbl">${label}</span></button>`).join("");
+$("#search-ico").outerHTML = svg("search");
+$("#palette-btn").innerHTML = svg("search", "width:16px;height:16px") + `<kbd class="hide-sm">⌘K</kbd>`;
+$("#palette-btn").style.cssText = "display:flex;gap:4px;align-items:center";
+$("#new").innerHTML = `${svg("plus")}<span class="hide-sm">New Task</span>`;
+$("#menu-btn").innerHTML = svg("menu", "width:16px;height:16px");
+let section = "board", view = "board";
+
+function renderNav() {
+  const counts = { chat: unreadChat(), inbox: state.inbox.filter((i) => !i.read).length, mine: mine().length };
+  $("#nav").innerHTML = SECTIONS.map(([k, label, icon]) => `<button data-section="${k}" aria-current="${section === k}" title="${label}">${svg(icon)}<span class="hide-slim">${label}</span>${counts[k] ? `<span class="badge hide-slim${k === "mine" ? "" : " strong"}">${counts[k]}</span>` : ""}</button>`).join("");
+  $("#ws-name").textContent = state.workspace;
+  $("#side-project").textContent = state.project;
+}
+function render() {
+  const id = section === "board" ? view : section;
+  ({ board: renderBoard, list: renderList, calendar: renderCalendar, timeline: renderTimeline, analytics: renderAnalytics, home: renderHome,
+    chat: renderChat, inbox: renderInbox, mine: renderMine, meetings: renderMeetings, settings: renderSettings, canvas: () => {} })[id]();
+  renderNav(); renderFilterbar(); renderBell();
+  const title = $("#ptitle");
+  title.textContent = section === "board" ? state.project : SECTIONS.find((s) => s[0] === section)[1];
+  title.classList.toggle("editable", section === "board");
+  title.title = section === "board" ? "Rename project" : "";
+}
+function show() {
+  const id = section === "board" ? view : section;
+  document.querySelectorAll("main > section").forEach((s) => (s.hidden = s.id !== `view-${id}`));
+  document.querySelectorAll("#tabs [data-view]").forEach((b) => b.setAttribute("aria-selected", b.dataset.view === view));
+  $("#tabs").hidden = $("#search-wrap").hidden = $("#filter-btn").hidden = section !== "board";
+  $("#new").hidden = section === "canvas";
+  if (section === "canvas") window.loadCanvas?.();
+  closeDrawer();
   render();
 }
+function setSection(s) { section = s; show(); }
+function setView(v) { section = "board"; view = v; show(); }
 document.addEventListener("click", (e) => {
-  const target = e.target.closest("#tabs [data-view], #nav [data-view]");
-  if (target) setView(target.dataset.view);
+  const v = e.target.closest("#tabs [data-view]");
+  if (v) return setView(v.dataset.view);
+  const s = e.target.closest("#nav [data-section]");
+  if (s) setSection(s.dataset.section);
 });
-setView("board");
-$("#search").addEventListener("input", (e) => { query = e.target.value.trim().toLowerCase(); render(); });
+
+// Click-to-rename, like the app's EditableTitle.
+function editInPlace(el, value, onSave) {
+  const input = document.createElement("input");
+  input.value = value; input.maxLength = 60;
+  input.style.cssText = "font:inherit;font-weight:600;padding:2px 6px;width:180px";
+  el.replaceChildren(input);
+  input.focus(); input.select();
+  let done = false;
+  const finish = (ok) => { if (done) return; done = true; if (ok && input.value.trim()) onSave(input.value.trim()); save(); render(); };
+  input.addEventListener("keydown", (e) => { if (e.key === "Enter") finish(true); if (e.key === "Escape") finish(false); });
+  input.addEventListener("blur", () => finish(true));
+}
+$("#ptitle").onclick = () => { if (section === "board" && !$("#ptitle input")) editInPlace($("#ptitle"), state.project, (v) => (state.project = v)); };
+$("#ws-name").onclick = () => { if (!$("#ws-name input")) editInPlace($("#ws-name"), state.workspace, (v) => (state.workspace = v)); };
+
+// Sidebar: the logo collapses it on desktop; ☰ opens it as a drawer on phones.
+const sideNav = $("#side-nav");
+const closeDrawer = () => { sideNav.classList.remove("open"); $("#scrim").classList.remove("open"); };
+$("#menu-btn").onclick = () => { sideNav.classList.add("open"); $("#scrim").classList.add("open"); };
+$("#scrim").onclick = closeDrawer;
+$("#collapse").onclick = () => { if (sideNav.classList.contains("open")) return closeDrawer(); sideNav.classList.toggle("slim"); };
+
+$("#search").addEventListener("input", (e) => { filters.q = e.target.value; render(); });
 $("#new").onclick = () => openTask(null);
 $("#reset").onclick = () => {
-  state = sample(); save();
-  try { localStorage.removeItem(CANVAS_KEY); } catch {}
+  try { localStorage.removeItem(KEY); localStorage.removeItem(CANVAS_KEY); } catch {}
   location.reload();
 };
 
 const root = document.documentElement;
-try { const t = localStorage.getItem("theme"); if (t) root.dataset.theme = t; } catch {}
 const isDark = () => root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
-$("#theme").onclick = () => {
-  root.dataset.theme = isDark() ? "light" : "dark";
-  try { localStorage.setItem("theme", root.dataset.theme); } catch {}
+// Palettes carry their own dark tokens under .is-dark, so the class follows the effective mode.
+const syncDark = () => root.classList.toggle("is-dark", isDark());
+function setTheme(mode) {
+  if (mode) root.dataset.theme = mode; else delete root.dataset.theme;
+  try { mode ? localStorage.setItem("theme", mode) : localStorage.removeItem("theme"); } catch {}
+  syncDark();
   window.dispatchEvent(new Event("themechange"));
-};
-render();
+  if (section === "settings") renderSettings();
+}
+function setPalette(id) {
+  if (id === "graphite") delete root.dataset.palette; else root.dataset.palette = id;
+  try { localStorage.setItem("palette", id); } catch {}
+  if (section === "settings") renderSettings();
+}
+try { const t = localStorage.getItem("theme"); if (t) root.dataset.theme = t; const p = localStorage.getItem("palette"); if (p && p !== "graphite") root.dataset.palette = p; } catch {}
+syncDark();
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { syncDark(); window.dispatchEvent(new Event("themechange")); });
+$("#theme").onclick = () => setTheme(isDark() ? "light" : "dark");
+
+show();
 </script>
 
 <script type="module">
