@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { get } from "@/lib/db";
 import { planEvent, type Payload } from "@/lib/github-events";
+import { openGithub } from "@/lib/github";
 import { applySteps, validSignature } from "@/lib/github-webhook";
 import { nudgeBoard } from "@/lib/chat-live";
 
@@ -15,7 +16,7 @@ export async function POST(req: Request) {
   const projectId = new URL(req.url).searchParams.get("project") ?? "";
   const body = await req.text();
   const row = await get<{ github: string | null; key: string; workspace_id: string }>("SELECT github, key, workspace_id FROM projects WHERE id = ?", projectId);
-  const config = row?.github ? (JSON.parse(row.github) as { repo: string; webhookSecret?: string }) : null;
+  const config = row?.github ? openGithub(row.github) : null;
   if (!config?.webhookSecret || !validSignature(config.webhookSecret, body, req.headers.get("x-hub-signature-256"))) {
     return NextResponse.json({ error: "Bad signature." }, { status: 401 });
   }

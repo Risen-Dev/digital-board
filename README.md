@@ -259,7 +259,8 @@ Each delivery is a `POST` with `Content-Type: application/json`:
 | `SMTP_URL` | unset | SMTP server for emailed password-reset links, e.g. `smtps://user:pass@smtp.example.com`. |
 | `APP_URL` | unset | Public address the reset link points at, e.g. `https://board.example.com`. Reset by email is on only when both are set. |
 | `MAIL_FROM` | `Digital Board <no-reply@localhost>` | Sender of those emails. |
-| `SECRET_KEY` | unset | Encrypts the AI agent's API key at rest (AES-256-GCM). Unset stores it as plain text. Changing it makes the saved key unreadable — re-enter it in Settings. Generate one with `openssl rand -hex 32`. |
+| `SECRET_KEY` | unset | Encrypts the AI agent's API key and each project's GitHub token and webhook secret at rest (AES-256-GCM). Unset stores them as plain text. Changing it makes them unreadable — re-enter the AI key, re-save the GitHub token and rotate the webhook secret. Generate one with `openssl rand -hex 32`. |
+| `ALLOW_PRIVATE_URLS` | unset | Outgoing webhook URLs and the AI base URL may not point at loopback, private-network or cloud-metadata addresses. Set to `1` to allow them, e.g. for a local Ollama or n8n. |
 
 Session cookies are `secure` in production, so serve it over HTTPS or reach it on
 `localhost`. Sign-in locks for 15 minutes after 5 wrong passwords for one email or

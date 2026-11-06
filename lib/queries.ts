@@ -81,8 +81,8 @@ const TASK_COLS = `t.id, t.column_id, t.title, t.description, t.label, t.priorit
 export type Project = { id: string; name: string; key: string; doneColumnId: string | null; repo: string | null; tokenHint: string | null; webhookHint: string | null; inbound: boolean;
   outgoing: { url: string; events: string[]; last?: { status: number | string; event: string; at: string } } | null;
   automations: Automation[]; columns: { id: string; title: string }[] };
-const PROJECT_COLS = `p.id, p.name, p.key, p.done_column_id AS "doneColumnId", p.github::jsonb ->> 'repo' AS repo, right(p.github::jsonb ->> 'token', 4) AS "tokenHint",
-  right(p.github::jsonb ->> 'webhookSecret', 4) AS "webhookHint", p.inbound_token IS NOT NULL AS inbound,
+const PROJECT_COLS = `p.id, p.name, p.key, p.done_column_id AS "doneColumnId", p.github::jsonb ->> 'repo' AS repo, COALESCE(p.github::jsonb ->> 'tokenHint', right(p.github::jsonb ->> 'token', 4)) AS "tokenHint",
+  COALESCE(p.github::jsonb ->> 'webhookHint', right(p.github::jsonb ->> 'webhookSecret', 4)) AS "webhookHint", p.inbound_token IS NOT NULL AS inbound,
   p.outgoing - 'secret' AS outgoing, COALESCE(p.automations, '[]') AS automations,
   COALESCE((SELECT json_agg(json_build_object('id', c.id, 'title', c.title) ORDER BY c.position) FROM columns c WHERE c.project_id = p.id), '[]') AS columns`;
 

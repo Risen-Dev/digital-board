@@ -3,6 +3,7 @@ import { createHmac } from "node:crypto";
 import { after } from "next/server";
 import { get, run } from "./db";
 import { runAutomations } from "./tasks";
+import { urlProblem } from "./safe-url";
 import { outgoingPayload, type OutgoingEvent, type OutgoingTask } from "./outgoing-events";
 
 /** `projects.outgoing` (JSONB): where to POST, the HMAC secret, which events, and the last result. */
@@ -40,6 +41,8 @@ export async function notify(event: OutgoingEvent, taskId: string, change: strin
 export async function deliver(projectId: string, config: OutgoingConfig, event: OutgoingEvent, body: string) {
   let status: number | string;
   try {
+    // Saved before the guard existed, or DNS now points inside: never send it.
+    if (await urlProblem(config.url)) throw new Error("blocked");
     const res = await fetch(config.url, {
       method: "POST",
       headers: {
@@ -54,7 +57,7 @@ export async function deliver(projectId: string, config: OutgoingConfig, event: 
     });
     status = res.status;
   } catch (e) {
-    status = e instanceof Error && e.name === "TimeoutError" ? "timeout" : "unreachable";
+    status = e instanceof Error && e.name === "TimeoutError" ? "timeout" : e instanceof Error && e.message === "blocked" ? "blocked" : "unreachable";
   }
   await run(
     "UPDATE projects SET outgoing = jsonb_set(outgoing, '{last}', ?::jsonb) WHERE id = ? AND outgoing IS NOT NULL",

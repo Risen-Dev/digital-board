@@ -3,6 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { get } from "./db";
 import { parseFlow, type Flow } from "./canvas/flow";
 import { unseal } from "./secret";
+import { urlProblem } from "./safe-url";
 
 /**
  * Per-workspace AI provider, stored as JSON in `workspaces.ai_config`.
@@ -122,8 +123,13 @@ async function askAnthropic(config: AiConfig, system: string, turns: ChatTurn[])
   return response.content.map((b) => (b.type === "text" ? b.text : "")).join("");
 }
 
-const openAiBase = (config: AiConfig) =>
-  (config.provider === "gemini" ? GEMINI_URL : config.baseUrl || "https://api.openai.com/v1").replace(/\/+$/, "");
+/** The admin-set base URL is re-checked on every call: one saved before the SSRF guard, or DNS that moved inside. */
+async function openAiBase(config: AiConfig) {
+  const base = (config.provider === "gemini" ? GEMINI_URL : config.baseUrl || "https://api.openai.com/v1").replace(/\/+$/, "");
+  const problem = config.baseUrl ? await urlProblem(base) : null;
+  if (problem) throw new ProviderError(problem, 400);
+  return base;
+}
 const openAiAuth = (config: AiConfig): Record<string, string> => (config.apiKey ? { authorization: `Bearer ${config.apiKey}` } : {});
 
 // Only the provider's own error message goes back to the browser, never the raw body:
@@ -147,7 +153,7 @@ export async function listModels(config: AiConfig): Promise<string[]> {
     for await (const model of new Anthropic({ apiKey: config.apiKey }).models.list()) ids.push(model.id);
     return ids;
   }
-  const res = await fetch(`${openAiBase(config)}/models`, { headers: openAiAuth(config), signal: AbortSignal.timeout(15_000) });
+  const res = await fetch(`${await openAiBase(config)}/models`, { headers: openAiAuth(config), redirect: "manual", signal: AbortSignal.timeout(15_000) });
   const body = await res.json().catch(() => null);
   if (!res.ok) throw providerError(res.status, body);
   return (Array.isArray(body?.data) ? body.data : [])
@@ -169,8 +175,9 @@ export async function workspaceModels(workspaceId: string, config: AiConfig) {
 }
 
 async function askOpenAi(config: AiConfig, system: string, turns: ChatTurn[]) {
-  const res = await fetch(`${openAiBase(config)}/chat/completions`, {
+  const res = await fetch(`${await openAiBase(config)}/chat/completions`, {
     method: "POST",
+    redirect: "manual",
     headers: { "content-type": "application/json", ...openAiAuth(config) },
     body: JSON.stringify({
       model: config.model,

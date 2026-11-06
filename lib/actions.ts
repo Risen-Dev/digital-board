@@ -18,6 +18,7 @@ import { DONE_COLUMN } from "./queries";
 import { cleanImport, type Imported } from "./trello";
 import { appUrl, mailEnabled, sendMail } from "./mail";
 import { mentionedIn, pushTo } from "./push";
+import { urlProblem } from "./safe-url";
 import { MEETING_REPEATS, safeLink, type MeetingRepeat } from "./meetings";
 import type { Flow } from "./canvas/flow";
 import examplesData from "./template-examples.json";
@@ -866,11 +867,11 @@ export async function renameWorkspace(name: string) {
 export async function rotateGithubWebhook(projectId: string) {
   const user = await requireUser();
   if (!await canManage(user, projectId)) return { error: "You cannot manage this project." };
-  const { githubConfig } = await import("./github");
+  const { githubConfig, sealGithub } = await import("./github");
   const saved = await githubConfig(projectId);
   if (!saved) return { error: "Connect a repository first." };
   const webhookSecret = randomBytes(24).toString("hex");
-  await run("UPDATE projects SET github = ? WHERE id = ?", JSON.stringify({ ...saved, webhookSecret }), projectId);
+  await run("UPDATE projects SET github = ? WHERE id = ?", sealGithub({ ...saved, webhookSecret }), projectId);
   changed(user);
   return { secret: webhookSecret };
 }
@@ -916,7 +917,8 @@ export async function saveOutgoing(projectId: string, url: string, events: strin
     changed(user);
     return { ok: "Turned off." };
   }
-  if (!URL.canParse(clean) || !/^https?:$/.test(new URL(clean).protocol)) return { error: "URL must start with http:// or https://." };
+  const problem = await urlProblem(clean);
+  if (problem) return { error: problem };
   const { OUTGOING_EVENTS } = await import("./outgoing-events");
   const picked = OUTGOING_EVENTS.filter((e) => events.includes(e));
   if (!picked.length) return { error: "Pick at least one event." };
@@ -1068,7 +1070,7 @@ export async function saveGithub(projectId: string, repo: string, token: string)
   const user = await requireUser();
   if (!await canManage(user, projectId)) return { error: "You cannot manage this project." };
 
-  const { REPO_RE, GithubError, githubConfig, verifyGithub } = await import("./github");
+  const { REPO_RE, GithubError, githubConfig, sealGithub, verifyGithub } = await import("./github");
   const clean = repo.trim().replace(/^https:\/\/github\.com\//, "").replace(/\.git$|\/$/g, "");
   if (!clean) {
     await run("UPDATE projects SET github = NULL WHERE id = ?", projectId);
@@ -1084,7 +1086,7 @@ export async function saveGithub(projectId: string, repo: string, token: string)
   try {
     full = await verifyGithub({ repo: clean, token: key });
     // Keep the webhook secret: re-saving the token must not break the configured webhook.
-    await run("UPDATE projects SET github = ? WHERE id = ?", JSON.stringify({ ...saved, repo: full, token: key }), projectId);
+    await run("UPDATE projects SET github = ? WHERE id = ?", sealGithub({ ...saved, repo: full, token: key }), projectId);
   } catch (e) {
     return { error: e instanceof GithubError ? e.message : "Could not reach GitHub." };
   }
@@ -1382,7 +1384,8 @@ export async function saveAiConfig(_prev: unknown, form: FormData) {
   if (!AI_PROVIDERS.includes(provider)) return { error: "Pick a provider." };
   if (!model) return { error: "Model is required." };
   if (!REASONING.includes(reasoning)) return { error: "Pick a reasoning level." };
-  if (baseUrl && !/^https?:\/\/\S+$/.test(baseUrl)) return { error: "Base URL must start with http:// or https://." };
+  const urlError = baseUrl ? await urlProblem(baseUrl) : null;
+  if (urlError) return { error: urlError };
 
   const saved = await aiConfig(user.workspace_id);
   const key = apiKey || (saved?.provider === provider ? saved.apiKey : "");
@@ -1404,7 +1407,8 @@ export async function fetchAiModels(provider: string, baseUrl: string, apiKey: s
 
   const { AI_PROVIDERS, aiConfig, listModels } = await import("./ai");
   if (!AI_PROVIDERS.includes(provider as (typeof AI_PROVIDERS)[number])) return { error: "Pick a provider." };
-  if (baseUrl && !/^https?:\/\/\S+$/.test(baseUrl)) return { error: "Base URL must start with http:// or https://." };
+  const urlError = baseUrl ? await urlProblem(baseUrl) : null;
+  if (urlError) return { error: urlError };
 
   const saved = await aiConfig(user.workspace_id);
   const key = apiKey.trim() || (saved?.provider === provider ? saved.apiKey : "");

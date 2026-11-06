@@ -200,7 +200,8 @@ npm start`}</Code>
               [<C>SMTP_URL</C>, <>unset</>, <>SMTP server for emailed password-reset links, e.g. <C>smtps://user:pass@smtp.example.com</C>.</>],
               [<C>APP_URL</C>, <>unset</>, <>Public address the reset link points at. Reset by email is on only when this and <C>SMTP_URL</C> are both set.</>],
               [<C>MAIL_FROM</C>, <><C>Digital Board &lt;no-reply@localhost&gt;</C></>, <>Sender of those emails.</>],
-              [<C>SECRET_KEY</C>, <>unset</>, <>Encrypts the AI agent&apos;s API key at rest (AES-256-GCM). Unset stores it as plain text. Changing it makes the saved key unreadable — re-enter it in Settings. Generate one with <C>openssl rand -hex 32</C>.</>],
+              [<C>SECRET_KEY</C>, <>unset</>, <>Encrypts the AI agent&apos;s API key and each project&apos;s GitHub token and webhook secret at rest (AES-256-GCM). Unset stores them as plain text. Changing it makes them unreadable — re-enter the AI key, re-save the GitHub token and rotate the webhook secret. Generate one with <C>openssl rand -hex 32</C>.</>],
+              [<C>ALLOW_PRIVATE_URLS</C>, <>unset</>, <>Outgoing webhook URLs and the AI base URL may not point at loopback, private-network or cloud-metadata addresses. Set to <C>1</C> to allow them, e.g. for a local Ollama or n8n.</>],
               [<C>NODE_ENV</C>, <><C>production</C> via <C>npm start</C></>, <>Session cookies are marked <C>secure</C> in production, which means they require HTTPS.</>],
             ]}
           />

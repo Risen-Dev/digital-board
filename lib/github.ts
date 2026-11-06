@@ -2,6 +2,7 @@ import "server-only";
 import { all, get } from "./db";
 import { ciOf, type CiState } from "./board";
 import { keysIn } from "./github-events";
+import { seal, unseal } from "./secret";
 
 /**
  * Per-project GitHub link, stored as JSON in `projects.github`: a repo and a
@@ -35,7 +36,22 @@ export const REPO_RE = /^[\w.-]+\/[\w.-]+$/;
 
 export async function githubConfig(projectId: string): Promise<GithubConfig | null> {
   const row = await get<{ github: string | null }>("SELECT github FROM projects WHERE id = ?", projectId);
-  return row?.github ? JSON.parse(row.github) : null;
+  return row?.github ? openGithub(row.github) : null;
+}
+
+/**
+ * Token and webhook secret are sealed with SECRET_KEY (lib/secret.ts); the last-4 hints
+ * Settings shows are stored beside them, since the sealed text's tail means nothing.
+ * Rows saved before sealing still read and get sealed on their next save.
+ */
+export const sealGithub = ({ repo, token, webhookSecret }: GithubConfig) => JSON.stringify({
+  repo, token: seal(token), tokenHint: token.slice(-4),
+  ...(webhookSecret ? { webhookSecret: seal(webhookSecret), webhookHint: webhookSecret.slice(-4) } : {}),
+});
+
+export function openGithub(stored: string): GithubConfig {
+  const c = JSON.parse(stored) as GithubConfig;
+  return { repo: c.repo, token: unseal(c.token ?? ""), ...(c.webhookSecret ? { webhookSecret: unseal(c.webhookSecret) } : {}) };
 }
 
 export class GithubError extends Error {}
