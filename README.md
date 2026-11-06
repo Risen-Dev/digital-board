@@ -263,8 +263,10 @@ Each delivery is a `POST` with `Content-Type: application/json`:
 | `ALLOW_PRIVATE_URLS` | unset | Outgoing webhook URLs and the AI base URL may not point at loopback, private-network or cloud-metadata addresses. Set to `1` to allow them, e.g. for a local Ollama or n8n. |
 
 Session cookies are `secure` in production, so serve it over HTTPS or reach it on
-`localhost`. Sign-in locks for 15 minutes after 5 wrong passwords for one email or
-20 from one IP (taken from `X-Forwarded-For`, so put it behind a proxy that sets it).
+`localhost`. Sign-in locks for 15 minutes after 5 wrong passwords for one email from
+one IP, 20 from one IP, or 100 for one email from anywhere. The IP is the **last**
+`X-Forwarded-For` entry, so run it behind exactly one reverse proxy that appends it
+(nginx `proxy_add_x_forwarded_for`, Caddy by default); without one, clients can fake it.
 
 ## Documentation
 

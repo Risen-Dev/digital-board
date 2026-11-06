@@ -103,32 +103,43 @@ async function touch(userId: string, lastSeen: string | null) {
 }
 
 // Counters live in login_failures so every app instance shares them.
+// The lock is per email *and* IP, so a stranger's wrong guesses can't lock the owner out
+// from their own address. The per-email ceiling still caps a spread-out (or spoofed-IP) guesser.
+// ponytail: an attacker past 100 guesses in 15 min still locks the account; add a known-device cookie that skips the ceiling if that bites.
 const WINDOW = "15 minutes";
-const MAX_PER_EMAIL = 5;
+const MAX_PER_EMAIL_IP = 5;
 const MAX_PER_IP = 20;
+const MAX_PER_EMAIL = 100;
 
 const recent = async (key: string) =>
   (await get<{ n: number }>(`SELECT COUNT(*) n FROM login_failures WHERE key = ? AND at > now() - interval '${WINDOW}'`, key))!.n;
 
+/**
+ * The client as the nearest proxy saw it: the LAST X-Forwarded-For entry, which that proxy
+ * appended. The first entry is whatever the client typed. Without a proxy in front, every
+ * header here is client-controlled — see the README on running behind one.
+ */
 async function clientIp() {
   const h = await headers();
-  return h.get("x-forwarded-for")?.split(",")[0].trim() || h.get("x-real-ip") || "unknown";
+  return h.get("x-forwarded-for")?.split(",").at(-1)?.trim() || h.get("x-real-ip") || "unknown";
 }
 
 /** User id, null on a wrong email/password, or "locked" after too many recent failures. */
 export async function login(email: string, password: string): Promise<string | null | "locked"> {
   email = email.toLowerCase().trim();
-  const keys = [`e:${email}`, `ip:${await clientIp()}`];
-  if (await recent(keys[0]) >= MAX_PER_EMAIL || await recent(keys[1]) >= MAX_PER_IP) return "locked";
+  const ip = await clientIp();
+  const keys = [`ei:${email}|${ip}`, `ip:${ip}`, `e:${email}`];
+  if (await recent(keys[0]) >= MAX_PER_EMAIL_IP || await recent(keys[1]) >= MAX_PER_IP || await recent(keys[2]) >= MAX_PER_EMAIL) return "locked";
 
   const row = await get<{ id: string; password_hash: string }>("SELECT id, password_hash FROM users WHERE email = ?", email);
   // Hash anyway on a miss so a bad email and a bad password take the same time.
   const ok = row ? verifyPassword(password, row.password_hash) : verifyPassword(password, hashPassword("decoy"));
   if (ok && row) {
+    // Only this address's count: clearing the email's total would hand a guesser a fresh 100.
     await run("DELETE FROM login_failures WHERE key = ?", keys[0]);
     return row.id;
   }
-  await run("INSERT INTO login_failures (key) VALUES (?), (?)", ...keys);
+  await run("INSERT INTO login_failures (key) VALUES (?), (?), (?)", ...keys);
   await run(`DELETE FROM login_failures WHERE at < now() - interval '${WINDOW}'`);
   return null;
 }

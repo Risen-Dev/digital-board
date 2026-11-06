@@ -298,6 +298,7 @@ WantedBy=multi-user.target`}</Code>
     proxy_pass http://127.0.0.1:3000;
     proxy_set_header Host $host;
     proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;   # sign-in lockout reads the last entry
     client_max_body_size 12M;   # attachments are capped at 10 MB
   }
 }`}</Code>
@@ -453,7 +454,9 @@ git push -u origin feat/WEB-42-title`}</Code>
             <li>
               <strong className="text-foreground">Auth</strong> is <C>scrypt</C> from <C>node:crypto</C> — no bcrypt
               dependency. A session is a random 32-byte token in an <C>httpOnly</C> cookie plus a row, valid 30 days.
-              Sign-in locks for 15 minutes after 5 wrong passwords for one email or 20 from one IP. With{" "}
+              Sign-in locks for 15 minutes after 5 wrong passwords for one email from one IP, 20 from one IP, or
+              100 for one email from anywhere; the IP is the last <C>X-Forwarded-For</C> entry, so run it behind one
+              reverse proxy that appends it. With{" "}
               <C>SMTP_URL</C> and <C>APP_URL</C> set, <C>/forgot</C> emails a one-hour reset link; only its sha256 is
               stored.
             </li>
