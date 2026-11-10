@@ -13,22 +13,22 @@ with multiple sheets, and workspace chat with direct messages. Multi-user,
 with per-project roles.
 Runs on your own machine against your own PostgreSQL — no per-seat billing.
 
-[![The board — click to watch the demo video](public/screenshots/board.png)](https://risen-dev.github.io/digital-board/screenshots/demo.webm)
+[![The board — click to watch the demo video](apps/web/public/screenshots/board.png)](https://risen-dev.github.io/digital-board/screenshots/demo.webm)
 
 ▶ **[Watch the 2-minute demo](https://risen-dev.github.io/digital-board/screenshots/demo.webm)**: board, views, GitHub, search, the AI agents, canvas and chat.
 
 <table>
   <tr>
-    <td width="50%"><img src="public/screenshots/canvas.png" alt="Canvas"><br><sub><b>Canvas</b> — Excalidraw sheets per project</sub></td>
-    <td width="50%"><img src="public/screenshots/analytics.png" alt="Analytics"><br><sub><b>Analytics</b> — column, priority, workload, 14-day activity</sub></td>
+    <td width="50%"><img src="apps/web/public/screenshots/canvas.png" alt="Canvas"><br><sub><b>Canvas</b> — Excalidraw sheets per project</sub></td>
+    <td width="50%"><img src="apps/web/public/screenshots/analytics.png" alt="Analytics"><br><sub><b>Analytics</b> — column, priority, workload, 14-day activity</sub></td>
   </tr>
   <tr>
-    <td><img src="public/screenshots/github.png" alt="GitHub view"><br><sub><b>GitHub</b> — the repo's PRs, issues, commits and branches</sub></td>
-    <td><img src="public/screenshots/task.png" alt="Task linked to GitHub"><br><sub><b>Task</b> — properties on the left; comments, an @agent answer and the @ picker on the right</sub></td>
+    <td><img src="apps/web/public/screenshots/github.png" alt="GitHub view"><br><sub><b>GitHub</b> — the repo's PRs, issues, commits and branches</sub></td>
+    <td><img src="apps/web/public/screenshots/task.png" alt="Task linked to GitHub"><br><sub><b>Task</b> — properties on the left; comments, an @agent answer and the @ picker on the right</sub></td>
   </tr>
   <tr>
-    <td><img src="public/screenshots/chat.png" alt="Chat"><br><sub><b>Chat</b> — workspace channel and direct messages</sub></td>
-    <td><img src="public/screenshots/settings.png" alt="Settings"><br><sub><b>Settings</b> — members, projects, GitHub, AI agent, account</sub></td>
+    <td><img src="apps/web/public/screenshots/chat.png" alt="Chat"><br><sub><b>Chat</b> — workspace channel and direct messages</sub></td>
+    <td><img src="apps/web/public/screenshots/settings.png" alt="Settings"><br><sub><b>Settings</b> — members, projects, GitHub, AI agent, account</sub></td>
   </tr>
 </table>
 
@@ -44,7 +44,7 @@ git clone https://github.com/Risen-Dev/digital-board.git
 cd digital-board
 npm install
 
-cp .env.example .env      # set DATABASE_URL
+cp apps/web/.env.example apps/web/.env      # set DATABASE_URL
 npm run build
 npm start
 ```
@@ -61,7 +61,7 @@ Or with Docker — app plus Postgres, nothing else to install:
 docker compose up -d      # edit the passwords in docker-compose.yml first
 ```
 
-![Create a workspace, with the template picker](public/screenshots/setup.png)
+![Create a workspace, with the template picker](apps/web/public/screenshots/setup.png)
  Tables create themselves on first use; there is no migration
 command.
 
@@ -273,18 +273,18 @@ one IP, 20 from one IP, or 100 for one email from anywhere. The IP is the **last
 The app serves its own documentation at **`/docs`** — installation,
 configuration, deployment with pm2 or systemd, the data model, architecture,
 backups, upgrading and troubleshooting. Run it and open
-<http://localhost:3000/docs>, or read [`app/docs/page.tsx`](app/docs/page.tsx).
+<http://localhost:3000/docs>, or read [`app/docs/page.tsx`](apps/web/app/docs/page.tsx).
 
 ## Database
 
 PostgreSQL via `pg`, plain SQL, no ORM. The schema is
-[`lib/schema.sql`](lib/schema.sql), applied idempotently on the first query;
+[`lib/schema.sql`](apps/web/lib/schema.sql), applied idempotently on the first query;
 columns added later sit at the bottom of that file as
 `ALTER TABLE … ADD COLUMN IF NOT EXISTS`.
 
-[`lib/db.ts`](lib/db.ts) is the only file that knows about the driver. Every read
-lives in [`lib/queries.ts`](lib/queries.ts) and every write in
-[`lib/actions.ts`](lib/actions.ts). The routes under `app/api/integrations/`
+[`lib/db.ts`](apps/web/lib/db.ts) is the only file that knows about the driver. Every read
+lives in [`lib/queries.ts`](apps/web/lib/queries.ts) and every write in
+[`lib/actions.ts`](apps/web/lib/actions.ts). The routes under `app/api/integrations/`
 (GitHub webhook, inbound webhook, iCal feed) run without a session and check a
 per-project secret instead.
 
@@ -314,20 +314,25 @@ New columns apply themselves on the next query. Back up first anyway.
 For pre-database attachments, migrate once before deleting the old uploads directory:
 
 ```bash
-DATABASE_URL=... node scripts/files-to-postgres.mjs /path/to/uploads
+cd apps/web && DATABASE_URL=... node scripts/files-to-postgres.mjs /path/to/uploads
 ```
 
 ## Development
 
+Turborepo monorepo (npm workspaces): the Next.js app is `apps/web`, the static
+landing page is `apps/site`. Root scripts run through `turbo`.
+
+
 ```bash
-npm run dev
+npm run dev          # turbo, all apps
 npm run lint
-npx tsc --noEmit
+npm run typecheck
 ```
 
-Runnable checks, no test framework:
+Runnable checks, no test framework (from `apps/web`):
 
 ```bash
+cd apps/web
 node --experimental-strip-types lib/board.check.ts   # board helpers
 node --experimental-strip-types lib/chat.check.ts    # chat poll merge
 node --experimental-strip-types lib/secret.check.ts  # API key encryption
@@ -354,7 +359,7 @@ Full list in the [docs](/docs).
 ## Contributing
 
 Issues and pull requests are welcome. Before opening a PR, run `npm run lint`,
-`npx tsc --noEmit` and the checks above, and keep SQL in `lib/queries.ts` /
+`npm run typecheck` and the checks above, and keep SQL in `lib/queries.ts` /
 `lib/actions.ts` rather than in components.
 
 ## License

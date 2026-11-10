@@ -25,14 +25,21 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run lint
-      - run: npx next typegen && npx tsc --noEmit
-      - run: node --experimental-strip-types lib/board.check.ts
-      - run: node --experimental-strip-types lib/chat.check.ts
-      - run: node --experimental-strip-types lib/secret.check.ts
-      - run: node --experimental-strip-types lib/safe-url.check.ts
-      - run: node --experimental-strip-types lib/automations.check.ts
-      - run: node --experimental-strip-types lib/canvas/merge.check.ts
-      - run: node --experimental-strip-types lib/i18n/i18n.check.ts
-      - run: node lib/postgres.check.mjs
-      - run: npm run build
+      - run: npx turbo run lint typecheck
+      - working-directory: apps/web
+        run: node --experimental-strip-types lib/board.check.ts
+      - working-directory: apps/web
+        run: node --experimental-strip-types lib/chat.check.ts
+      - working-directory: apps/web
+        run: node --experimental-strip-types lib/secret.check.ts
+      - working-directory: apps/web
+        run: node --experimental-strip-types lib/safe-url.check.ts
+      - working-directory: apps/web
+        run: node --experimental-strip-types lib/automations.check.ts
+      - working-directory: apps/web
+        run: node --experimental-strip-types lib/canvas/merge.check.ts
+      - working-directory: apps/web
+        run: node --experimental-strip-types lib/i18n/i18n.check.ts
+      - working-directory: apps/web
+        run: node lib/postgres.check.mjs
+      - run: npx turbo run build

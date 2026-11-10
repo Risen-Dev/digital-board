@@ -3,9 +3,11 @@
 FROM node:22-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
+COPY apps/web/package.json apps/web/
+COPY apps/site/package.json apps/site/
 RUN npm ci
 COPY . .
-RUN npm run build && npm prune --omit=dev
+RUN npx turbo run build --filter=web && npm prune --omit=dev
 
 FROM node:22-alpine
 WORKDIR /app
@@ -13,4 +15,4 @@ ENV NODE_ENV=production
 COPY --from=build --chown=node:node /app ./
 USER node
 EXPOSE 3000
-CMD ["npm", "start"]
+CMD ["npm", "start", "-w", "web"]

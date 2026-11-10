@@ -1,10 +1,10 @@
-# Publishes site/ (plus the README screenshots) to GitHub Pages.
+# Publishes apps/site/ (plus the README screenshots) to GitHub Pages.
 name: Pages
 
 on:
   push:
     branches: [main]
-    paths: [site/**, public/screenshots/**, .github/workflows/pages.yml]
+    paths: [apps/site/**, apps/web/public/screenshots/**, .github/workflows/pages.yml]
   workflow_dispatch:
 
 permissions:
@@ -24,9 +24,9 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
-      - run: cp -r public/screenshots site/screenshots
+      - run: cp -r apps/web/public/screenshots apps/site/screenshots
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: site
+          path: apps/site
       - id: deployment
         uses: actions/deploy-pages@v4
