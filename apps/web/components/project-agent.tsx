@@ -153,7 +153,7 @@ export function ProjectAgent({ projectId, enabled, open, tags, onTag, onClose }:
           </div>
         ))}
         {busy && <p className="text-xs text-muted-foreground">{status ?? tr("Thinking…")}</p>}
-        {error && <p className="rounded-md bg-[rgba(239,68,68,0.08)] px-3 py-2 text-xs text-[var(--chart-7)]">{tr(error)}</p>}
+        {error && <p className="rounded-md bg-destructive/10 px-3 py-2 text-xs text-[var(--chart-7)]">{tr(error)}</p>}
         <div ref={end} />
       </div>
 

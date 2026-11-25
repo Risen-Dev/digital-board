@@ -68,7 +68,7 @@ export function SprintsDialog({ projectId, sprints, today, readOnly, onClose }: 
             <button
               aria-label={tr("Delete")}
               onClick={() => confirm(tr("Delete sprint \"{name}\"? Its cards go back to the backlog.", { name: s.name })) && void run(deleteSprint(s.id))}
-              className="rounded p-1 text-muted-foreground transition-colors hover:text-[#ef4444]"
+              className="rounded p-1 text-muted-foreground transition-colors hover:text-destructive"
             >
               <Trash2 className="size-3.5" />
             </button>
@@ -121,7 +121,7 @@ export function SprintsDialog({ projectId, sprints, today, readOnly, onClose }: 
           <button className="rounded-md bg-primary px-3 py-1.5 font-medium text-primary-foreground">{tr("Create sprint")}</button>
         </form>
       )}
-      {error && <p className="mt-2 text-xs text-[#ef4444]">{tr(error)}</p>}
+      {error && <p className="mt-2 text-xs text-destructive">{tr(error)}</p>}
       {closed.length > 0 && (
         <>
           <p className="mt-4 text-[11px] font-semibold text-muted-foreground">{tr("Completed sprints")}</p>

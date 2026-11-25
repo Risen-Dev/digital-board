@@ -56,7 +56,7 @@ export function TimelineView({ columns, doneColumnId, today, onOpen }: {
                 {(i === 0 || date.getUTCDate() === 1) && (
                   <span className="absolute left-1 top-1 whitespace-nowrap font-semibold text-foreground">{MONTHS[date.getUTCMonth()]} {date.getUTCFullYear()}</span>
                 )}
-                <span className={`absolute inset-x-0 bottom-1.5 ${d === today ? "font-bold text-[#ef4444]" : ""}`}>{date.getUTCDate()}</span>
+                <span className={`absolute inset-x-0 bottom-1.5 ${d === today ? "font-bold text-destructive" : ""}`}>{date.getUTCDate()}</span>
               </div>
             );
           })}
@@ -68,7 +68,7 @@ export function TimelineView({ columns, doneColumnId, today, onOpen }: {
             <div key={d} className={`shrink-0 border-r border-border/40 ${new Date(`${d}T00:00:00Z`).getUTCDay() % 6 === 0 ? "bg-secondary/40" : ""}`} style={{ width: DAY }} />
           ))}
         </div>
-        <div className="pointer-events-none absolute bottom-0 z-10 w-px bg-[#ef4444]" style={{ top: HEAD, left: LEFT + x(tl.today) + DAY / 2 }} title={tr("Today")} />
+        <div className="pointer-events-none absolute bottom-0 z-10 w-px bg-destructive" style={{ top: HEAD, left: LEFT + x(tl.today) + DAY / 2 }} title={tr("Today")} />
 
         {/* Rows */}
         {tl.rows.map(({ task, start, end }) => {
@@ -99,7 +99,7 @@ export function TimelineView({ columns, doneColumnId, today, onOpen }: {
         <svg className="pointer-events-none absolute z-10 overflow-visible" style={{ top: HEAD, left: LEFT }} width={tl.days * DAY} height={tl.rows.length * ROW} aria-hidden>
           <defs>
             <marker id="tl-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="var(--muted-foreground)" /></marker>
-            <marker id="tl-arrow-late" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="#ef4444" /></marker>
+            <marker id="tl-arrow-late" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="var(--destructive)" /></marker>
           </defs>
           {arrows.map((a) => {
             const bend = Math.max(a.x1 + 6, Math.min(a.x2 - 6, a.x1 + 12));
@@ -108,7 +108,7 @@ export function TimelineView({ columns, doneColumnId, today, onOpen }: {
                 key={a.key}
                 d={`M${a.x1} ${a.y1} H${bend} V${a.y2} H${a.x2}`}
                 fill="none"
-                stroke={a.late ? "#ef4444" : "var(--muted-foreground)"}
+                stroke={a.late ? "var(--destructive)" : "var(--muted-foreground)"}
                 strokeWidth={1.5}
                 markerEnd={`url(#${a.late ? "tl-arrow-late" : "tl-arrow"})`}
               >

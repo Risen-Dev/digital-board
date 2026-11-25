@@ -161,7 +161,7 @@ function MeetingDialog({ meeting, members, meId, onClose }: { meeting: Meeting |
         <div className="flex items-center gap-2">
           <SubmitButton>{meeting ? tr("Save") : tr("Create meeting")}</SubmitButton>
           {meeting && (
-            <button type="button" onClick={() => void remove()} className="ml-auto flex items-center gap-1.5 rounded-md border px-3 py-2 text-xs text-[#ef4444] hover:bg-[rgba(239,68,68,0.08)]">
+            <button type="button" onClick={() => void remove()} className="ml-auto flex items-center gap-1.5 rounded-md border px-3 py-2 text-xs text-destructive hover:bg-destructive/10">
               <Trash2 className="size-3.5" /> {tr("Delete")}
             </button>
           )}

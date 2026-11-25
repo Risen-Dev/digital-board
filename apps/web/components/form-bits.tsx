@@ -42,7 +42,7 @@ export function FormError({ error }: { error?: string }) {
   const tr = useT();
   if (!error) return null;
   return (
-    <p role="alert" className="rounded-md bg-[rgba(239,68,68,0.08)] px-3 py-2 text-xs text-[#ef4444]">
+    <p role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">
       {tr(error)}
     </p>
   );

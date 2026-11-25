@@ -2,7 +2,7 @@
 
 import { startTransition, useActionState, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlignLeft, Archive, CalendarDays, Check, CircleDot, Clock, Flag, Hash, List as ListIcon, Plus, Settings2, Type, GitBranch, GitPullRequest, History, Image as ImageIcon, ImagePlus, ListChecks, ListTree, Ban, Pause, Play, Repeat, Sparkles, Tag, Trash2, Users, X, type LucideIcon } from "lucide-react";
+import { AlignLeft, Archive, CalendarDays, Check, CircleDot, Clock, Flag, Hash, IterationCw, List as ListIcon, Plus, Settings2, Type, GitBranch, GitPullRequest, History, Image as ImageIcon, ImagePlus, ListChecks, ListTree, Ban, Pause, Play, Repeat, Sparkles, Tag, Trash2, Users, X, type LucideIcon } from "lucide-react";
 import { addComment, addField, addSubtask, archiveTask, askCardAgent, createGithubIssue, createTask, deleteField, deleteTask, fetchHistory, fetchTime, logTime, setBlocker, setChecklist, startTimer, stopTimer, updateTask } from "@/lib/actions";
 import { branchNameOf, FIELD_TYPES, formatDuration, initials, pullRequestUrlOf, PRIORITIES, PRIORITY_CFG, REPEATS, type CheckItem, type Column, type CustomField, type Entry, type Sprint, type FieldType, type Member, type Task, type TaskImage } from "@/lib/board";
 import { Avatar } from "./avatar";
@@ -14,6 +14,7 @@ import { MentionText, TagLinks, tagOptions, useMentionPicker } from "./mentions"
 import type { CanvasTag } from "@/lib/queries";
 import { useT } from "@/components/i18n";
 import { eventText } from "@/lib/i18n";
+import { useDialog } from "@/hooks/use-dialog";
 
 type Props = {
   task: Task | null;
@@ -48,6 +49,13 @@ type Props = {
 
 export function TaskDialog({ task, columns, members, mentionable, defaultColumnId, links, repo, tags, onTag, doneColumnId, fields, manageFields, sprints, defaultSprintId, onOpenTask, onClose, onDeleted }: Props) {
   const tr = useT();
+  // Typed but unsaved edits: Escape, the backdrop and X ask before throwing them away.
+  const [dirty, setDirty] = useState(false);
+  const requestClose = () => {
+    if (dirty && !confirm(tr("Discard your unsaved changes?"))) return;
+    onClose();
+  };
+  const dialog = useDialog(requestClose);
   const editing = task !== null;
   const [state, action, saving] = useActionState(editing ? updateTask : createTask, null);
   const [history, setHistory] = useState<Entry[]>([]);
@@ -72,10 +80,12 @@ export function TaskDialog({ task, columns, members, mentionable, defaultColumnI
   }, [history]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 animate-in fade-in duration-150 sm:p-6" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 animate-in fade-in duration-150 sm:p-6" onClick={requestClose}>
       <div
+        {...dialog}
+        aria-label={task ? task.title : tr("New task")}
         onClick={(e) => e.stopPropagation()}
-        className={`flex max-h-[90vh] w-full flex-col overflow-hidden rounded-xl border bg-card shadow-lg animate-in fade-in zoom-in-95 slide-in-from-top-2 duration-200 sm:mt-6 ${editing ? "max-w-5xl md:h-[90vh]" : "max-w-2xl"}`}
+        className={`flex max-h-[90vh] w-full flex-col overflow-hidden rounded-xl border bg-card shadow-lg outline-none animate-in fade-in zoom-in-95 slide-in-from-top-2 duration-200 sm:mt-6 ${editing ? "max-w-5xl md:h-[90vh]" : "max-w-2xl"}`}
       >
         <div className="flex shrink-0 items-center gap-2 border-b px-5 py-2.5 text-xs text-muted-foreground">
           {column && (
@@ -86,7 +96,7 @@ export function TaskDialog({ task, columns, members, mentionable, defaultColumnI
           )}
           {task?.key && <span className="font-mono">{column ? "/ " : ""}{task.key}</span>}
           {!editing && <span className="font-medium text-foreground">{tr("New task")}</span>}
-          {task?.key && (
+          {task?.key && repo && (
             <button
               type="button"
               onClick={() => {
@@ -103,9 +113,9 @@ export function TaskDialog({ task, columns, members, mentionable, defaultColumnI
             </button>
           )}
           <button
-            onClick={onClose}
+            onClick={requestClose}
             aria-label={tr("Close")}
-            className={`${task?.key ? "" : "ml-auto "}rounded p-1 transition-colors hover:bg-secondary hover:text-foreground`}
+            className={`${task?.key && repo ? "" : "ml-auto "}rounded p-1 transition-colors hover:bg-secondary hover:text-foreground`}
           >
             <X className="size-4" />
           </button>
@@ -116,6 +126,7 @@ export function TaskDialog({ task, columns, members, mentionable, defaultColumnI
             {/* Submitted from onSubmit, not `action`: React resets a form after its action runs,
                 which wiped everything typed whenever the server answered with an error. */}
             <form
+              onInput={() => setDirty(true)}
               onSubmit={(e) => {
                 e.preventDefault();
                 const data = new FormData(e.currentTarget);
@@ -159,18 +170,19 @@ export function TaskDialog({ task, columns, members, mentionable, defaultColumnI
                 <Prop icon={CalendarDays} label={tr("Due date")}>
                   <input type="date" name="dueDate" defaultValue={task?.dueDate ?? ""} className={bare} />
                 </Prop>
-                <Prop icon={Flag} label={tr("Sprint")}>
+                {/* Only once the project runs sprints: most teams never do. */}
+                {(sprints.length > 0 || task?.sprintId) && <Prop icon={IterationCw} label={tr("Sprint")}>
                   <select name="sprintId" defaultValue={task ? task.sprintId ?? "" : defaultSprintId ?? ""} className={bare}>
                     <option value="">{tr("No sprint")}</option>
                     {/* Open sprints, plus the closed one a card may still sit in. */}
                     {sprints.filter((s) => !s.closed || s.id === task?.sprintId).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>
-                </Prop>
+                </Prop>}
                 <Prop icon={Repeat} label={tr("Repeat")} title={tr("Repeating cards get their next copy when moved to the done column.")}>
                   <select name="repeat" defaultValue={task?.repeat ?? ""} className={bare}>
                     <option value="">{tr("Never")}</option>
                     {REPEATS.map((r) => (
-                      <option key={r} value={r}>{r[0].toUpperCase() + r.slice(1)}</option>
+                      <option key={r} value={r}>{tr(r[0].toUpperCase() + r.slice(1))}</option>
                     ))}
                   </select>
                 </Prop>
@@ -231,7 +243,8 @@ export function TaskDialog({ task, columns, members, mentionable, defaultColumnI
 
               <FormError error={state?.error} />
 
-              <div className="flex items-center gap-2">
+              {/* Pinned to the foot of the pane: the sections below save on their own, these fields only on Save. */}
+              <div className="sticky bottom-0 z-10 -mx-5 -mb-6 flex items-center gap-2 border-t bg-card px-5 py-3 md:-mx-8 md:px-8">
                 <SubmitButton pending={saving}>{editing ? tr("Save") : tr("Create task")}</SubmitButton>
                 {editing && (
                   <button
@@ -255,7 +268,7 @@ export function TaskDialog({ task, columns, members, mentionable, defaultColumnI
                       onClose();
                       if (r?.undo) onDeleted(r.undo, task.title);
                     }}
-                    className="flex items-center gap-1.5 rounded-md border px-3 py-2 text-xs text-[#ef4444] transition-colors hover:bg-[rgba(239,68,68,0.08)]"
+                    className="flex items-center gap-1.5 rounded-md border px-3 py-2 text-xs text-destructive transition-colors hover:bg-destructive/10"
                   >
                     <Trash2 className="size-3.5" />
                     {tr("Delete")}
@@ -462,7 +475,7 @@ function Images({ task }: { task: Task }) {
           }}
         />
       </label>
-      {error && <p className="mt-1.5 text-[11px] text-[#ef4444]">{tr(error)}</p>}
+      {error && <p className="mt-1.5 text-[11px] text-destructive">{tr(error)}</p>}
     </div>
   );
 }
@@ -734,7 +747,7 @@ function Subtasks({ task, columns, doneColumnId, onOpen, onChange }: {
         placeholder={tr("Add a subtask… press Enter")}
         className="w-full rounded-md border bg-background px-2.5 py-1.5 text-xs outline-none transition-colors focus:border-ring"
       />
-      {error && <p className="mt-1 text-[11px] text-[#ef4444]">{tr(error)}</p>}
+      {error && <p className="mt-1 text-[11px] text-destructive">{tr(error)}</p>}
     </div>
   );
 }
@@ -826,7 +839,7 @@ function Dependencies({ task, columns, doneColumnId, onOpen, onChange }: {
           ))}
         </ul>
       )}
-      {error && <p className="mt-1 text-[11px] text-[#ef4444]">{tr(error)}</p>}
+      {error && <p className="mt-1 text-[11px] text-destructive">{tr(error)}</p>}
     </div>
   );
 }
@@ -946,7 +959,7 @@ function CommentBox({ taskId, members, tags, onPosted }: { taskId: string; membe
           {tr("Comment")}
         </button>
         <span className="text-[11px] text-muted-foreground">{thinking ? tr("AI agent is thinking…") : tr("Ctrl/⌘ + Enter")}</span>
-        {error && <span className="text-[11px] text-[#ef4444]">{tr(error)}</span>}
+        {error && <span className="text-[11px] text-destructive">{tr(error)}</span>}
       </div>
     </div>
   );
@@ -1002,7 +1015,7 @@ function GithubActions({ taskId, repo, task, closes, onDone }: { taskId: string;
           <GitPullRequest className="size-3" /> {tr("Open pull request")}
         </a>
       </div>
-      {error && <p className="mt-1.5 text-[11px] text-[#ef4444]">{tr(error)}</p>}
+      {error && <p className="mt-1.5 text-[11px] text-destructive">{tr(error)}</p>}
     </>
   );
 }

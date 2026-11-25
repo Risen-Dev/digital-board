@@ -246,7 +246,7 @@ npm run build
 pm2 start ecosystem.config.js
 pm2 save          # remember the process list
 pm2 startup       # print the command that re-runs pm2 at boot, then run it`}</Code>
-          <p className="rounded-lg border border-[var(--chart-7)] bg-[rgba(239,68,68,0.06)] p-4 text-sm">
+          <p className="rounded-lg border border-[var(--chart-7)] bg-destructive/10 p-4 text-sm">
             <strong className="text-foreground">Raising <C>instances</C> is allowed.</strong> Postgres holds all
             application state. Raise <C>DATABASE_POOL_MAX</C> with care — each instance opens its own pool, so total
             connections is instances × pool size, plus one listening connection per instance: live canvas

@@ -209,7 +209,7 @@ export function Workspace({
   const readOnly = !!project && user.is_admin !== 1 && assignments.find((item) => item.user_id === user.id && item.project_id === project.id)?.role === "viewer";
   // Project admins (and workspace admins) define custom fields.
   const manages = !!project && (user.is_admin === 1 || assignments.some((a) => a.user_id === user.id && a.project_id === project.id && a.role === "admin"));
-  const activeFilters = [filters.assignee, filters.priority, filters.label].filter(Boolean).length;
+  const activeFilters = [filters.q?.trim(), filters.assignee, filters.priority, filters.label, filters.sprint].filter(Boolean).length;
   const shown = filtered.reduce((s, c) => s + c.tasks.length, 0);
   const total = columns.reduce((s, c) => s + c.tasks.length, 0);
   const labels = [...new Set(columns.flatMap((c) => c.tasks.flatMap((t) => labelsOf(t.label))))];
@@ -494,6 +494,9 @@ export function Workspace({
                 if (key === "chat") setChatChannel("all");
                 setDrawer(false);
               }}
+              aria-current={section === key ? "page" : undefined}
+              aria-label={slim ? tr(label) : undefined}
+              title={slim ? tr(label) : undefined}
               className={`flex items-center gap-2.5 rounded-md px-2 py-1.5 text-sm transition-all ${
                 section === key ? "bg-secondary font-medium text-foreground" : "text-muted-foreground"
               }`}
@@ -555,9 +558,9 @@ export function Workspace({
                   <p className="truncate text-xs font-medium">{user.name}</p>
                   <p className="truncate text-[10px] text-muted-foreground">{user.email}</p>
                 </div>
-                <span className="md:hidden"><ThemeToggle /></span>
+                <ThemeToggle />
                 <form action={async () => { await dropPush(); await logoutAction(); }}>
-                  <button title={tr("Sign out")} className="rounded p-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
+                  <button title={tr("Sign out")} aria-label={tr("Sign out")} className="rounded p-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
                     <LogOut className="size-3.5" />
                   </button>
                 </form>
@@ -569,11 +572,11 @@ export function Workspace({
 
       {/* Main */}
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 shrink-0 items-center gap-2 border-b px-3 sm:gap-4 sm:px-5">
+        <header className="flex min-h-14 shrink-0 flex-wrap items-center gap-2 border-b px-3 py-2 sm:h-14 sm:flex-nowrap sm:gap-4 sm:px-5 sm:py-0">
           <button
             aria-label={tr("Open menu")}
             onClick={() => setDrawer(true)}
-            className="-ml-1 rounded-md p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground md:hidden"
+            className="-ml-1 rounded-md p-1.5 text-muted-foreground max-sm:p-2 hover:bg-secondary hover:text-foreground md:hidden"
           >
             <Menu className="size-4" />
           </button>
@@ -581,23 +584,37 @@ export function Workspace({
             <EditableTitle
               value={project.name}
               onSave={(name) => renameProject(project.id, name).then((r) => { router.refresh(); return r; })}
-              className="min-w-0 truncate text-sm font-semibold"
+              className="min-w-0 flex-1 basis-0 truncate text-sm font-semibold sm:flex-none sm:basis-auto"
               inputClassName="text-sm font-semibold w-48"
             />
           ) : (
-            <h1 className="min-w-0 truncate text-sm font-semibold">
+            <h1 className="min-w-0 flex-1 basis-0 truncate text-sm font-semibold sm:flex-none sm:basis-auto">
               {onBoard ? tr("Board") : tr(SECTIONS.find((s) => s.key === section)!.label)}
             </h1>
           )}
 
+          {/* Phones: the views drop to a full-width picker on a second row, so the project name and New Task keep their room. */}
           {onBoard && project && (
-            <div className="flex items-center gap-0.5 rounded-md border bg-secondary p-0.5">
+            <select
+              value={view}
+              onChange={(e) => setView(Number(e.target.value))}
+              aria-label={tr("View")}
+              className="order-last basis-full rounded-md border bg-secondary px-2 py-1.5 text-xs sm:hidden"
+            >
+              {(project.repo ? [...VIEWS, GITHUB_VIEW] : VIEWS).map(({ label }, i) => (
+                <option key={label} value={i}>{tr(label)}</option>
+              ))}
+            </select>
+          )}
+          {onBoard && project && (
+            <div className="hidden items-center gap-0.5 rounded-md border bg-secondary p-0.5 sm:flex">
               {(project?.repo ? [...VIEWS, GITHUB_VIEW] : VIEWS).map(({ Icon, label }, i) => (
                 <button
                   key={label}
                   onClick={() => setView(i)}
                   title={tr(label)}
                   aria-label={tr(label)}
+                  aria-pressed={view === i}
                   className={`flex items-center gap-1.5 rounded px-1.5 py-1 text-xs transition-all sm:px-2.5 ${
                     view === i ? "bg-card font-medium text-foreground shadow-sm" : "text-muted-foreground"
                   }`}
@@ -609,23 +626,14 @@ export function Workspace({
             </div>
           )}
 
-          <div className="flex-1" />
+          <div className="hidden flex-1 sm:block" />
 
           <div className="flex shrink-0 items-center gap-1 sm:gap-2">
             {onBoard && project && view !== VIEWS.length && (
               <>
-                <label className="hidden min-w-[180px] items-center gap-1.5 rounded-md border bg-secondary px-2.5 py-1.5 text-xs sm:flex">
-                  <Search className="size-3.5 shrink-0 text-muted-foreground" />
-                  <input
-                    value={filters.q ?? ""}
-                    onChange={(e) => setFilters((f) => ({ ...f, q: e.target.value }))}
-                    placeholder={tr("Search tasks…")}
-                    className="w-full bg-transparent outline-none placeholder:text-muted-foreground"
-                  />
-                </label>
                 <button
                   onClick={() => setShowFilters((s) => !s)}
-                  className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs transition-colors hover:bg-secondary ${
+                  className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs transition-colors max-sm:py-2 hover:bg-secondary ${
                     activeFilters ? "border-primary font-medium" : "text-muted-foreground"
                   }`}
                 >
@@ -637,24 +645,26 @@ export function Workspace({
                 </button>
               </>
             )}
+            {/* The one search: cards, messages, projects and meetings. Narrowing the board by text lives in the filter bar. */}
             <button
               onClick={() => setSearching(true)}
               title={tr("Search (⌘K)")}
               aria-label={tr("Search")}
-              className="flex items-center gap-1.5 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+              className="flex items-center gap-1.5 rounded-md p-1.5 text-xs text-muted-foreground max-sm:p-2 transition-colors hover:bg-secondary hover:text-foreground sm:min-w-[180px] sm:border sm:bg-secondary sm:px-2.5"
             >
-              <Search className="size-4" />
-              <kbd className="hidden rounded border px-1 text-[10px] lg:inline">⌘K</kbd>
+              <Search className="size-4 shrink-0 sm:size-3.5" />
+              <span className="hidden flex-1 text-left sm:inline">{tr("Search…")}</span>
+              <kbd className="hidden rounded border bg-background px-1 text-[10px] lg:inline">⌘K</kbd>
             </button>
-            {/* On phones the toggle lives in the drawer's footer instead. */}
-            <span className="hidden md:contents"><ThemeToggle /></span>
+            {/* The theme lives with the account in the sidebar footer; only a collapsed sidebar has no room for it. */}
+            {slim && <span className="hidden md:contents"><ThemeToggle /></span>}
             <div className="relative">
               <button
                 aria-label={tr("Notifications")}
                 aria-expanded={showNotifications}
                 aria-haspopup="menu"
                 onClick={() => setShowNotifications((open) => !open)}
-                className="relative rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                className="relative rounded-md p-1.5 text-muted-foreground transition-colors max-sm:p-2 hover:bg-secondary hover:text-foreground"
               >
                 <Bell className="size-4" />
                 {(notifications.length > 0 || unread.length > 0 || due.length > 0 || upcoming.length > 0) && <span className="absolute right-1 top-1 size-1.5 rounded-full bg-[var(--chart-7)]" />}
@@ -690,7 +700,7 @@ export function Workspace({
                 onClick={() => setAgentOpen((o) => !o)}
                 title={tr("Project agent")}
                 aria-pressed={agentOpen}
-                className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs transition-colors hover:bg-secondary ${agentOpen ? "border-primary font-medium" : "text-muted-foreground"}`}
+                className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs transition-colors max-sm:py-2 hover:bg-secondary ${agentOpen ? "border-primary font-medium" : "text-muted-foreground"}`}
               >
                 <Sparkles className="size-3.5" />
                 <span className="hidden sm:inline">{tr("Agent")}</span>
@@ -699,7 +709,7 @@ export function Workspace({
             {project && section !== "canvas" && (
               <button
                 onClick={() => setCreating(columns[0]?.id ?? "")}
-                className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90"
+                className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground max-sm:py-2.5 transition-opacity hover:opacity-90"
               >
                 <Plus className="size-3" />
                 <span className="hidden sm:inline">{tr("New Task")}</span>
@@ -711,6 +721,17 @@ export function Workspace({
         {/* Filter bar */}
         {onBoard && showFilters && project && view !== VIEWS.length && (
           <div className="flex shrink-0 flex-wrap items-center gap-2 border-b bg-secondary/50 px-5 py-2.5 text-xs">
+            <label className="flex min-w-[160px] items-center gap-1.5 rounded-md border bg-background px-2 py-1">
+              <Search className="size-3 shrink-0 text-muted-foreground" />
+              <input
+                autoFocus
+                value={filters.q ?? ""}
+                onChange={(e) => setFilters((f) => ({ ...f, q: e.target.value }))}
+                placeholder={tr("Filter tasks…")}
+                aria-label={tr("Filter tasks…")}
+                className="w-full bg-transparent outline-none placeholder:text-muted-foreground"
+              />
+            </label>
             <SavedViews
               projectId={project.id}
               views={views}
@@ -765,14 +786,7 @@ export function Workspace({
                 ))}
               </select>
             )}
-            <button
-              onClick={() => setFilters({ q: filters.q })}
-              className="flex items-center gap-1 rounded-md border px-2 py-1 text-muted-foreground transition-colors hover:bg-secondary"
-            >
-              <X className="size-3" />
-              {tr("Reset")}
-            </button>
-            <select
+            {(sprints.length > 0 || filters.sprint) && <select
               value={filters.sprint ?? ""}
               onChange={(e) => setFilters((f) => ({ ...f, sprint: e.target.value || undefined }))}
               aria-label={tr("Sprint")}
@@ -787,12 +801,25 @@ export function Workspace({
                   {sprints.filter((s) => s.closed).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </optgroup>
               )}
-            </select>
+            </select>}
             {sprint && (
               <span className="text-muted-foreground">
                 {tr("{done}/{total} done", { done: sprint.done, total: sprint.total })} · {sprint.startDate} → {sprint.endDate}
               </span>
             )}
+            {activeFilters > 0 && (
+              <button
+                onClick={() => setFilters({ group: filters.group })}
+                className="flex items-center gap-1 rounded-md px-2 py-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+              >
+                <X className="size-3" />
+                {tr("Clear filters")}
+              </button>
+            )}
+            <span className="ml-auto text-muted-foreground">
+              {tr("{shown} of {total} tasks", { shown, total })}
+            </span>
+            <span className="mx-1 h-4 w-px bg-border" aria-hidden />
             <button
               onClick={() => setShowSprints(true)}
               className="flex items-center gap-1 rounded-md border px-2 py-1 text-muted-foreground transition-colors hover:bg-secondary"
@@ -807,9 +834,6 @@ export function Workspace({
               <Archive className="size-3" />
               {tr("Archived")}
             </button>
-            <span className="ml-auto text-muted-foreground">
-              {tr("{shown} of {total} tasks", { shown, total })}
-            </span>
           </div>
         )}
 

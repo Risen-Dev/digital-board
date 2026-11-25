@@ -156,7 +156,7 @@ export function ColumnEditor({
               onClose();
             }}
             title={tr("Delete column")}
-            className="ml-auto rounded-md border p-1.5 text-muted-foreground transition-colors hover:bg-[rgba(239,68,68,0.08)] hover:text-[var(--chart-7)]"
+            className="ml-auto rounded-md border p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-[var(--chart-7)]"
           >
             <Trash2 className="size-3.5" />
           </button>

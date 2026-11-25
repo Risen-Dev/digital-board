@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   closestCenter, closestCorners, DndContext, DragOverlay, KeyboardSensor, MeasuringStrategy, MouseSensor,
-  pointerWithin, rectIntersection, TouchSensor, useDroppable, useSensor, useSensors,
+  pointerWithin, rectIntersection, TouchSensor, useDroppable, useSensor, useSensors, type UniqueIdentifier,
   type CollisionDetection, type DragEndEvent, type DragOverEvent, type DragStartEvent,
 } from "@dnd-kit/core";
 import { arrayMove, horizontalListSortingStrategy, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
@@ -135,6 +135,29 @@ export function BoardView({
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
+  // Screen-reader text for keyboard drags, by name rather than dnd-kit's raw ids, in the viewer's language.
+  const nameOf = (id: UniqueIdentifier) => {
+    const s = String(id);
+    const col = view.find((c) => c.id === s || COL + c.id === s);
+    return col ? col.title : view.flatMap((c) => c.tasks).find((t) => t.id === s)?.title ?? "";
+  };
+  const placeOf = (over: { id: UniqueIdentifier } | null) => (over ? nameOf(over.id) : "");
+  // Over its own slot means nothing moved yet: say nothing (keeps "Picked up") / plain "dropped".
+  const self = (active: { id: UniqueIdentifier }, over: { id: UniqueIdentifier } | null) => over?.id === active.id;
+  const accessibility = {
+    screenReaderInstructions: {
+      draggable: tr("To move it, press Space, use the arrow keys, then press Space again to drop it or Escape to cancel. On a card, Enter opens it."),
+    },
+    announcements: {
+      onDragStart: ({ active }: { active: { id: UniqueIdentifier } }) => tr("Picked up {name}.", { name: nameOf(active.id) }),
+      onDragOver: ({ active, over }: { active: { id: UniqueIdentifier }; over: { id: UniqueIdentifier } | null }) =>
+        self(active, over) ? undefined : over ? tr("{name} is over {place}.", { name: nameOf(active.id), place: placeOf(over) }) : tr("{name} is not over a drop area.", { name: nameOf(active.id) }),
+      onDragEnd: ({ active, over }: { active: { id: UniqueIdentifier }; over: { id: UniqueIdentifier } | null }) =>
+        over && !self(active, over) ? tr("{name} was dropped on {place}.", { name: nameOf(active.id), place: placeOf(over) }) : tr("{name} was dropped.", { name: nameOf(active.id) }),
+      onDragCancel: ({ active }: { active: { id: UniqueIdentifier } }) => tr("Moving {name} was cancelled.", { name: nameOf(active.id) }),
+    },
+  };
+
   const activeTask = view.flatMap((c) => c.tasks).find((t) => t.id === activeId) ?? null;
   const activeColumn = activeId?.startsWith(COL) ? view.find((c) => COL + c.id === activeId) ?? null : null;
   // The stage timer shown on a card in `col`: none in the done column.
@@ -215,6 +238,7 @@ export function BoardView({
         // counter, which differs between the server render and hydration.
         id={lane ? `board-lane-${lane.key}` : "board"}
         sensors={sensors}
+        accessibility={accessibility}
         collisionDetection={collisionDetection}
         // Re-measure on every drag. Without this, droppable rects are captured
         // once at drag start; the optimistic move in onDragOver resizes the
@@ -256,6 +280,7 @@ export function BoardView({
                 <button
                   onClick={() => onAdd(col.id)}
                   title={tr("Add task")}
+                  aria-label={tr("Add task to {name}", { name: col.title })}
                   className="rounded p-0.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
                 >
                   <Plus className="size-3" />

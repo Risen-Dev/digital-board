@@ -448,12 +448,12 @@ function ProjectDetail({ project, memberId, presence, isAdmin, assignments, onBa
       {canRename && <Automations key={`auto-${project.id}`} project={project} people={[...presence.filter((m) => m.is_admin === 1), ...assigned.map((a) => a.member)]} />}
 
       {isAdmin && (
-        <div className="mt-8 flex items-center gap-3 rounded-lg border border-[rgba(239,68,68,0.3)] px-3 py-2.5">
+        <div className="mt-8 flex items-center gap-3 rounded-lg border border-destructive/30 px-3 py-2.5">
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium">{tr("Delete project")}</p>
             <p className="text-[11px] text-muted-foreground">{tr("Removes its columns, tasks, history and canvas sheets.")}</p>
           </div>
-          <button onClick={() => void remove()} className="flex shrink-0 items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs text-[var(--chart-7)] hover:bg-[rgba(239,68,68,0.08)]">
+          <button onClick={() => void remove()} className="flex shrink-0 items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs text-[var(--chart-7)] hover:bg-destructive/10">
             <Trash2 className="size-3.5" /> {tr("Delete")}
           </button>
         </div>

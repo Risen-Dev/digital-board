@@ -44,7 +44,8 @@ export function TaskCard({ task, links, onOpen, overdue = false, overlay = false
           className="-mx-3 -mt-3 mb-3 block max-h-48 w-[calc(100%+1.5rem)] max-w-none bg-secondary object-cover"
         />
       )}
-      {task.key && (
+      {/* The key leads the card only next to its GitHub badges; otherwise it sits quietly at the foot. */}
+      {task.key && (pull || issue) && (
         <div className="mb-1 flex items-center gap-2 text-[10px] text-muted-foreground">
           <span className="font-mono">{task.key}</span>
           {pull && <PullBadge pull={pull} />}
@@ -100,7 +101,7 @@ export function TaskCard({ task, links, onOpen, overdue = false, overlay = false
               {task.images.length}
             </span>
           )}
-          {task.repeat && <Repeat className="size-3.5" aria-label={`Repeats ${task.repeat}`} />}
+          {task.repeat && <Repeat className="size-3.5" aria-label={tr("Repeats {value}", { value: tr(task.repeat[0].toUpperCase() + task.repeat.slice(1)) })} />}
         </div>
       )}
       {(task.assignees.length > 0 || task.dueDate) && (
@@ -114,10 +115,18 @@ export function TaskCard({ task, links, onOpen, overdue = false, overlay = false
           )}
         </div>
       )}
-      <div className="flex items-center gap-1.5 text-xs">
-        <Flag className="size-3.5" style={{ color: priority.color, fill: priority.color }} />
-        {tr(priority.label)}
-      </div>
+      {/* Medium is the default, so only High and Low earn a line. */}
+      {(task.priority !== "medium" || (task.key && !pull && !issue)) && (
+        <div className="flex items-center gap-1.5 text-xs">
+          {task.priority !== "medium" && (
+            <>
+              <Flag className="size-3.5" style={{ color: priority.color, fill: priority.color }} />
+              {tr(priority.label)}
+            </>
+          )}
+          {task.key && !pull && !issue && <span className="ml-auto font-mono text-[10px] text-muted-foreground">{task.key}</span>}
+        </div>
+      )}
       {labels.length > 0 && (
         <div className="mt-2 flex items-center gap-1.5">
           <Tag className="size-3.5 shrink-0 text-muted-foreground" />
@@ -157,6 +166,15 @@ export function SortableTaskCard({ task, links, overdue, stageLimit, fields, onO
       className={isDragging ? "opacity-40" : undefined}
       {...attributes}
       {...listeners}
+      // Enter opens the card; Space (and the arrows once lifted) stay with dnd-kit's keyboard drag.
+      onKeyDown={(e) => {
+        if (e.key === "Enter" && !isDragging && e.target === e.currentTarget) {
+          e.preventDefault();
+          onOpen();
+          return;
+        }
+        listeners?.onKeyDown?.(e);
+      }}
     >
       <TaskCard task={task} links={links} overdue={overdue} stageLimit={stageLimit} fields={fields} onOpen={onOpen} />
     </div>
@@ -174,7 +192,7 @@ export function Assignees({ task }: { task: Task }) {
         </span>
       ))}
       {task.assignees.length > 3 && (
-        <span className="flex size-[22px] items-center justify-center rounded-full bg-secondary text-[9px] font-medium ring-2 ring-card">
+        <span className="flex size-[22px] items-center justify-center rounded-full bg-secondary text-[10px] font-medium ring-2 ring-card">
           +{task.assignees.length - 3}
         </span>
       )}

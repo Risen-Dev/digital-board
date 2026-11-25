@@ -102,7 +102,7 @@ export function GithubView({ projectId, repo }: { projectId: string; repo: strin
         {!current ? (
           <p className="py-10 text-center text-xs text-muted-foreground">{tr("Loading from GitHub…")}</p>
         ) : "error" in current ? (
-          <p role="alert" className="rounded-md bg-[rgba(239,68,68,0.08)] px-3 py-2 text-xs text-[#ef4444]">{current.error}</p>
+          <p role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">{current.error}</p>
         ) : current.items.length === 0 ? (
           <p className="rounded-lg border border-dashed py-10 text-center text-xs text-muted-foreground">{tr("Nothing here yet.")}</p>
         ) : (

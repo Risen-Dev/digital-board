@@ -675,6 +675,22 @@ const id: Record<string, string> = {
   "Automation: priority set to {value}": "Otomatisasi: prioritas diatur ke {value}",
   "Automation: label {value} added": "Otomatisasi: label {value} ditambahkan",
   "Automation: due date set to {value}": "Otomatisasi: tenggat diatur ke {value}",
+  "To move it, press Space, use the arrow keys, then press Space again to drop it or Escape to cancel. On a card, Enter opens it.": "Untuk memindahkan, tekan Spasi, gunakan tombol panah, lalu tekan Spasi lagi untuk meletakkan atau Escape untuk membatalkan. Pada kartu, Enter membukanya.",
+  "Picked up {name}.": "{name} diambil.",
+  "{name} is over {place}.": "{name} berada di atas {place}.",
+  "{name} is not over a drop area.": "{name} tidak berada di atas area tujuan.",
+  "{name} was dropped on {place}.": "{name} diletakkan di {place}.",
+  "{name} was dropped.": "{name} diletakkan.",
+  "Moving {name} was cancelled.": "Pemindahan {name} dibatalkan.",
+  "Add task to {name}": "Tambah tugas ke {name}",
+  "Daily": "Harian",
+  "Weekly": "Mingguan",
+  "Monthly": "Bulanan",
+  "Discard your unsaved changes?": "Buang perubahan yang belum disimpan?",
+  "Search…": "Cari…",
+  "Filter tasks…": "Saring tugas…",
+  "Clear filters": "Hapus filter",
+  "View": "Tampilan",
 };
 
 export default id;
