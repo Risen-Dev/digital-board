@@ -1,0 +1,138 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-25T00:00:00Z",
+  "title": "Design System: Digital Board",
+  "extensions": {
+    "colorMeta": {
+      "ink": { "role": "neutral", "displayName": "Ink", "canonical": "oklch(0.141 0.005 285.823)", "tonalRamp": ["oklch(0.141 0.005 285.823)", "oklch(0.21 0.006 285.885)", "oklch(0.274 0.006 286.033)", "oklch(0.37 0.013 285.805)", "oklch(0.552 0.016 285.938)", "oklch(0.705 0.015 286.067)", "oklch(0.871 0.006 286.286)", "oklch(0.967 0.001 286.375)"] },
+      "graphite": { "role": "primary", "displayName": "Graphite", "canonical": "oklch(0.21 0.006 285.885)", "tonalRamp": ["oklch(0.141 0.005 285.823)", "oklch(0.21 0.006 285.885)", "oklch(0.274 0.006 286.033)", "oklch(0.37 0.013 285.805)", "oklch(0.552 0.016 285.938)", "oklch(0.705 0.015 286.067)", "oklch(0.871 0.006 286.286)", "oklch(0.967 0.001 286.375)"] },
+      "paper": { "role": "neutral", "displayName": "Paper", "canonical": "oklch(1 0 0)" },
+      "paper-on-dark": { "role": "neutral", "displayName": "Paper on Dark", "canonical": "oklch(0.985 0 0)" },
+      "ash": { "role": "neutral", "displayName": "Ash", "canonical": "oklch(0.967 0.001 286.375)" },
+      "pencil": { "role": "neutral", "displayName": "Pencil", "canonical": "oklch(0.552 0.016 285.938)" },
+      "rule": { "role": "neutral", "displayName": "Rule", "canonical": "oklch(0.92 0.004 286.32)" },
+      "focus-grey": { "role": "neutral", "displayName": "Focus Grey", "canonical": "oklch(0.705 0.015 286.067)" },
+      "signal-red": { "role": "status", "displayName": "Signal Red", "canonical": "oklch(0.577 0.245 27.325)", "tonalRamp": ["oklch(0.258 0.092 26.042)", "oklch(0.396 0.141 25.723)", "oklch(0.505 0.213 27.518)", "oklch(0.577 0.245 27.325)", "oklch(0.637 0.237 25.331)", "oklch(0.704 0.191 22.216)", "oklch(0.808 0.114 19.571)", "oklch(0.936 0.032 17.717)"] },
+      "entity-indigo": { "role": "entity", "displayName": "Entity Indigo (--chart-1)", "canonical": "var(--chart-1)" },
+      "entity-green": { "role": "entity", "displayName": "Entity Green (--chart-2)", "canonical": "var(--chart-2)" },
+      "entity-amber": { "role": "entity", "displayName": "Entity Amber (--chart-3)", "canonical": "var(--chart-3)" },
+      "entity-pink": { "role": "entity", "displayName": "Entity Pink (--chart-4)", "canonical": "var(--chart-4)" },
+      "entity-cyan": { "role": "entity", "displayName": "Entity Cyan (--chart-5)", "canonical": "var(--chart-5)" },
+      "entity-violet": { "role": "entity", "displayName": "Entity Violet (--chart-6)", "canonical": "var(--chart-6)" },
+      "entity-red": { "role": "entity", "displayName": "Entity Red (--chart-7)", "canonical": "var(--chart-7)" },
+      "priority-low": { "role": "status", "displayName": "Low Priority Grey", "canonical": "#6b7280" }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Landing and first-run section headings only." },
+      "headline": { "displayName": "Headline", "purpose": "Task title in the task dialog; analytics stat values." },
+      "title": { "displayName": "Title", "purpose": "Dialog titles, workspace and project names, panel headers." },
+      "body": { "displayName": "Body", "purpose": "Card titles, inputs, messages." },
+      "body-small": { "displayName": "Body Small", "purpose": "Lists, menus, field labels; the workhorse size." },
+      "meta": { "displayName": "Meta", "purpose": "Card metadata, hints, timestamps, counts." },
+      "label": { "displayName": "Label", "purpose": "Uppercase section headers in menus and the sidebar." },
+      "mono": { "displayName": "Mono", "purpose": "Card keys like WEB-42, code." }
+    },
+    "shadows": [
+      { "name": "card-rest", "value": "0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1)", "purpose": "Task cards at rest." },
+      { "name": "card-lift", "value": "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)", "purpose": "Card under hover, with a 1px rise." },
+      { "name": "floating", "value": "0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)", "purpose": "Dragged card, dialogs, popovers, dropdowns." }
+    ],
+    "motion": [
+      { "name": "press", "value": "scale 120ms ease-out", "purpose": "Every enabled button scales to 0.97 on :active." },
+      { "name": "dialog-in", "value": "200ms fade + zoom from 0.95 + slide from top", "purpose": "Modal entrance; scrim fades in over 150ms." },
+      { "name": "theme-wipe", "value": "420ms cubic-bezier(0.4, 0, 0.2, 1)", "purpose": "Light/dark switch: circle grows from the toggle (View Transitions)." },
+      { "name": "theme-scroll", "value": "900ms cubic-bezier(0.65, 0, 0.35, 1)", "purpose": "Shanshui arrives from the right edge, like a handscroll." },
+      { "name": "theme-tide", "value": "700ms cubic-bezier(0.65, 0, 0.35, 1)", "purpose": "Kanagawa rises from the bottom edge." }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px", "purpose": "Below this the sidebar becomes a drawer and the header goes icon-only." }
+    ],
+    "themes": [
+      { "name": "graphite", "summary": "Default. Zinc neutrals, near-black primary, 0.5rem radius." },
+      { "name": "harbor", "summary": "Cobalt on cool slate, 0.375rem radius." },
+      { "name": "iris", "summary": "Soft violet, 0.75rem radius, Plus Jakarta Sans body." },
+      { "name": "shanshui", "summary": "Mineral blue-green on silk, 0.25rem radius, Noto Serif headings, ridge-and-grain backdrop." },
+      { "name": "kanagawa", "summary": "Prussian blue on washi, 0.125rem radius, Shippori Mincho headings, seigaiha backdrop." }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Main form action (Save, Create). Presses to 97%.",
+      "html": "<button class=\"ds-btn-primary\">Create task</button>",
+      "css": ".ds-btn-primary { background: var(--primary, oklch(0.21 0.006 285.885)); color: var(--primary-foreground, oklch(0.985 0 0)); font: 500 14px/1.43 Inter, system-ui, sans-serif; padding: 8px 16px; border: none; border-radius: 0.4rem; cursor: pointer; transition: opacity 150ms, scale 120ms ease-out; } .ds-btn-primary:hover { opacity: 0.9; } .ds-btn-primary:active { scale: 0.97; } .ds-btn-primary:focus-visible { outline: 2px solid color-mix(in oklab, var(--ring, oklch(0.705 0.015 286.067)) 50%, transparent); outline-offset: 2px; } .ds-btn-primary:disabled { opacity: 0.5; cursor: default; }"
+    },
+    {
+      "name": "Toolbar Button",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "Bordered low-contrast button in headers and toolbars.",
+      "html": "<button class=\"ds-btn-outline\"><svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M22 3H2l8 9.46V19l4 2v-8.54L22 3z\"/></svg>Filter</button>",
+      "css": ".ds-btn-outline { display: inline-flex; align-items: center; gap: 4px; background: transparent; color: var(--muted-foreground, oklch(0.552 0.016 285.938)); font: 400 12px/1.33 Inter, system-ui, sans-serif; padding: 4px 8px; border: 1px solid var(--border, oklch(0.92 0.004 286.32)); border-radius: 0.4rem; cursor: pointer; transition: background-color 150ms, scale 120ms ease-out; } .ds-btn-outline:hover { background: var(--secondary, oklch(0.967 0.001 286.375)); } .ds-btn-outline:active { scale: 0.97; } .ds-btn-outline:focus-visible { outline: 2px solid color-mix(in oklab, var(--ring, oklch(0.705 0.015 286.067)) 50%, transparent); outline-offset: 2px; }"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Labelled input with optional hint.",
+      "html": "<label class=\"ds-field\"><span class=\"ds-field-label\">Workspace name</span><input class=\"ds-input\" placeholder=\"Acme\"><span class=\"ds-field-hint\">Shown in the sidebar.</span></label>",
+      "css": ".ds-field { display: flex; flex-direction: column; gap: 6px; font-family: Inter, system-ui, sans-serif; } .ds-field-label { font-size: 12px; font-weight: 500; color: var(--foreground, oklch(0.141 0.005 285.823)); } .ds-field-hint { font-size: 11px; color: var(--muted-foreground, oklch(0.552 0.016 285.938)); } .ds-input { background: var(--background, oklch(1 0 0)); color: var(--foreground, oklch(0.141 0.005 285.823)); font-size: 14px; padding: 8px 12px; border: 1px solid var(--border, oklch(0.92 0.004 286.32)); border-radius: 0.4rem; outline: none; transition: border-color 150ms; } .ds-input:focus { border-color: var(--ring, oklch(0.705 0.015 286.067)); }"
+    },
+    {
+      "name": "Task Card",
+      "kind": "card",
+      "refersTo": "task-card",
+      "description": "The board's signature unit: key, title, icon counts. Lifts on hover.",
+      "html": "<div class=\"ds-card\"><div class=\"ds-card-key\">WEB-42</div><p class=\"ds-card-title\">Set up CI for the backend</p><div class=\"ds-card-meta\"><span class=\"ds-blocked\"><svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"m4.9 4.9 14.2 14.2\"/></svg>Blocked</span><span>2/5</span><span>3d left</span></div></div>",
+      "css": ".ds-card { width: 260px; background: var(--card, oklch(1 0 0)); color: var(--card-foreground, oklch(0.141 0.005 285.823)); border: 1px solid var(--border, oklch(0.92 0.004 286.32)); border-radius: 0.5rem; padding: 12px; box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1); font-family: Inter, system-ui, sans-serif; cursor: grab; transition: all 150ms; } .ds-card:hover { translate: 0 -1px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1); } .ds-card-key { font: 10px ui-monospace, Menlo, monospace; color: var(--muted-foreground, oklch(0.552 0.016 285.938)); margin-bottom: 4px; } .ds-card-title { margin: 0 0 8px; font-size: 14px; font-weight: 500; line-height: 1.375; } .ds-card-meta { display: flex; gap: 10px; font-size: 11px; color: var(--muted-foreground, oklch(0.552 0.016 285.938)); } .ds-blocked { display: inline-flex; align-items: center; gap: 4px; font-weight: 500; color: var(--chart-7, #ef4444); }"
+    },
+    {
+      "name": "Sidebar Nav",
+      "kind": "nav",
+      "refersTo": "nav-item",
+      "description": "Sidebar section label and rows.",
+      "html": "<nav class=\"ds-nav\"><div class=\"ds-nav-label\">Workspace</div><a class=\"ds-nav-item is-active\">Board</a><a class=\"ds-nav-item\">Canvas</a><a class=\"ds-nav-item\">Chat</a></nav>",
+      "css": ".ds-nav { width: 200px; display: flex; flex-direction: column; gap: 2px; font-family: Inter, system-ui, sans-serif; } .ds-nav-label { padding: 6px 8px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted-foreground, oklch(0.552 0.016 285.938)); } .ds-nav-item { padding: 8px; border-radius: 0.4rem; font-size: 14px; color: var(--foreground, oklch(0.141 0.005 285.823)); cursor: pointer; transition: background-color 150ms; } .ds-nav-item:hover { background: var(--secondary, oklch(0.967 0.001 286.375)); } .ds-nav-item.is-active { background: var(--accent, oklch(0.967 0.001 286.375)); font-weight: 500; } .ds-nav-item:focus-visible { outline: 2px solid color-mix(in oklab, var(--ring, oklch(0.705 0.015 286.067)) 50%, transparent); }"
+    },
+    {
+      "name": "Priority Chip",
+      "kind": "chip",
+      "description": "Priority colour on its 8% tint.",
+      "html": "<span class=\"ds-chip ds-chip-high\">High</span> <span class=\"ds-chip ds-chip-med\">Medium</span> <span class=\"ds-chip ds-chip-low\">Low</span>",
+      "css": ".ds-chip { display: inline-block; padding: 2px 6px; border-radius: 0.25rem; font: 500 11px Inter, system-ui, sans-serif; } .ds-chip-high { color: #ef4444; background: rgba(239,68,68,0.08); } .ds-chip-med { color: #f59e0b; background: rgba(245,158,11,0.08); } .ds-chip-low { color: #6b7280; background: rgba(107,114,128,0.08); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Plain Ledger",
+    "overview": "Digital Board looks like a well-kept record book: factual, dense, and honest about what it holds. The chrome is zinc grey on white (or near-black at night) so the colour on screen belongs to the work itself: column swatches, labels, priority flags, avatars, a Blocked chip, a drawing on the canvas. Nothing in the frame competes with the entries.\n\nDensity is deliberate. Most text is 12–14px, metadata sits at 11px, and section labels at 10px uppercase. A card shows its key, title and a row of small icon counts, not a paragraph. Surfaces are flat and bordered; depth appears only where something is physically held (a card under the pointer, a dialog over the page). Small tactile responses — a card lifting 1px, a button pressing to 97% — make it feel handled rather than decorated.\n\nGraphite is the canonical palette. Four themes (Harbor, Iris, Shanshui, Kanagawa) restate the same semantic tokens and may add a backdrop motif behind the page; every screen must survive all five, in light and dark.",
+    "keyCharacteristics": [
+      "Neutral zinc chrome; colour reserved for entities and status.",
+      "Dense, small type with a clear 14 / 12 / 11 / 10px ladder.",
+      "Flat bordered surfaces; shadows only on held or floating things.",
+      "Quiet and tactile: small lifts and presses, no flourish.",
+      "Semantic tokens only, so every palette and mode works unchanged."
+    ],
+    "rules": [
+      { "name": "The Work Carries the Colour Rule", "body": "Chrome (sidebar, header, toolbars, dialogs) is neutral. A hue appears only when it means something: an entity, a priority, a status, or an error.", "section": "colors" },
+      { "name": "The Token-Only Rule", "body": "New UI reads semantic variables (`--primary`, `--muted-foreground`, `--chart-n`), never a literal hex, so Harbor, Iris, Shanshui and Kanagawa restyle it for free.", "section": "colors" },
+      { "name": "The Small Ladder Rule", "body": "Application screens stay on 14 / 12 / 11 / 10px. Sizes above 14px are for one focal thing per surface (the task title, a stat), not for decoration.", "section": "typography" },
+      { "name": "The Held-Things-Cast-Shadows Rule", "body": "A surface gets a heavier shadow only when the user is holding it or it floats over the page. Static panels stay flat and bordered.", "section": "elevation" }
+    ],
+    "dos": [
+      "**Do** use semantic tokens (`bg-card`, `text-muted-foreground`, `var(--chart-n)`) for every colour, and check the result in all five palettes, light and dark.",
+      "**Do** keep app text on the 14 / 12 / 11 / 10px ladder and lead with weight and muted colour for hierarchy.",
+      "**Do** give every surface a 1px rule border and keep it flat unless it is held or floating.",
+      "**Do** let entity colour (columns, labels, priorities, avatars) be the colour on the screen.",
+      "**Do** leave room for Bahasa Indonesia strings, which run longer than English."
+    ],
+    "donts": [
+      "**Don't** hard-code hex or fixed radii in new components; it breaks the themes.",
+      "**Don't** add brand colour to chrome (sidebar, header, dialog frames).",
+      "**Don't** put heavy shadows on static panels or use shadows as decoration.",
+      "**Don't** use display sizes inside the app beyond one focal element per surface."
+    ]
+  }
+}
