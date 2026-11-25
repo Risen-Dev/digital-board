@@ -81,18 +81,20 @@ async function gh<T>(config: GithubConfig, path: string, post?: unknown, method 
 }
 
 /** Opens an issue; returns its number and page. */
-export async function createIssue(config: GithubConfig, title: string, body: string) {
-  const issue = await gh<{ number: number; html_url: string }>(config, "/issues", { title, body });
+export async function createIssue(config: GithubConfig, title: string, body: string, labels: string[] = []) {
+  const issue = await gh<{ number: number; html_url: string }>(config, "/issues", { title, body, labels });
   return { number: issue.number, url: issue.html_url };
 }
 
-/** An issue's body ("" when empty). */
-export async function issueBody(config: GithubConfig, number: number) {
-  return (await gh<{ body: string | null }>(config, `/issues/${number}`)).body ?? "";
+/** An issue's body ("" when empty) and label names. */
+export async function issueOf(config: GithubConfig, number: number) {
+  const i = await gh<{ body: string | null; labels: { name: string }[] }>(config, `/issues/${number}`);
+  return { body: i.body ?? "", labels: i.labels.map((l) => l.name) };
 }
 
-export async function setIssueBody(config: GithubConfig, number: number, body: string) {
-  await gh(config, `/issues/${number}`, { body }, "PATCH");
+/** Labels GitHub doesn't know yet are created in the repo. */
+export async function patchIssue(config: GithubConfig, number: number, change: { body?: string; labels?: string[] }) {
+  await gh(config, `/issues/${number}`, change, "PATCH");
 }
 
 /** Checks a repo + token pair before saving it; returns the repo's canonical full name. */

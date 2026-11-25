@@ -3,7 +3,7 @@
 import { startTransition, useActionState, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlignLeft, Archive, CalendarDays, Check, CircleDot, Clock, Flag, Hash, IterationCw, List as ListIcon, Plus, Settings2, Type, GitBranch, GitPullRequest, History, Image as ImageIcon, ImagePlus, ListChecks, ListTree, Ban, Pause, Play, Repeat, Sparkles, Tag, Trash2, Users, X, type LucideIcon } from "lucide-react";
-import { addComment, addField, addSubtask, archiveTask, askCardAgent, createGithubIssue, createTask, deleteField, deleteTask, fetchHistory, fetchTime, logTime, setBlocker, setChecklist, startTimer, syncChecklist, stopTimer, updateTask } from "@/lib/actions";
+import { addComment, addField, addSubtask, archiveTask, askCardAgent, createGithubIssue, createTask, deleteField, deleteTask, fetchHistory, fetchTime, logTime, setBlocker, setChecklist, startTimer, syncIssue, stopTimer, updateTask } from "@/lib/actions";
 import { branchNameOf, FIELD_TYPES, formatDuration, initials, pullRequestUrlOf, PRIORITIES, PRIORITY_CFG, REPEATS, type CheckItem, type Column, type CustomField, type Entry, type Sprint, type FieldType, type Member, type Task, type TaskImage } from "@/lib/board";
 import { Avatar } from "./avatar";
 import { imageUrl } from "./task-card";
@@ -59,6 +59,12 @@ export function TaskDialog({ task, columns, members, mentionable, defaultColumnI
   const editing = task !== null;
   const [state, action, saving] = useActionState(editing ? updateTask : createTask, null);
   const [history, setHistory] = useState<Entry[]>([]);
+  const labelInput = useRef<HTMLInputElement>(null);
+  // Labels changed on GitHub land in the field, unless it's being typed in.
+  const onSynced = useCallback((label: string | null) => {
+    const input = labelInput.current;
+    if (input && document.activeElement !== input) input.value = label ?? "";
+  }, []);
   const [copied, setCopied] = useState(false);
   const linked = links ? links.pulls.length + links.issues.length + links.branches.length + links.commits.length : 0;
   const column = columns.find((c) => c.id === task?.columnId);
@@ -74,7 +80,10 @@ export function TaskDialog({ task, columns, members, mentionable, defaultColumnI
     if (!state?.ok) return;
     if (!editing) return onClose();
     loadHistory();
-  }, [state, editing, onClose, loadHistory]);
+    // Save is disabled while it runs, which drops focus to <body>; bring it back so Escape and Tab still work.
+    const panel = dialog.ref.current;
+    if (panel && !panel.contains(document.activeElement)) panel.focus();
+  }, [state, editing, onClose, loadHistory, dialog.ref]);
   useEffect(loadHistory, [loadHistory]);
   // Oldest at the top, like a chat: keep the newest comment in view.
   const feed = useRef<HTMLOListElement>(null);
@@ -191,7 +200,7 @@ export function TaskDialog({ task, columns, members, mentionable, defaultColumnI
                   </select>
                 </Prop>
                 <Prop icon={Tag} label={tr("Labels")}>
-                  <input name="label" defaultValue={task?.label ?? ""} placeholder={tr("Design, QA")} className={bare} />
+                  <input ref={labelInput} name="label" defaultValue={task?.label ?? ""} placeholder={tr("Design, QA")} className={bare} />
                 </Prop>
                 <Prop icon={Users} label={tr("Assignees")} wide>
                   <div className="flex flex-wrap gap-1.5">
@@ -287,7 +296,7 @@ export function TaskDialog({ task, columns, members, mentionable, defaultColumnI
               </div>
             </form>
 
-            {editing && <Checklist key={task.id} taskId={task.id} initial={task.checklist} synced={!!repo} />}
+            {editing && <Checklist key={task.id} taskId={task.id} initial={task.checklist} synced={!!repo} onSynced={onSynced} />}
 
             {editing && <Images key={`images-${task.id}`} task={task} />}
 
@@ -855,16 +864,23 @@ function Dependencies({ task, columns, doneColumnId, onOpen, onChange }: {
 }
 
 /** Ticks save at once; there is no Save button for the checklist. */
-/** `synced`: the project has a repo, so the card's GitHub issue (if any) shares this checklist. */
-function Checklist({ taskId, initial, synced }: { taskId: string; initial: CheckItem[]; synced: boolean }) {
+/**
+ * `synced`: the project has a repo, so the card's GitHub issue (if any) shares this
+ * checklist and the labels; `onSynced` gets the labels pulled from it.
+ */
+function Checklist({ taskId, initial, synced, onSynced }: { taskId: string; initial: CheckItem[]; synced: boolean; onSynced: (label: string | null) => void }) {
   const tr = useT();
   const [items, setItems] = useState(initial);
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string>();
-  // Ticks made on GitHub since the card was last open.
+  // Ticks and labels changed on GitHub since the card was last open.
   useEffect(() => {
-    if (synced) syncChecklist(taskId).then((pulled) => pulled && setItems(pulled));
-  }, [taskId, synced]);
+    if (synced) syncIssue(taskId).then((pulled) => {
+      if (!pulled) return;
+      setItems(pulled.checklist);
+      onSynced(pulled.label);
+    });
+  }, [taskId, synced, onSynced]);
   const save = (next: CheckItem[]) => {
     setItems(next);
     setChecklist(taskId, next).then((r) => setError(r && "error" in r ? r.error : undefined));
@@ -885,7 +901,30 @@ function Checklist({ taskId, initial, synced }: { taskId: string; initial: Check
               onChange={() => save(items.map((x, j) => (j === i ? { ...x, done: !x.done } : x)))}
               className="size-3.5 accent-[var(--primary)]"
             />
-            <span className={`flex-1 ${item.done ? "text-muted-foreground line-through" : ""}`}>{item.text}</span>
+            {/* Edited in place: Enter or leaving the field saves, Escape puts the old text back. Keyed by text so a GitHub pull refreshes it. */}
+            <input
+              key={item.text}
+              defaultValue={item.text}
+              aria-label={tr("Edit checklist item")}
+              onBlur={(e) => {
+                const text = e.target.value.trim().slice(0, 300);
+                if (!text) e.target.value = item.text;
+                else if (text !== item.text) save(items.map((x, j) => (j === i ? { ...x, text } : x)));
+              }}
+              onKeyDown={(e) => {
+                // Focus moves to the dialog, not <body>, so the next Escape still closes it.
+                const leave = () => e.currentTarget.closest<HTMLElement>("[aria-modal]")?.focus();
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  leave();
+                } else if (e.key === "Escape") {
+                  e.stopPropagation();
+                  e.currentTarget.value = item.text;
+                  leave();
+                }
+              }}
+              className={`-mx-1 min-w-0 flex-1 rounded bg-transparent px-1 py-0.5 outline-none transition-colors hover:bg-secondary focus:bg-secondary ${item.done ? "text-muted-foreground line-through" : ""}`}
+            />
             <button
               type="button"
               aria-label={`Remove ${item.text}`}

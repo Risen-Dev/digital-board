@@ -6,7 +6,7 @@ import { after } from "next/server";
 import { redirect } from "next/navigation";
 import { all, get, run, transaction } from "./db";
 import { createUser, createWorkspace, currentUser, endSession, login, passwordOf, setPassword, startSession, verifyPassword, type User } from "./auth";
-import { cleanFilters, FIELD_TYPES, fieldOptionsOf, fieldValuesOf, joinLabels, LAYOUTS, nextDue, parseDuration, projectKeyOf, PROJECT_KEY_RE, REPEATS, templateOf, PALETTE, PRIORITIES, reorder, type CheckItem, type CustomField, type FieldType, type Filters, type Layout, type Member, type Priority, type Repeat } from "./board";
+import { cleanFilters, FIELD_TYPES, fieldOptionsOf, fieldValuesOf, joinLabels, labelsOf, LAYOUTS, nextDue, parseDuration, projectKeyOf, PROJECT_KEY_RE, REPEATS, templateOf, PALETTE, PRIORITIES, reorder, type CheckItem, type CustomField, type FieldType, type Filters, type Layout, type Member, type Priority, type Repeat } from "./board";
 import { broadcast } from "./canvas/hub";
 import { projectRole } from "./canvas/guard";
 import { notify } from "./outgoing";
@@ -479,6 +479,10 @@ export async function updateTask(_prev: unknown, form: FormData) {
   if (changes.length) await notify("task.updated", id, changes.join("; "), user.name);
 
   changed(user);
+  if (before.label !== label) {
+    const pushed = await pushLabels(id, label);
+    if (pushed.error) return { ok: true, error: pushed.error };
+  }
   return { ok: true };
 }
 
@@ -741,14 +745,27 @@ export async function setChecklist(taskId: string, items: CheckItem[]) {
 
 /** Writes the card's checklist into its GitHub issue, if it has one. */
 async function pushChecklist(taskId: string, items: CheckItem[]) {
-  const linked = await issueOf(taskId);
+  const linked = await linkedIssue(taskId);
   if (!linked) return { ok: true };
-  const { GithubError, issueBody, setIssueBody } = await import("./github");
+  const { GithubError, issueOf, patchIssue } = await import("./github");
   const { withChecklist } = await import("./github-events");
   try {
-    const body = await issueBody(linked.config, linked.number);
+    const { body } = await issueOf(linked.config, linked.number);
     const next = withChecklist(body, items);
-    if (next !== body) await setIssueBody(linked.config, linked.number, next);
+    if (next !== body) await patchIssue(linked.config, linked.number, { body: next });
+    return { ok: true };
+  } catch (e) {
+    return { error: e instanceof GithubError ? e.message : "Could not reach GitHub." };
+  }
+}
+
+/** Sets the card's labels on its GitHub issue, if it has one. */
+async function pushLabels(taskId: string, label: string | null) {
+  const linked = await linkedIssue(taskId);
+  if (!linked) return { ok: true };
+  const { GithubError, patchIssue } = await import("./github");
+  try {
+    await patchIssue(linked.config, linked.number, { labels: labelsOf(label) });
     return { ok: true };
   } catch (e) {
     return { error: e instanceof GithubError ? e.message : "Could not reach GitHub." };
@@ -756,7 +773,7 @@ async function pushChecklist(taskId: string, items: CheckItem[]) {
 }
 
 /** The card's GitHub issue and a config that can write to it; null when either is missing. */
-async function issueOf(taskId: string) {
+async function linkedIssue(taskId: string) {
   const row = await get<{ github_issue: number | null; project_id: string }>(
     "SELECT t.github_issue, c.project_id FROM tasks t JOIN columns c ON c.id = t.column_id WHERE t.id = ?", taskId);
   if (!row?.github_issue) return null;
@@ -766,31 +783,39 @@ async function issueOf(taskId: string) {
 }
 
 /**
- * Pulls the checklist from the card's GitHub issue (GitHub wins). An issue with no
- * checklist block yet gets the card's. Returns the checklist to show, or null when
- * the card has no issue or GitHub can't be reached.
+ * Pulls the checklist and labels from the card's GitHub issue (GitHub wins). An
+ * issue with no checklist block yet gets the card's. Returns what to show, or null
+ * when the card has no issue or GitHub can't be reached.
  */
 // ponytail: pulled when a card opens, not pushed by webhook — the dev server isn't reachable from GitHub.
-export async function syncChecklist(taskId: string): Promise<CheckItem[] | null> {
+export async function syncIssue(taskId: string): Promise<{ checklist: CheckItem[]; label: string | null } | null> {
   const user = await requireUser();
   if (!await writableTask(user, taskId)) return null;
-  const linked = await issueOf(taskId);
+  const linked = await linkedIssue(taskId);
   if (!linked) return null;
-  const { issueBody } = await import("./github");
+  const { issueOf } = await import("./github");
   const { checklistIn } = await import("./github-events");
-  const ours = (await get<{ checklist: CheckItem[] }>("SELECT checklist FROM tasks WHERE id = ?", taskId))!.checklist;
+  const ours = (await get<{ checklist: CheckItem[]; label: string | null }>("SELECT checklist, label FROM tasks WHERE id = ?", taskId))!;
   try {
-    const theirs = checklistIn(await issueBody(linked.config, linked.number));
+    const issue = await issueOf(linked.config, linked.number);
+    let checklist = ours.checklist;
+    const theirs = checklistIn(issue.body);
     if (theirs === null) {
-      if (ours.length) await pushChecklist(taskId, ours);
-      return ours;
+      if (ours.checklist.length) await pushChecklist(taskId, ours.checklist);
+    } else {
+      checklist = theirs.slice(0, 100).map((i) => ({ text: i.text.slice(0, 300), done: i.done }));
     }
-    const clean = theirs.slice(0, 100).map((i) => ({ text: i.text.slice(0, 300), done: i.done }));
-    if (JSON.stringify(clean) !== JSON.stringify(ours)) {
-      await run("UPDATE tasks SET checklist = ?::jsonb WHERE id = ?", JSON.stringify(clean), taskId);
-      changed(user);
+    const label = joinLabels(issue.labels.join(","));
+    const same = (a: string | null, b: string | null) => labelsOf(a).map((l) => l.toLowerCase()).sort().join() === labelsOf(b).map((l) => l.toLowerCase()).sort().join();
+    const newChecklist = JSON.stringify(checklist) !== JSON.stringify(ours.checklist);
+    const newLabel = !same(label, ours.label);
+    if (newChecklist) await run("UPDATE tasks SET checklist = ?::jsonb WHERE id = ?", JSON.stringify(checklist), taskId);
+    if (newLabel) {
+      await run("UPDATE tasks SET label = ? WHERE id = ?", label, taskId);
+      await logEvent(taskId, null, label ? `Labels set to ${label} on GitHub` : "Labels cleared on GitHub");
     }
-    return clean;
+    if (newChecklist || newLabel) changed(user);
+    return { checklist, label: newLabel ? label : ours.label };
   } catch {
     return null;
   }
@@ -1104,8 +1129,8 @@ export async function deleteMeeting(id: string) {
 export async function createGithubIssue(taskId: string) {
   const user = await requireUser();
   if (!await writableTask(user, taskId)) return { error: "You cannot edit this task." };
-  const task = (await get<{ title: string; description: string | null; checklist: CheckItem[]; project_id: string; key: string }>(
-    `SELECT t.title, t.description, t.checklist, c.project_id, p.key || '-' || t.number AS key
+  const task = (await get<{ title: string; description: string | null; label: string | null; checklist: CheckItem[]; project_id: string; key: string }>(
+    `SELECT t.title, t.description, t.label, t.checklist, c.project_id, p.key || '-' || t.number AS key
        FROM tasks t JOIN columns c ON c.id = t.column_id JOIN projects p ON p.id = c.project_id WHERE t.id = ?`, taskId,
   ))!;
   const { GithubError, createIssue, forgetGithub, githubConfig } = await import("./github");
@@ -1115,7 +1140,7 @@ export async function createGithubIssue(taskId: string) {
   try {
     const { withChecklist } = await import("./github-events");
     const body = withChecklist(`${task.description ?? ""}\n\n---\nFrom digital board card ${task.key}.`, task.checklist).trim();
-    const issue = await createIssue(config, `[${task.key}] ${task.title}`, body);
+    const issue = await createIssue(config, `[${task.key}] ${task.title}`, body, labelsOf(task.label));
     await run("UPDATE tasks SET github_issue = ? WHERE id = ?", issue.number, taskId);
     await logEvent(taskId, user.id, `Created GitHub issue #${issue.number}: ${issue.url}`);
     forgetGithub(task.project_id);
