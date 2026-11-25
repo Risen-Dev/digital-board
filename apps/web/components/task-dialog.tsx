@@ -3,7 +3,7 @@
 import { startTransition, useActionState, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlignLeft, Archive, CalendarDays, Check, CircleDot, Clock, Flag, Hash, IterationCw, List as ListIcon, Plus, Settings2, Type, GitBranch, GitPullRequest, History, Image as ImageIcon, ImagePlus, ListChecks, ListTree, Ban, Pause, Play, Repeat, Sparkles, Tag, Trash2, Users, X, type LucideIcon } from "lucide-react";
-import { addComment, addField, addSubtask, archiveTask, askCardAgent, createGithubIssue, createTask, deleteField, deleteTask, fetchHistory, fetchTime, logTime, setBlocker, setChecklist, startTimer, stopTimer, updateTask } from "@/lib/actions";
+import { addComment, addField, addSubtask, archiveTask, askCardAgent, createGithubIssue, createTask, deleteField, deleteTask, fetchHistory, fetchTime, logTime, setBlocker, setChecklist, startTimer, syncChecklist, stopTimer, updateTask } from "@/lib/actions";
 import { branchNameOf, FIELD_TYPES, formatDuration, initials, pullRequestUrlOf, PRIORITIES, PRIORITY_CFG, REPEATS, type CheckItem, type Column, type CustomField, type Entry, type Sprint, type FieldType, type Member, type Task, type TaskImage } from "@/lib/board";
 import { Avatar } from "./avatar";
 import { imageUrl } from "./task-card";
@@ -65,13 +65,16 @@ export function TaskDialog({ task, columns, members, mentionable, defaultColumnI
   const [description, setDescription] = useState(task?.description ?? "");
   const describe = useMentionPicker(description, setDescription, tagOptions(tags), true);
 
-  useEffect(() => {
-    if (state?.ok) onClose();
-  }, [state, onClose]);
-
   const loadHistory = useCallback(() => {
     if (task) fetchHistory(task.id).then(setHistory);
   }, [task]);
+
+  // A new card closes once created; an edited one stays open, marked saved.
+  useEffect(() => {
+    if (!state?.ok) return;
+    if (!editing) return onClose();
+    loadHistory();
+  }, [state, editing, onClose, loadHistory]);
   useEffect(loadHistory, [loadHistory]);
   // Oldest at the top, like a chat: keep the newest comment in view.
   const feed = useRef<HTMLOListElement>(null);
@@ -130,6 +133,7 @@ export function TaskDialog({ task, columns, members, mentionable, defaultColumnI
               onSubmit={(e) => {
                 e.preventDefault();
                 const data = new FormData(e.currentTarget);
+                setDirty(false);
                 startTransition(() => action(data));
               }}
               className="flex flex-col gap-5 pb-6"
@@ -246,6 +250,12 @@ export function TaskDialog({ task, columns, members, mentionable, defaultColumnI
               {/* Pinned to the foot of the pane: the sections below save on their own, these fields only on Save. */}
               <div className="sticky bottom-0 z-10 -mx-5 -mb-6 flex items-center gap-2 border-t bg-card px-5 py-3 md:-mx-8 md:px-8">
                 <SubmitButton pending={saving}>{editing ? tr("Save") : tr("Create task")}</SubmitButton>
+                {editing && state?.ok && !dirty && !saving && (
+                  <span role="status" className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <Check className="size-3.5" />
+                    {tr("Saved")}
+                  </span>
+                )}
                 {editing && (
                   <button
                     type="button"
@@ -277,7 +287,7 @@ export function TaskDialog({ task, columns, members, mentionable, defaultColumnI
               </div>
             </form>
 
-            {editing && <Checklist key={task.id} taskId={task.id} initial={task.checklist} />}
+            {editing && <Checklist key={task.id} taskId={task.id} initial={task.checklist} synced={!!repo} />}
 
             {editing && <Images key={`images-${task.id}`} task={task} />}
 
@@ -845,13 +855,19 @@ function Dependencies({ task, columns, doneColumnId, onOpen, onChange }: {
 }
 
 /** Ticks save at once; there is no Save button for the checklist. */
-function Checklist({ taskId, initial }: { taskId: string; initial: CheckItem[] }) {
+/** `synced`: the project has a repo, so the card's GitHub issue (if any) shares this checklist. */
+function Checklist({ taskId, initial, synced }: { taskId: string; initial: CheckItem[]; synced: boolean }) {
   const tr = useT();
   const [items, setItems] = useState(initial);
   const [draft, setDraft] = useState("");
+  const [error, setError] = useState<string>();
+  // Ticks made on GitHub since the card was last open.
+  useEffect(() => {
+    if (synced) syncChecklist(taskId).then((pulled) => pulled && setItems(pulled));
+  }, [taskId, synced]);
   const save = (next: CheckItem[]) => {
     setItems(next);
-    void setChecklist(taskId, next);
+    setChecklist(taskId, next).then((r) => setError(r && "error" in r ? r.error : undefined));
   };
   const done = items.filter((i) => i.done).length;
   return (
@@ -896,6 +912,7 @@ function Checklist({ taskId, initial }: { taskId: string; initial: CheckItem[] }
           className="w-full rounded-md border bg-background px-2.5 py-1.5 text-xs outline-none transition-colors focus:border-ring"
         />
       </form>
+      {error && <p role="alert" className="mt-1.5 text-[11px] text-destructive">{tr("Saved here, but not on GitHub: {error}", { error: tr(error) })}</p>}
     </div>
   );
 }

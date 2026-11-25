@@ -691,6 +691,7 @@ const id: Record<string, string> = {
   "Filter tasks…": "Saring tugas…",
   "Clear filters": "Hapus filter",
   "View": "Tampilan",
+  "Saved here, but not on GitHub: {error}": "Tersimpan di sini, tapi tidak di GitHub: {error}",
 };
 
 export default id;

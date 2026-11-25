@@ -388,3 +388,25 @@ assert.equal(
   assert.equal(dateOfDay(tl.from), "2026-10-17");
   assert.equal(dateOfDay(tl.from + tl.days - 1), "2026-11-03", "a week after today, the latest point");
 }
+
+// Checklist ⇄ GitHub issue body.
+{
+  const { withChecklist, checklistIn } = await import("./github-events.ts");
+  const items = [{ text: "Add option", done: false }, { text: "Add skill", done: true }];
+  const created = withChecklist("Intro.\n\n---\nFrom digital board card KTG-2.", items);
+  assert.match(created, /^Intro\.\n\n<!-- digital-board:checklist -->\n- \[ \] Add option\n- \[x\] Add skill\n<!-- \/digital-board:checklist -->\n\n---\nFrom digital board card KTG-2\.$/);
+  assert.deepEqual(checklistIn(created), items);
+  // GitHub saves web edits with CRLF and an upper-case X.
+  const ticked = created.replace("- [ ] Add option", "- [X] Add option").replace(/\n/g, "\r\n");
+  assert.deepEqual(checklistIn(ticked), [{ text: "Add option", done: true }, { text: "Add skill", done: true }]);
+  // Replacing keeps the text around the block; an emptied checklist leaves an empty block.
+  const edited = withChecklist(ticked + "\r\nNote from GitHub.", []);
+  assert.ok(edited.startsWith("Intro.") && edited.endsWith("Note from GitHub."));
+  assert.deepEqual(checklistIn(edited), []);
+  assert.equal(checklistIn("No block here\n- [ ] stray"), null);
+  assert.equal(withChecklist("Plain", []), "Plain");
+  // A card with no description: the block still goes above the footer.
+  assert.match(withChecklist("\n\n---\nFrom digital board card KTG-3.", items).trim(), /^<!-- digital-board:checklist -->[\s\S]*-->\n\n---\nFrom digital board card KTG-3\.$/);
+  // `$&` in an item must not be read as a replacement pattern.
+  assert.deepEqual(checklistIn(withChecklist(created, [{ text: "Pay $& later", done: false }])), [{ text: "Pay $& later", done: false }]);
+}

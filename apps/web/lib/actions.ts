@@ -736,6 +736,64 @@ export async function setChecklist(taskId: string, items: CheckItem[]) {
     .filter((i) => i.text);
   await run("UPDATE tasks SET checklist = ?::jsonb WHERE id = ?", JSON.stringify(clean), taskId);
   changed(user);
+  return pushChecklist(taskId, clean);
+}
+
+/** Writes the card's checklist into its GitHub issue, if it has one. */
+async function pushChecklist(taskId: string, items: CheckItem[]) {
+  const linked = await issueOf(taskId);
+  if (!linked) return { ok: true };
+  const { GithubError, issueBody, setIssueBody } = await import("./github");
+  const { withChecklist } = await import("./github-events");
+  try {
+    const body = await issueBody(linked.config, linked.number);
+    const next = withChecklist(body, items);
+    if (next !== body) await setIssueBody(linked.config, linked.number, next);
+    return { ok: true };
+  } catch (e) {
+    return { error: e instanceof GithubError ? e.message : "Could not reach GitHub." };
+  }
+}
+
+/** The card's GitHub issue and a config that can write to it; null when either is missing. */
+async function issueOf(taskId: string) {
+  const row = await get<{ github_issue: number | null; project_id: string }>(
+    "SELECT t.github_issue, c.project_id FROM tasks t JOIN columns c ON c.id = t.column_id WHERE t.id = ?", taskId);
+  if (!row?.github_issue) return null;
+  const { githubConfig } = await import("./github");
+  const config = await githubConfig(row.project_id);
+  return config?.repo && config.token ? { config, number: row.github_issue } : null;
+}
+
+/**
+ * Pulls the checklist from the card's GitHub issue (GitHub wins). An issue with no
+ * checklist block yet gets the card's. Returns the checklist to show, or null when
+ * the card has no issue or GitHub can't be reached.
+ */
+// ponytail: pulled when a card opens, not pushed by webhook — the dev server isn't reachable from GitHub.
+export async function syncChecklist(taskId: string): Promise<CheckItem[] | null> {
+  const user = await requireUser();
+  if (!await writableTask(user, taskId)) return null;
+  const linked = await issueOf(taskId);
+  if (!linked) return null;
+  const { issueBody } = await import("./github");
+  const { checklistIn } = await import("./github-events");
+  const ours = (await get<{ checklist: CheckItem[] }>("SELECT checklist FROM tasks WHERE id = ?", taskId))!.checklist;
+  try {
+    const theirs = checklistIn(await issueBody(linked.config, linked.number));
+    if (theirs === null) {
+      if (ours.length) await pushChecklist(taskId, ours);
+      return ours;
+    }
+    const clean = theirs.slice(0, 100).map((i) => ({ text: i.text.slice(0, 300), done: i.done }));
+    if (JSON.stringify(clean) !== JSON.stringify(ours)) {
+      await run("UPDATE tasks SET checklist = ?::jsonb WHERE id = ?", JSON.stringify(clean), taskId);
+      changed(user);
+    }
+    return clean;
+  } catch {
+    return null;
+  }
 }
 
 export async function setProjectMember(projectId: string, userId: string, role: "admin" | "editor" | "viewer" | "") {
@@ -1046,8 +1104,8 @@ export async function deleteMeeting(id: string) {
 export async function createGithubIssue(taskId: string) {
   const user = await requireUser();
   if (!await writableTask(user, taskId)) return { error: "You cannot edit this task." };
-  const task = (await get<{ title: string; description: string | null; project_id: string; key: string }>(
-    `SELECT t.title, t.description, c.project_id, p.key || '-' || t.number AS key
+  const task = (await get<{ title: string; description: string | null; checklist: CheckItem[]; project_id: string; key: string }>(
+    `SELECT t.title, t.description, t.checklist, c.project_id, p.key || '-' || t.number AS key
        FROM tasks t JOIN columns c ON c.id = t.column_id JOIN projects p ON p.id = c.project_id WHERE t.id = ?`, taskId,
   ))!;
   const { GithubError, createIssue, forgetGithub, githubConfig } = await import("./github");
@@ -1055,8 +1113,10 @@ export async function createGithubIssue(taskId: string) {
   if (!config?.repo) return { error: "Connect a GitHub repo in Settings → Projects first." };
   if (!config.token) return { error: "Creating issues needs a token with Issues: Read and write (Settings → Projects → GitHub)." };
   try {
-    const body = `${task.description ?? ""}\n\n---\nFrom digital board card ${task.key}.`.trim();
+    const { withChecklist } = await import("./github-events");
+    const body = withChecklist(`${task.description ?? ""}\n\n---\nFrom digital board card ${task.key}.`, task.checklist).trim();
     const issue = await createIssue(config, `[${task.key}] ${task.title}`, body);
+    await run("UPDATE tasks SET github_issue = ? WHERE id = ?", issue.number, taskId);
     await logEvent(taskId, user.id, `Created GitHub issue #${issue.number}: ${issue.url}`);
     forgetGithub(task.project_id);
     changed(user);

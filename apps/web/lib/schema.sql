@@ -468,3 +468,10 @@ CREATE TABLE IF NOT EXISTS message_reactions (
   emoji      TEXT NOT NULL,
   PRIMARY KEY (message_id, user_id, emoji)
 );
+
+-- The GitHub issue a card opened ("Create issue"); its checklist is synced into that issue's body.
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS github_issue INTEGER;
+-- Cards whose issue predates the column: recover the number from their history line.
+UPDATE tasks t SET github_issue = substring(e.text from '^Created GitHub issue #([0-9]+)')::int
+  FROM task_events e
+ WHERE t.github_issue IS NULL AND e.task_id = t.id AND e.text LIKE 'Created GitHub issue #%';

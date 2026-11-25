@@ -56,9 +56,9 @@ export function openGithub(stored: string): GithubConfig {
 
 export class GithubError extends Error {}
 
-async function gh<T>(config: GithubConfig, path: string, post?: unknown): Promise<T> {
+async function gh<T>(config: GithubConfig, path: string, post?: unknown, method = "POST"): Promise<T> {
   const res = await fetch(`https://api.github.com/repos/${config.repo}${path}`, {
-    method: post === undefined ? "GET" : "POST",
+    method: post === undefined ? "GET" : method,
     headers: {
       accept: "application/vnd.github+json",
       ...(config.token ? { authorization: `Bearer ${config.token}` } : {}),
@@ -84,6 +84,15 @@ async function gh<T>(config: GithubConfig, path: string, post?: unknown): Promis
 export async function createIssue(config: GithubConfig, title: string, body: string) {
   const issue = await gh<{ number: number; html_url: string }>(config, "/issues", { title, body });
   return { number: issue.number, url: issue.html_url };
+}
+
+/** An issue's body ("" when empty). */
+export async function issueBody(config: GithubConfig, number: number) {
+  return (await gh<{ body: string | null }>(config, `/issues/${number}`)).body ?? "";
+}
+
+export async function setIssueBody(config: GithubConfig, number: number, body: string) {
+  await gh(config, `/issues/${number}`, { body }, "PATCH");
 }
 
 /** Checks a repo + token pair before saving it; returns the repo's canonical full name. */

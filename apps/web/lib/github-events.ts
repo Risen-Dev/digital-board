@@ -129,3 +129,34 @@ export function columnFor<C extends { id: string; title: string; position: numbe
   }
   return null;
 }
+
+/*
+ * Checklist ⇄ issue body. The checklist lives between two HTML comments, which
+ * GitHub doesn't render, so the rest of the body (anything people wrote on
+ * GitHub) is never touched.
+ */
+type CheckItem = { text: string; done: boolean };
+const START = "<!-- digital-board:checklist -->";
+const END = "<!-- /digital-board:checklist -->";
+const BLOCK = /<!-- digital-board:checklist -->[\s\S]*?<!-- \/digital-board:checklist -->/;
+const FOOTER = "\n---\nFrom digital board card";
+
+export const checklistBlock = (items: CheckItem[]) =>
+  `${START}\n${items.map((i) => `- [${i.done ? "x" : " "}] ${i.text}`).join("\n")}\n${END}`;
+
+/** The body with its checklist block replaced, or added above the card footer (or at the end). */
+export function withChecklist(body: string, items: CheckItem[]) {
+  const block = checklistBlock(items);
+  if (BLOCK.test(body)) return body.replace(BLOCK, () => block);
+  if (!items.length) return body;
+  const plain = body.replace(/\r\n/g, "\n");
+  const at = plain.indexOf(FOOTER);
+  return at < 0 ? `${plain.trimEnd()}\n\n${block}` : `${plain.slice(0, at).trimEnd()}\n\n${block}\n${plain.slice(at)}`;
+}
+
+/** The checklist inside the block; null when the body has no block yet. */
+export function checklistIn(body: string): CheckItem[] | null {
+  const block = body.match(BLOCK)?.[0];
+  if (!block) return null;
+  return [...block.matchAll(/^\s*[-*]\s+\[([ xX])\]\s+(.+?)\s*$/gm)].map((m) => ({ text: m[2], done: m[1] !== " " }));
+}
