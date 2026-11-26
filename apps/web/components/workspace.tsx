@@ -874,7 +874,15 @@ export function Workspace({
         ) : section === "inbox" ? (
           <FeedView feed={notifications} mentionsMe={mentionsMe} onMarkRead={markNotificationItemsRead} onMarkAll={markCardNotificationsRead} onOpen={openCardNotification} />
         ) : section === "mine" ? (
-          <MyTasksView tasks={mine} onOpen={(id) => setEditing(columns.flatMap((c) => c.tasks).find((t) => t.id === id) ?? null)} />
+          <MyTasksView
+            tasks={mine}
+            // A card of the open project opens in place; one from another project goes through that project's board.
+            onOpen={(t) => {
+              const here = columns.flatMap((c) => c.tasks).find((x) => x.id === t.id);
+              if (here) setEditing(here);
+              else goToCard(t.projectId, t.id);
+            }}
+          />
         ) : view === VIEWS.length && project.repo ? (
           <GithubView key={project.id} projectId={project.id} repo={project.repo} />
         ) : view === 0 ? (

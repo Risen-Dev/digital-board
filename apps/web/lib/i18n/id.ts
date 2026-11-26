@@ -693,6 +693,14 @@ const id: Record<string, string> = {
   "View": "Tampilan",
   "Saved here, but not on GitHub: {error}": "Tersimpan di sini, tapi tidak di GitHub: {error}",
   "Edit checklist item": "Ubah item checklist",
+  "Status": "Status",
+  "Project": "Proyek",
+  "No grouping": "Tanpa grup",
+  "No due date": "Tanpa tenggat",
+  "Next 7 days": "7 hari ke depan",
+  "Later": "Nanti",
+  "All projects": "Semua proyek",
+  "Group by": "Kelompokkan",
 };
 
 export default id;
