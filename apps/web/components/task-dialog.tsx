@@ -71,6 +71,12 @@ export function TaskDialog({ task, columns, members, mentionable, defaultColumnI
   const linked = links ? links.pulls.length + links.issues.length + links.branches.length + links.commits.length : 0;
   const column = columns.find((c) => c.id === task?.columnId);
   const [description, setDescription] = useState(task?.description ?? "");
+  // A newer description from GitHub replaces the field, unless it's been edited here.
+  const [seenDescription, setSeenDescription] = useState(task?.description ?? "");
+  if ((task?.description ?? "") !== seenDescription) {
+    setSeenDescription(task?.description ?? "");
+    if (description === seenDescription) setDescription(task?.description ?? "");
+  }
   const describe = useMentionPicker(description, setDescription, tagOptions(tags), true);
 
   const loadHistory = useCallback(() => {

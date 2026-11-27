@@ -409,4 +409,14 @@ assert.equal(
   assert.match(withChecklist("\n\n---\nFrom digital board card KTG-3.", items).trim(), /^<!-- digital-board:checklist -->[\s\S]*-->\n\n---\nFrom digital board card KTG-3\.$/);
   // `$&` in an item must not be read as a replacement pattern.
   assert.deepEqual(checklistIn(withChecklist(created, [{ text: "Pay $& later", done: false }])), [{ text: "Pay $& later", done: false }]);
+  const { descriptionIn, withDescription } = await import("./github-events.ts");
+  // Text written on GitHub after the block belongs to the description too.
+  const github = created.replace("\n\n---", "\n\n## Decisions\n- one\n\n---");
+  assert.equal(descriptionIn(github), "Intro.\n\n## Decisions\n- one");
+  assert.equal(withDescription(github, "Intro.\r\n\r\n## Decisions\r\n- one"), github);
+  const pushed = withDescription(github, "New text");
+  assert.equal(descriptionIn(pushed), "New text");
+  assert.deepEqual(checklistIn(pushed), items);
+  assert.match(pushed, /^New text\n\n<!-- digital-board:checklist -->[\s\S]*-->\n\n---\nFrom digital board card KTG-2\.$/);
+  assert.equal(descriptionIn(""), "");
 }

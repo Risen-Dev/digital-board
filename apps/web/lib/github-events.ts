@@ -161,3 +161,23 @@ export function checklistIn(body: string): CheckItem[] | null {
   if (!block) return null;
   return [...block.matchAll(/^\s*[-*]\s+\[([ xX])\]\s+(.+?)\s*$/gm)].map((m) => ({ text: m[2], done: m[1] !== " " }));
 }
+
+/*
+ * Description ⇄ issue body: everything except the checklist block and the
+ * "From digital board card" footer. Pushing a new description puts the block
+ * after it, above the footer.
+ */
+const FOOTER_RE = /(^|\n)---\nFrom digital board card[^\n]*/;
+const lf = (s: string | null) => (s ?? "").replace(/\r\n/g, "\n").trim();
+
+export const descriptionIn = (body: string) =>
+  lf(body).replace(BLOCK, "\n\n").replace(FOOTER_RE, "\n\n").replace(/\n{3,}/g, "\n\n").trim();
+
+export const sameDescription = (a: string | null, b: string | null) => lf(a) === lf(b);
+
+/** The body with its description replaced; unchanged when the description already matches. */
+export function withDescription(body: string, description: string | null) {
+  if (sameDescription(descriptionIn(body), description)) return body;
+  const plain = lf(body);
+  return [lf(description), plain.match(BLOCK)?.[0], plain.match(FOOTER_RE)?.[0].trim()].filter(Boolean).join("\n\n");
+}

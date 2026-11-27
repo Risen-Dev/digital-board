@@ -523,6 +523,7 @@ const id: Record<string, string> = {
   "{n} in this workspace · {online} online now": "{n} di ruang kerja ini · {online} sedang online",
   "Task created": "Tugas dibuat",
   "Details updated": "Detail diperbarui",
+  "Description updated on GitHub": "Deskripsi diperbarui di GitHub",
   "Due date cleared": "Tenggat dihapus",
   "Labels cleared": "Label dihapus",
   "Assignees cleared": "Assignee dihapus",

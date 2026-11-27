@@ -479,8 +479,11 @@ export async function updateTask(_prev: unknown, form: FormData) {
   if (changes.length) await notify("task.updated", id, changes.join("; "), user.name);
 
   changed(user);
-  if (before.label !== label) {
-    const pushed = await pushLabels(id, label);
+  const push: { label?: string | null; description?: string | null } = {};
+  if (before.label !== label) push.label = label;
+  if (before.description !== description) push.description = description;
+  if (Object.keys(push).length) {
+    const pushed = await pushIssue(id, push);
     if (pushed.error) return { ok: true, error: pushed.error };
   }
   return { ok: true };
@@ -759,13 +762,21 @@ async function pushChecklist(taskId: string, items: CheckItem[]) {
   }
 }
 
-/** Sets the card's labels on its GitHub issue, if it has one. */
-async function pushLabels(taskId: string, label: string | null) {
+/** Sets the card's labels and/or description on its GitHub issue, if it has one. */
+async function pushIssue(taskId: string, change: { label?: string | null; description?: string | null }) {
   const linked = await linkedIssue(taskId);
   if (!linked) return { ok: true };
-  const { GithubError, patchIssue } = await import("./github");
+  const { GithubError, issueOf, patchIssue } = await import("./github");
+  const { withDescription } = await import("./github-events");
   try {
-    await patchIssue(linked.config, linked.number, { labels: labelsOf(label) });
+    const patch: { body?: string; labels?: string[] } = {};
+    if ("label" in change) patch.labels = labelsOf(change.label ?? null);
+    if ("description" in change) {
+      const { body } = await issueOf(linked.config, linked.number);
+      const next = withDescription(body, change.description ?? null);
+      if (next !== body) patch.body = next;
+    }
+    if (patch.body !== undefined || patch.labels) await patchIssue(linked.config, linked.number, patch);
     return { ok: true };
   } catch (e) {
     return { error: e instanceof GithubError ? e.message : "Could not reach GitHub." };
@@ -787,7 +798,7 @@ async function linkedIssue(taskId: string) {
  * issue with no checklist block yet gets the card's. Returns what to show, or null
  * when the card has no issue or GitHub can't be reached.
  */
-// Pulled when a card opens; with the project's webhook subscribed to Issues it also arrives live.
+// Checklist, labels and description: pulled when a card opens; with the project's webhook subscribed to Issues it also arrives live.
 export async function syncIssue(taskId: string): Promise<{ checklist: CheckItem[]; label: string | null } | null> {
   const user = await requireUser();
   if (!await writableTask(user, taskId)) return null;
