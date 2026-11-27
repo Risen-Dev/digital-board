@@ -26,9 +26,10 @@ export async function POST(req: Request) {
 
   let payload: Payload;
   try {
-    payload = JSON.parse(body);
+    // Either content type GitHub offers: application/json, or form with the JSON in `payload`.
+    payload = JSON.parse(body.startsWith("payload=") ? new URLSearchParams(body).get("payload") ?? "" : body);
   } catch {
-    return NextResponse.json({ error: "Body is not JSON. Set the webhook content type to application/json." }, { status: 400 });
+    return NextResponse.json({ error: "Body is not JSON." }, { status: 400 });
   }
   // A secret reused across repos must not let another repo move this project's cards.
   if (payload.repository?.full_name?.toLowerCase() !== config.repo.toLowerCase()) {
