@@ -1,7 +1,8 @@
 import "server-only";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { all, get, run, transaction } from "./db";
-import { columnFor, type Step } from "./github-events";
+import { joinLabels, labelsOf, type CheckItem } from "./board";
+import { checklistIn, columnFor, type Step } from "./github-events";
 import { notify } from "./outgoing";
 import { relocateTask } from "./tasks";
 
@@ -75,4 +76,24 @@ export async function applySteps(projectId: string, steps: Step[]) {
   });
   for (const [id, why] of moves) await notify("task.moved", id, why, null);
   return done;
+}
+
+/**
+ * Pulls an issue's checklist and labels onto its card; GitHub wins. `hadBlock`
+ * is false when the issue has no checklist block yet (the card's is kept).
+ */
+export async function applyIssue(taskId: string, issue: { body: string; labels: string[] }) {
+  const ours = (await get<{ checklist: CheckItem[]; label: string | null }>("SELECT checklist, label FROM tasks WHERE id = ?", taskId))!;
+  const theirs = checklistIn(issue.body);
+  const checklist = theirs === null ? ours.checklist : theirs.slice(0, 100).map((i) => ({ text: i.text.slice(0, 300), done: i.done }));
+  const label = joinLabels(issue.labels.join(","));
+  const norm = (l: string | null) => labelsOf(l).map((x) => x.toLowerCase()).sort().join();
+  const newChecklist = JSON.stringify(checklist) !== JSON.stringify(ours.checklist);
+  const newLabel = norm(label) !== norm(ours.label);
+  if (newChecklist) await run("UPDATE tasks SET checklist = ?::jsonb WHERE id = ?", JSON.stringify(checklist), taskId);
+  if (newLabel) {
+    await run("UPDATE tasks SET label = ? WHERE id = ?", label, taskId);
+    await event(taskId, label ? `Labels set to ${label} on GitHub` : "Labels cleared on GitHub");
+  }
+  return { checklist, label: newLabel ? label : ours.label, changed: newChecklist || newLabel, hadBlock: theirs !== null };
 }

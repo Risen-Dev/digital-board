@@ -65,6 +65,8 @@ export function TaskDialog({ task, columns, members, mentionable, defaultColumnI
     const input = labelInput.current;
     if (input && document.activeElement !== input) input.value = label ?? "";
   }, []);
+  const syncedLabel = task?.label ?? null;
+  useEffect(() => onSynced(syncedLabel), [syncedLabel, onSynced]);
   const [copied, setCopied] = useState(false);
   const linked = links ? links.pulls.length + links.issues.length + links.branches.length + links.commits.length : 0;
   const column = columns.find((c) => c.id === task?.columnId);
@@ -364,7 +366,7 @@ export function TaskDialog({ task, columns, members, mentionable, defaultColumnI
                       <CommentAvatar entry={e} members={members} />
                       <div className="min-w-0 flex-1">
                         <p className="text-xs">
-                          <span className="font-semibold">{e.actor ?? tr("Someone")}</span>
+                          <span className="font-semibold">{e.actor ?? (e.text.includes("GitHub") ? "GitHub" : tr("Someone"))}</span>
                           <span className="ml-1.5 text-[11px] text-muted-foreground">{e.atLabel}</span>
                         </p>
                         <p className="mt-0.5 whitespace-pre-wrap text-xs leading-snug">
@@ -374,7 +376,7 @@ export function TaskDialog({ task, columns, members, mentionable, defaultColumnI
                     </li>
                   ) : (
                     <li key={i} className="px-1 text-[11px] text-muted-foreground">
-                      <span className="text-foreground/80">{e.actor ?? tr("Someone")}</span> · {eventText(e.text, tr)} · {e.atLabel}
+                      <span className="text-foreground/80">{e.actor ?? (e.text.includes("GitHub") ? "GitHub" : tr("Someone"))}</span> · {eventText(e.text, tr)} · {e.atLabel}
                     </li>
                   ),
                 )}
@@ -871,6 +873,12 @@ function Dependencies({ task, columns, doneColumnId, onOpen, onChange }: {
 function Checklist({ taskId, initial, synced, onSynced }: { taskId: string; initial: CheckItem[]; synced: boolean; onSynced: (label: string | null) => void }) {
   const tr = useT();
   const [items, setItems] = useState(initial);
+  // The board refreshed (a save here, or a webhook from GitHub): show what's stored.
+  const [seen, setSeen] = useState(initial);
+  if (initial !== seen) {
+    setSeen(initial);
+    setItems(initial);
+  }
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string>();
   // Ticks and labels changed on GitHub since the card was last open.

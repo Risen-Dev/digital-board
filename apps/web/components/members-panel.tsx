@@ -647,7 +647,7 @@ function GithubWebhook({ project }: { project: Project }) {
         <h4 className="text-xs font-semibold">{tr("Webhook — move cards automatically")}</h4>
         <p className="mt-0.5 text-[11px] text-muted-foreground">
           {tr("In {repo} → Settings → Webhooks → Add webhook, paste the URL and secret, set content type to", { repo: project.repo ?? "" })}{" "}
-          <span className="font-mono">{tr("application/json")}</span>{tr(", and pick the events Pull requests, Pushes and Check suites. Then a push to a card’s branch moves it to In Progress, an opened PR to In Review, a merged PR to QA (or Done), and failing checks show in its history. Cards only move forward. GitHub must be able to reach this address.")}
+          <span className="font-mono">{tr("application/json")}</span>{tr(", and pick the events Pull requests, Pushes, Check suites and Issues. Then a push to a card’s branch moves it to In Progress, an opened PR to In Review, a merged PR to QA (or Done), and failing checks show in its history. Cards only move forward. Checklist and label edits on a card’s issue show on the card right away. GitHub must be able to reach this address.")}
         </p>
       </div>
       {url && <Row label={tr("Payload URL")} value={url} />}

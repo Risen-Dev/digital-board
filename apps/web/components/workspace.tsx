@@ -917,7 +917,8 @@ export function Workspace({
       {(editing || creating !== null) && (
         <TaskDialog
           key={editing?.id ?? "new"}
-          task={editing}
+          // Fresh from the board, so a webhook update shows in the open card.
+          task={editing && (columns.flatMap((c) => c.tasks).find((t) => t.id === editing.id) ?? editing)}
           columns={columns}
           members={members}
           mentionable={members.filter((m) => live.some((p) => p.id === m.id && p.is_admin === 1) || assignments.some((a) => a.user_id === m.id && a.project_id === project?.id))}

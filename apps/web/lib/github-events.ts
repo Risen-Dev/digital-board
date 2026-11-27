@@ -43,6 +43,7 @@ export type Payload = {
   deleted?: boolean;
   repository?: { html_url?: string; full_name?: string };
   commits?: { id: string; message: string; url: string; timestamp: string; author: { username?: string; name: string } }[];
+  issue?: { number: number; body: string | null; labels: { name: string }[] };
   check_suite?: { conclusion: string | null; head_branch: string | null; head_sha: string };
 };
 

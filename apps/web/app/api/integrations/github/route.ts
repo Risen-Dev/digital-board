@@ -3,14 +3,14 @@ import { revalidatePath } from "next/cache";
 import { get } from "@/lib/db";
 import { planEvent, type Payload } from "@/lib/github-events";
 import { openGithub } from "@/lib/github";
-import { applySteps, validSignature } from "@/lib/github-webhook";
+import { applyIssue, applySteps, validSignature } from "@/lib/github-webhook";
 import { nudgeBoard } from "@/lib/chat-live";
 
 /**
  * GitHub webhook for one project: POST /api/integrations/github?project=<id>.
  * No session — the HMAC signature with the project's secret is the auth, and it
  * is checked before the body is parsed. Set it up under Settings → Projects →
- * the project → GitHub; events: Pull requests, Pushes, Check suites.
+ * the project → GitHub; events: Pull requests, Pushes, Check suites, Issues.
  */
 export async function POST(req: Request) {
   const projectId = new URL(req.url).searchParams.get("project") ?? "";
@@ -33,6 +33,18 @@ export async function POST(req: Request) {
   // A secret reused across repos must not let another repo move this project's cards.
   if (payload.repository?.full_name?.toLowerCase() !== config.repo.toLowerCase()) {
     return NextResponse.json({ ignored: `Delivery is for ${payload.repository?.full_name}, not ${config.repo}.` }, { status: 202 });
+  }
+
+  // Checklist or labels edited on the card's issue.
+  if (event === "issues" && payload.issue) {
+    const t = await get<{ id: string }>(
+      "SELECT t.id FROM tasks t JOIN columns c ON c.id = t.column_id WHERE c.project_id = ? AND t.github_issue = ?", projectId, payload.issue.number);
+    const r = t && await applyIssue(t.id, { body: payload.issue.body ?? "", labels: payload.issue.labels.map((l) => l.name) });
+    if (r && r.changed) {
+      revalidatePath("/board");
+      nudgeBoard(row!.workspace_id);
+    }
+    return NextResponse.json({ ok: true, synced: !!r && r.changed });
   }
 
   const done = await applySteps(projectId, planEvent(event, payload, row!.key));

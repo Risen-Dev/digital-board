@@ -787,35 +787,19 @@ async function linkedIssue(taskId: string) {
  * issue with no checklist block yet gets the card's. Returns what to show, or null
  * when the card has no issue or GitHub can't be reached.
  */
-// ponytail: pulled when a card opens, not pushed by webhook — the dev server isn't reachable from GitHub.
+// Pulled when a card opens; with the project's webhook subscribed to Issues it also arrives live.
 export async function syncIssue(taskId: string): Promise<{ checklist: CheckItem[]; label: string | null } | null> {
   const user = await requireUser();
   if (!await writableTask(user, taskId)) return null;
   const linked = await linkedIssue(taskId);
   if (!linked) return null;
   const { issueOf } = await import("./github");
-  const { checklistIn } = await import("./github-events");
-  const ours = (await get<{ checklist: CheckItem[]; label: string | null }>("SELECT checklist, label FROM tasks WHERE id = ?", taskId))!;
+  const { applyIssue } = await import("./github-webhook");
   try {
-    const issue = await issueOf(linked.config, linked.number);
-    let checklist = ours.checklist;
-    const theirs = checklistIn(issue.body);
-    if (theirs === null) {
-      if (ours.checklist.length) await pushChecklist(taskId, ours.checklist);
-    } else {
-      checklist = theirs.slice(0, 100).map((i) => ({ text: i.text.slice(0, 300), done: i.done }));
-    }
-    const label = joinLabels(issue.labels.join(","));
-    const same = (a: string | null, b: string | null) => labelsOf(a).map((l) => l.toLowerCase()).sort().join() === labelsOf(b).map((l) => l.toLowerCase()).sort().join();
-    const newChecklist = JSON.stringify(checklist) !== JSON.stringify(ours.checklist);
-    const newLabel = !same(label, ours.label);
-    if (newChecklist) await run("UPDATE tasks SET checklist = ?::jsonb WHERE id = ?", JSON.stringify(checklist), taskId);
-    if (newLabel) {
-      await run("UPDATE tasks SET label = ? WHERE id = ?", label, taskId);
-      await logEvent(taskId, null, label ? `Labels set to ${label} on GitHub` : "Labels cleared on GitHub");
-    }
-    if (newChecklist || newLabel) changed(user);
-    return { checklist, label: newLabel ? label : ours.label };
+    const r = await applyIssue(taskId, await issueOf(linked.config, linked.number));
+    if (!r.hadBlock && r.checklist.length) await pushChecklist(taskId, r.checklist);
+    if (r.changed) changed(user);
+    return { checklist: r.checklist, label: r.label };
   } catch {
     return null;
   }
